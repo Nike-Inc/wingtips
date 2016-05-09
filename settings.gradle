@@ -1,0 +1,3 @@
+rootProject.name = 'wingtips'
+include "wingtips-core",
+        "wingtips-servlet-api"

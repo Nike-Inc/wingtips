@@ -1,0 +1,15 @@
+evaluationDependsOn(':')
+
+dependencies {
+    compile(
+            project(":wingtips-core"),
+            "javax.servlet:javax.servlet-api:$servletApiVersion"
+    )
+    testCompile(
+            "junit:junit-dep:$junitVersion",
+            "org.mockito:mockito-core:$mockitoVersion",
+            "ch.qos.logback:logback-classic:$logbackVersion",
+            "org.assertj:assertj-core:$assertJVersion",
+            "com.tngtech.java:junit-dataprovider:$junitDataproviderVersion"
+    )
+}

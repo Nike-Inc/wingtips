@@ -1,0 +1,115 @@
+// ========== JACOCO SETUP - View the combined/merged report at: [project_root]/build/reports/jacoco/jacocoRootReport/html/index.html.
+//                           Individual reports for each submodule can be found at: [project_root]/[submodule]/build/reports/jacoco/test/html/index.html
+allprojects {
+    apply plugin: 'jacoco'
+    apply plugin: 'com.palantir.jacoco-coverage'
+    apply plugin: 'com.github.ksoichiro.console.reporter'
+
+    jacoco {
+        toolVersion = jacocoToolVersion
+    }
+}
+
+// Tell subprojects to generate reports/data
+subprojects {
+    jacocoTestReport {
+        additionalSourceDirs = files(sourceSets.main.allSource.srcDirs)
+        sourceDirectories = files(sourceSets.main.allSource.srcDirs)
+        classDirectories =  files(sourceSets.main.output)
+        reports {
+            html.enabled = true
+            xml.enabled = true
+            csv.enabled = false
+        }
+        afterEvaluate {
+            classDirectories = files(classDirectories.files.collect {
+                fileTree(dir: it, exclude: jacocoExclusions)
+            })
+        }
+    }
+}
+
+def subprojectsToIncludeForJacocoComboReport(Set<Project> origSubprojects) {
+    Set<Project> projectsToInclude = new HashSet<>()
+    for (Project subproj : origSubprojects) {
+        // For this project we'll include everything
+        projectsToInclude.add(subproj)
+    }
+    return projectsToInclude
+}
+
+// Do a root report to generate the combined report
+task jacocoRootReport(type: org.gradle.testing.jacoco.tasks.JacocoReport) {
+    def subprojectsToInclude = subprojectsToIncludeForJacocoComboReport(subprojects)
+    dependsOn = subprojectsToInclude.test
+    additionalSourceDirs = files(subprojectsToInclude.sourceSets.main.allSource.srcDirs)
+    sourceDirectories = files(subprojectsToInclude.sourceSets.main.allSource.srcDirs)
+    classDirectories =  files(subprojectsToInclude.sourceSets.main.output)
+    executionData = files(subprojectsToInclude.jacocoTestReport.executionData)
+    reports {
+        html.enabled = true
+        xml.enabled = true
+        csv.enabled = false
+    }
+    afterEvaluate {
+        classDirectories = files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: jacocoExclusions)
+        })
+    }
+    onlyIf = {
+        true
+    }
+    doFirst {
+        executionData = files(executionData.findAll {
+            it.exists()
+        })
+    }
+}
+
+jacocoCoverageThresholdSetup()
+
+// consoleReporter is the task used for outputting code coverage numbers to the command line after a build.
+// See https://github.com/ksoichiro/gradle-console-reporter for full configuration details and options
+
+// Configure the common stuff for all projects
+allprojects {
+    consoleReporter {
+        jacoco {
+            // Disable by default - enabling for specific root/subprojects will be done below
+            enabled false
+
+            // We don't need the gradle-console-reporter plugin to adjust any of the jacoco settings
+            autoconfigureCoverageConfig false
+        }
+
+        junit {
+            enabled false
+        }
+
+        cobertura {
+            enabled false
+        }
+    }
+}
+// Configure stuff specifically for the root project
+consoleReporter {
+    jacoco {
+        enabled true
+
+        // gradle-console-reporter finds and reports on the individual submodules fine, but our combo report is in a different location.
+        reportFile new File("${project.buildDir}/reports/jacoco/jacocoRootReport/jacocoRootReport.xml")
+    }
+}
+// Enable subprojects that are included in the combo report
+configure(subprojectsToIncludeForJacocoComboReport(subprojects)) {
+    consoleReporter {
+        jacoco {
+            enabled true
+        }
+
+        junit {
+            // The junit reporter is actually really handy when a test fails.
+            enabled true
+        }
+    }
+}

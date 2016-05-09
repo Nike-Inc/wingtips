@@ -1,0 +1,109 @@
+// ========== GRADLE PLUGINS / REPOSITORIES SETUP
+buildscript {
+    repositories {
+        jcenter()
+    }
+    dependencies {
+        // STUFF FOR JACOCO
+        classpath 'com.palantir:jacoco-coverage:0.3.0'
+        // jacoco-coverage blows up unless you specify guava dependency
+        classpath 'com.google.guava:guava:18.0'
+        // Plugin for spitting out coverage numbers to the console
+        classpath 'com.github.ksoichiro:gradle-console-reporter:0.4.0'
+    }
+}
+
+allprojects {
+    apply plugin: 'idea'
+    apply plugin: 'java'
+    apply plugin: 'maven'
+    apply plugin: 'project-report'
+
+    task sourcesJar(type: Jar, dependsOn: classes) {
+        classifier = 'sources'
+        from sourceSets.main.allSource
+    }
+
+    artifacts {
+        archives sourcesJar
+    }
+
+    repositories {
+        jcenter()
+    }
+
+    idea {
+        module {
+            downloadSources = true
+        }
+    }
+}
+
+// Disable jar and sourcesJar tasks for the root project - we only want them to run for submodules
+jar.enabled = false
+sourcesJar.enabled = false
+
+// ========== PROPERTIES FOR GRADLE BUILD - DEPENDENCY VERSIONS / ETC
+ext {
+    slf4jVersion = '1.7.7'
+    servletApiVersion = '3.1.0'
+
+    junitVersion = '4.11'
+    mockitoVersion = '1.9.5'
+    logbackVersion = '1.1.2'
+    jacksonVersion = '2.4.2'
+    assertJVersion = '2.2.0'
+    junitDataproviderVersion = '1.10.1'
+
+    // http://www.gradle.org/docs/current/userguide/java_plugin.html
+    sourceCompatibility = org.gradle.api.JavaVersion.VERSION_1_7
+    targetCompatibility = org.gradle.api.JavaVersion.VERSION_1_7
+
+    // JACOCO PROPERTIES
+    jacocoToolVersion = '0.7.6.201602180812'
+    // Anything in this jacocoExclusions list will be excluded from coverage reports.
+    jacocoExclusions = []
+    jacocoCoverageThresholdSetup = {
+        configure(subprojects) {
+            jacocoCoverage {
+                // Enforce minimum code coverage. See https://github.com/palantir/gradle-jacoco-coverage for the full list of options.
+                reportThreshold 0.95, INSTRUCTION
+                reportThreshold 0.95, BRANCH
+            }
+        }
+    }
+}
+
+// ========== COMBO TEST REPORT - View the combined/merged report at: [project_root]/build/reports/tests/index.html
+apply from: file(rootProject.projectDir.getAbsolutePath() + '/gradle/junitComboTestReport.gradle')
+
+// ========== JACOCO SETUP - View the combined/merged report at: [project_root]/build/reports/jacoco/jacocoRootReport/html/index.html.
+//                           Individual reports for each submodule can be found at: [project_root]/[submodule]/build/reports/jacoco/test/html/index.html
+apply from: file(rootProject.projectDir.getAbsolutePath() + '/gradle/jacoco.gradle')
+
+// ========== MISCELLANEOUS BUILD STUFF
+allprojects {
+    group = groupId // Necessary for the maven install task to function correctly
+}
+
+subprojects {
+    task createPom << {
+        pom {
+            project {
+                groupId groupId
+                artifactId artifactId
+                version version
+                inceptionYear '2016'
+                licenses {
+                    license {
+                        name 'The Apache Software License, Version 2.0'
+                        url 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+                        distribution 'repo'
+                    }
+                }
+            }
+        }.writeTo("${project.buildDir}/libs/pom.xml")
+    }
+
+    assemble.finalizedBy(createPom)
+}

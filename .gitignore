@@ -1,0 +1,13 @@
+### Gradle stuff
+.gradle
+build/
+gradle-app.setting
+
+### IntelliJ stuff
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+classes/
+.idea_modules/

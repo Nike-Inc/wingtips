@@ -1,0 +1,16 @@
+evaluationDependsOn(':')
+
+dependencies {
+    compile(
+            "org.slf4j:slf4j-api:$slf4jVersion"
+    )
+    testCompile(
+            "junit:junit-dep:$junitVersion",
+            "org.mockito:mockito-core:$mockitoVersion",
+            "com.fasterxml.jackson.core:jackson-core:$jacksonVersion",
+            "com.fasterxml.jackson.core:jackson-databind:$jacksonVersion",
+            "ch.qos.logback:logback-classic:$logbackVersion",
+            "org.assertj:assertj-core:$assertJVersion",
+            "com.tngtech.java:junit-dataprovider:$junitDataproviderVersion"
+    )
+}
