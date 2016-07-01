@@ -2,9 +2,10 @@
 
 # Wingtips - Give Your Distributed Systems a Dapper Footprint
 
+[![][travis img]][travis]
 [![][license img]][license]
 
-Wingtips is a distributed tracing solution for Java based on the [Google Dapper paper](http://static.googleusercontent.com/media/research.google.com/en/us/pubs/archive/36356.pdf). 
+Wingtips is a distributed tracing solution for Java 7 and greater based on the [Google Dapper paper](http://static.googleusercontent.com/media/research.google.com/en/us/pubs/archive/36356.pdf). 
 
 There are a few modules associated with this project:
 
@@ -229,6 +230,9 @@ The typical way this goal is accomplished is to have a separate process on the s
 ## License
 
 Wingtips is released under the [Apache License, Version 2.0](http://www.apache.org/licenses/LICENSE-2.0)
+
+[travis]:https://travis-ci.org/Nike-Inc/wingtips
+[travis img]:https://api.travis-ci.org/Nike-Inc/wingtips.svg?branch=master
 
 [license]:LICENSE.txt
 [license img]:https://img.shields.io/badge/License-Apache%202-blue.svg
