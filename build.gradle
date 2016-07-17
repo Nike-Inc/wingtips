@@ -10,6 +10,9 @@ buildscript {
         classpath 'com.google.guava:guava:18.0'
         // Plugin for spitting out coverage numbers to the console
         classpath 'com.github.ksoichiro:gradle-console-reporter:0.4.0'
+
+        // STUFF FOR BINTRAY
+        classpath 'com.jfrog.bintray.gradle:gradle-bintray-plugin:1.6'
     }
 }
 
@@ -78,6 +81,11 @@ ext {
             }
         }
     }
+
+    // BINTRAY STUFF
+    bintrayUser = project.hasProperty('bintrayUser') ? property('bintrayUser') : 'UNDEFINED'
+    bintrayKey = project.hasProperty('bintrayKey') ? property('bintrayKey') : 'UNDEFINED'
+    bintrayVersion = "$version"
 }
 
 // ========== COMBO TEST REPORT - View the combined/merged report at: [project_root]/build/reports/tests/index.html
@@ -87,29 +95,10 @@ apply from: file(rootProject.projectDir.getAbsolutePath() + '/gradle/junitComboT
 //                           Individual reports for each submodule can be found at: [project_root]/[submodule]/build/reports/jacoco/test/html/index.html
 apply from: file(rootProject.projectDir.getAbsolutePath() + '/gradle/jacoco.gradle')
 
+// ========== BINTRAY PUBLISHING
+apply from: file(rootProject.projectDir.getAbsolutePath() + '/gradle/bintrayPublishing.gradle')
+
 // ========== MISCELLANEOUS BUILD STUFF
 allprojects {
     group = groupId // Necessary for the maven install task to function correctly
-}
-
-subprojects {
-    task createPom << {
-        pom {
-            project {
-                groupId groupId
-                artifactId artifactId
-                version version
-                inceptionYear '2016'
-                licenses {
-                    license {
-                        name 'The Apache Software License, Version 2.0'
-                        url 'http://www.apache.org/licenses/LICENSE-2.0.txt'
-                        distribution 'repo'
-                    }
-                }
-            }
-        }.writeTo("${project.buildDir}/libs/pom.xml")
-    }
-
-    assemble.finalizedBy(createPom)
 }
