@@ -2,6 +2,7 @@
 
 # Wingtips - Give Your Distributed Systems a Dapper Footprint
 
+[ ![Download](https://api.bintray.com/packages/nike/maven/wingtips/images/download.svg) ](https://bintray.com/nike/maven/wingtips/_latestVersion)
 [![][travis img]][travis]
 [![][license img]][license]
 
