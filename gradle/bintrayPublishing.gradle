@@ -1,0 +1,92 @@
+subprojects {
+    apply plugin: 'maven'
+    apply plugin: 'maven-publish'
+    apply plugin: 'com.jfrog.bintray'
+
+    ext {
+        createPomOutputLocation = "${project.buildDir}/libs/pom.xml"
+    }
+
+    task createPom << {
+        pom {
+            project {
+                groupId groupId
+                artifactId artifactId
+                version version
+                name artifactId
+                description "Wingtips module $artifactId"
+                url 'https://github.com/Nike-Inc/wingtips'
+                inceptionYear '2016'
+                licenses {
+                    license {
+                        name 'The Apache Software License, Version 2.0'
+                        url 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+                        distribution 'repo'
+                    }
+                }
+                scm {
+                    url 'https://github.com/Nike-Inc/wingtips'
+                    connection 'git@github.com:Nike-Inc/wingtips.git'
+                }
+                developers {
+                    developer {
+                        id 'nicmunroe'
+                        name 'Nic Munroe'
+                    }
+                }
+                organization {
+                    name 'Nike'
+                    url 'http://nike-inc.github.io'
+                }
+            }
+        }.writeTo(createPomOutputLocation)
+    }
+
+    publishing {
+        publications {
+            mavenInfo(MavenPublication) {
+                from components.java
+
+                artifact sourcesJar
+                artifact javadocJar
+
+                pom.withXml {
+                    // The pom produced by this task is questionable - ALL dependencies are set to runtime rather than how we set them up in the build.gradle files.
+                    //      Unfortunately we need to use this task anyway for the bintray gradle plugin.
+                    //      Therefore we'll just wipe out the pom this produces and use one created by the normal maven plugin (see the createPom task) instead.
+                    asString().delete(0, Integer.MAX_VALUE).append(new File(createPomOutputLocation).text)
+                }
+            }
+        }
+    }
+
+    bintray {
+        user = bintrayUser
+        key = bintrayKey
+        dryRun = false
+        publish = false
+        publications = ['mavenInfo']
+        pkg {
+            repo = 'maven'
+            name = 'wingtips'
+            userOrg = 'nike'
+            licenses = ['Apache-2.0']
+            websiteUrl = 'https://github.com/Nike-Inc/wingtips'
+            issueTrackerUrl = 'https://github.com/Nike-Inc/wingtips/issues'
+            vcsUrl = 'https://github.com/Nike-Inc/wingtips.git'
+            githubRepo = 'Nike-Inc/wingtips'
+            githubReleaseNotesFile = 'CHANGELOG.md'
+
+            version {
+                name = bintrayVersion
+
+                gpg {
+                    sign = true
+                }
+            }
+        }
+    }
+
+    bintrayUpload.dependsOn(createPom)
+    assemble.finalizedBy(createPom)
+}
