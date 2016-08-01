@@ -53,7 +53,7 @@ Distributed tracing can also be used in some cases for error debugging and probl
 * Spans can have Parent Spans, which is how we build a tree of the request's behavior as it branches across server boundaries. The ParentSpanID is set to the parent Span's SpanID.
 * All Spans contain the TraceID of the overall trace they are attached to, whether or not they have Parent Spans.
 * Spans include a SpanName, which is a more human readable indication of what the span was, e.g. `GET_/some/endpoint` for the overall span for a REST request, or `downstream-POST_https://otherservice.com/other/endpoint` for the span performing a downstream call to another service.
-* Spans contain timing info - a start timestamp, end timestamp, and total time spent value.
+* Spans contain timing info - a start timestamp and a duration value.
 
 See the [Output and Logging section](#output_and_logging) for an example of what a span looks like when it is logged.	
 
@@ -109,13 +109,13 @@ If your application is running in a Servlet environment (e.g. Spring MVC, Jersey
 <a name="output_and_logging"></a>  
 ### Output and Logging
 
-When `Tracer` completes a span it will log it to a SLF4J logger named `VALID_DTRACE_SPANS` so you can segregate your span information into a separate file if desired. The following is an example of log output for a valid span (in this case it is a root span because it does not have a parent span ID):
+When `Tracer` completes a span it will log it to a SLF4J logger named `VALID_WINGTIPS_SPANS` so you can segregate your span information into a separate file if desired. The following is an example of log output for a valid span (in this case it is a root span because it does not have a parent span ID):
 
 ```
-14:02:26.029 [main] INFO  VALID_DTRACE_SPANS - [DISTRIBUTED_TRACING] {"traceId":"8605610726410546456","parentSpanId":"null","spanId":"219182545067377576","spanName":"somespan","sampleable":"true","userId":"null","startTimeNanos":"1445720545485958000","endTimeNanos":"1445720546029474000","timeSpentNanos":"543516000"}
+14:02:26.029 [main] INFO  VALID_WINGTIPS_SPANS - [DISTRIBUTED_TRACING] {"traceId":"8605610726410546456","parentSpanId":"null","spanId":"219182545067377576","spanName":"somespan","sampleable":"true","userId":"null","startTimeEpochMicros":"1445720545485958","durationNanos":"543516000"}
 ```
 
- If an invalid span is detected due to incorrect usage of `Tracer` then the invalid span will be logged to a SLF4J logger named `INVALID_DTRACE_SPANS`. These specially-named loggers will not be used for any other purpose.
+ If an invalid span is detected due to incorrect usage of `Tracer` then the invalid span will be logged to a SLF4J logger named `INVALID_WINGTIPS_SPANS`. These specially-named loggers will not be used for any other purpose.
 
 <a name="mdc_info"></a> 
 #### Automatically attaching trace information to all log messages
@@ -136,7 +136,7 @@ traceId=5911002846273424396 14:43:53.483 INFO  [main] com.foo.Bar - important lo
 
 ***This is one of the primary features and benefits of Wingtips - if you utilize this MDC feature then you'll be able to trivially collect all log messages related to a specific request across all services it touched even if some of those messages came from third party libraries.***
 
-A [Log4j pattern](https://logging.apache.org/log4j/1.2/apidocs/org/apache/log4j/PatternLayout.html) would look similar - in particular %X{traceId} to access the trace ID in the MDC is identical.
+A [Log4j pattern](https://logging.apache.org/log4j/1.2/apidocs/org/apache/log4j/PatternLayout.html) would look similar - in particular `%X{traceId}` to access the trace ID in the MDC is identical.
 
 #### Changing output format
 
