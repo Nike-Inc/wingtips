@@ -1,18 +1,21 @@
 package com.nike.wingtips.servlet;
 
 import com.nike.wingtips.Span;
+import com.nike.wingtips.Span.SpanPurpose;
 import com.nike.wingtips.TraceAndSpanIdGenerator;
 import com.nike.wingtips.TraceHeaders;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
 
-import javax.servlet.http.HttpServletRequest;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
+
+import javax.servlet.http.HttpServletRequest;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
@@ -81,6 +84,7 @@ public class HttpSpanFactoryTest {
         assertThat(goodSpan.getUserId()).isEqualTo(userId);
         assertThat(goodSpan.getSpanStartTimeNanos()).isBetween(beforeCallNanos, afterCallNanos);
         assertThat(goodSpan.isCompleted()).isFalse();
+        assertThat(goodSpan.getSpanPurpose()).isEqualTo(SpanPurpose.SERVER);
     }
 
     @Test
@@ -105,6 +109,7 @@ public class HttpSpanFactoryTest {
         assertThat(goodSpan.getUserId()).isNull();
         assertThat(goodSpan.getSpanStartTimeNanos()).isBetween(beforeCallNanos, afterCallNanos);
         assertThat(goodSpan.isCompleted()).isFalse();
+        assertThat(goodSpan.getSpanPurpose()).isEqualTo(SpanPurpose.SERVER);
     }
 
     @Test
@@ -129,6 +134,7 @@ public class HttpSpanFactoryTest {
         assertThat(goodSpan.getUserId()).isEqualTo(altUserId);
         assertThat(goodSpan.getSpanStartTimeNanos()).isBetween(beforeCallNanos, afterCallNanos);
         assertThat(goodSpan.isCompleted()).isFalse();
+        assertThat(goodSpan.getSpanPurpose()).isEqualTo(SpanPurpose.SERVER);
     }
 
     @Test
@@ -168,6 +174,7 @@ public class HttpSpanFactoryTest {
         assertThat(goodSpan.getUserId()).isEqualTo(userId);
         assertThat(goodSpan.getSpanStartTimeNanos()).isBetween(beforeCallNanos, afterCallNanos);
         assertThat(goodSpan.isCompleted()).isFalse();
+        assertThat(goodSpan.getSpanPurpose()).isEqualTo(SpanPurpose.SERVER);
     }
 
     @Test
@@ -186,6 +193,7 @@ public class HttpSpanFactoryTest {
         assertThat(newSpan.getUserId()).isEqualTo(altUserId);
         assertThat(newSpan.getSpanStartTimeNanos()).isBetween(beforeCallNanos, afterCallNanos);
         assertThat(newSpan.isCompleted()).isFalse();
+        assertThat(newSpan.getSpanPurpose()).isEqualTo(SpanPurpose.SERVER);
     }
 
     @Test

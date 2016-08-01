@@ -1,8 +1,10 @@
 package com.nike.wingtips.http;
 
 import com.nike.wingtips.Span;
+import com.nike.wingtips.Span.SpanPurpose;
 import com.nike.wingtips.TraceAndSpanIdGenerator;
 import com.nike.wingtips.TraceHeaders;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,11 +47,13 @@ public class HttpRequestTracingUtils {
      *                         span's {@link Span#getUserId()} will be null.
      *
      * @return The {@link Span} stored in the given request's trace headers (e.g. {@link TraceHeaders#TRACE_ID}, {@link TraceHeaders#TRACE_SAMPLED},
-     *         {@link TraceHeaders#PARENT_SPAN_ID}, etc), or null if the request is null or doesn't contain the necessary headers.
-     *         <p/>
+     *         {@link TraceHeaders#PARENT_SPAN_ID}, etc), or null if the request is null or doesn't contain the necessary headers. Since this method is for
+     *         a server receiving a request, if this method returns a non-null span then its {@link Span#getSpanPurpose()} will be {@link SpanPurpose#SERVER}.
+     *         <p>
      *         NOTE: {@link TraceHeaders#TRACE_ID} is the minimum header needed to return a non-null {@link Span}. If {@link TraceHeaders#SPAN_ID} is missing then
      *         a new span ID will be generated using {@link TraceAndSpanIdGenerator#generateId()}. If {@link TraceHeaders#TRACE_SAMPLED} is missing then the returned
      *         span will be sampleable. If {@link TraceHeaders#SPAN_NAME} is missing then {@link #UNSPECIFIED_SPAN_NAME} will be used as the span name.
+     *         </p>
      */
     public static Span fromRequestWithHeaders(RequestWithHeaders request, List<String> userIdHeaderKeys) {
         if (request == null)
@@ -63,7 +67,7 @@ public class HttpRequestTracingUtils {
         if (spanName == null || spanName.length() == 0)
             spanName = UNSPECIFIED_SPAN_NAME;
 
-        return Span.newBuilder(spanName)
+        return Span.newBuilder(spanName, SpanPurpose.SERVER)
                    .withTraceId(traceId)
                    .withParentSpanId(getSpanIdFromRequest(request, TraceHeaders.PARENT_SPAN_ID, false))
                    .withSpanId(getSpanIdFromRequest(request, TraceHeaders.SPAN_ID, true))
