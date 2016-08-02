@@ -23,9 +23,9 @@ import java.util.List;
  * <p>
  *     Instead using a data store to record the tracing information, SLF4J is used. The results will be logged and a separate process on the machine can be used to extract the
  *     tracing information from the logs and send it to a collector/data store/log aggregator/etc (if desired). This is consistent with the behavior described in the Google Dapper
- *     paper. Valid distributed trace spans will be logged to a SLF4J logger named {@value #VALID_DTRACE_SPAN_LOGGER_NAME} so you can pipe them to their own log file if desired.
+ *     paper. Valid distributed trace spans will be logged to a SLF4J logger named {@value #VALID_WINGTIPS_SPAN_LOGGER_NAME} so you can pipe them to their own log file if desired.
  *     Similarly, invalid spans (where this class has detected incorrect usage and knows that the spans have invalid timing info, for example) will be logged to a SLF4J
- *     logger named {@value #INVALID_DTRACE_SPAN_LOGGER_NAME}. These specially-named loggers will not be used for any other purpose.
+ *     logger named {@value #INVALID_WINGTIPS_SPAN_LOGGER_NAME}. These specially-named loggers will not be used for any other purpose.
  * </p>
  * <p>
  *     Sampling is determined using {@link #rootSpanSamplingStrategy} which defaults to sampling everything. You can override this by calling
@@ -120,12 +120,12 @@ public class Tracer {
         KEY_VALUE
     }
 
-    private static final String VALID_DTRACE_SPAN_LOGGER_NAME = "VALID_DTRACE_SPANS";
-    private static final String INVALID_DTRACE_SPAN_LOGGER_NAME = "INVALID_DTRACE_SPANS";
+    private static final String VALID_WINGTIPS_SPAN_LOGGER_NAME = "VALID_WINGTIPS_SPANS";
+    private static final String INVALID_WINGTIPS_SPAN_LOGGER_NAME = "INVALID_WINGTIPS_SPANS";
 
     private static final Logger classLogger = LoggerFactory.getLogger(Tracer.class);
-    private static final Logger validSpanLogger = LoggerFactory.getLogger(VALID_DTRACE_SPAN_LOGGER_NAME);
-    private static final Logger invalidSpanLogger = LoggerFactory.getLogger(INVALID_DTRACE_SPAN_LOGGER_NAME);
+    private static final Logger validSpanLogger = LoggerFactory.getLogger(VALID_WINGTIPS_SPAN_LOGGER_NAME);
+    private static final Logger invalidSpanLogger = LoggerFactory.getLogger(INVALID_WINGTIPS_SPAN_LOGGER_NAME);
 
     /**
      * ThreadLocal that keeps track of the stack of {@link Span} objects associated with the thread. This is treated as a LIFO stack.
@@ -288,9 +288,9 @@ public class Tracer {
         Span parentSpan = getCurrentSpan();
         if (parentSpan == null) {
             classLogger.error(
-                    "DTRACE ERROR - Expected getCurrentSpan() to return a span for use as a parent for a new child sub-span but null was returned instead. This probably " +
-                    "means the request's overall span was never started. The child sub-span will still be started without any parent. dtracer_error=true bad_span_stack=true",
-                    new Exception("from here")
+                    "WINGTIPS USAGE ERROR - Expected getCurrentSpan() to return a span for use as a parent for a new child sub-span but null was returned instead. This probably " +
+                    "means the request's overall span was never started. The child sub-span will still be started without any parent. wingtips_usage_error=true bad_span_stack=true",
+                    new Exception("Stack trace for debugging purposes")
             );
         }
 
@@ -356,10 +356,10 @@ public class Tracer {
                 lostTraceIds.append(span.getTraceId());
                 first = false;
             }
-            classLogger.error("DTRACE ERROR - We were asked to start a new span stack (i.e. new request) but there was a stack already on this thread with {} old spans. " +
+            classLogger.error("WINGTIPS USAGE ERROR - We were asked to start a new span stack (i.e. new request) but there was a stack already on this thread with {} old spans. " +
                     "This probably means completeRequestSpan() was not called on the previous request this thread handled. The old spans will be cleared out " +
-                    "and lost. dtracer_error=true, dirty_span_stack=true, lost_trace_ids={}",
-                    existingStack.size(), lostTraceIds.toString(), new Exception("from here")
+                    "and lost. wingtips_usage_error=true, dirty_span_stack=true, lost_trace_ids={}",
+                    existingStack.size(), lostTraceIds.toString(), new Exception("Stack trace for debugging purposes")
             );
 
         }
@@ -456,11 +456,11 @@ public class Tracer {
             // Output an error message if we had any bad spans.
             if (originalSize > 1) {
                 classLogger.error(
-                        "DTRACE ERROR - We were asked to fully complete a request span (i.e. end of the request) but there was more than one span on this thread's stack (" +
+                        "WINGTIPS USAGE ERROR - We were asked to fully complete a request span (i.e. end of the request) but there was more than one span on this thread's stack (" +
                         "{} total spans when there should only be one). This probably means completeSubSpan() was not called on child sub-span(s) this thread " +
                         "generated - they should always be in finally clauses or otherwise guaranteed to complete. The bad child sub-spans were logged but the total " +
-                        "time spent on the bad child sub-spans will not be correct. dtracer_error=true, dirty_span_stack=true, bad_subspan_trace_ids={}",
-                        originalSize, badTraceIds.toString(), new Exception("from here")
+                        "time spent on the bad child sub-spans will not be correct. wingtips_usage_error=true, dirty_span_stack=true, bad_subspan_trace_ids={}",
+                        originalSize, badTraceIds.toString(), new Exception("Stack trace for debugging purposes")
                 );
             }
         }
@@ -482,9 +482,9 @@ public class Tracer {
         if (currentSpanStack == null || currentSpanStack.size() < 2) {
             int stackSize = (currentSpanStack == null) ? 0 : currentSpanStack.size();
             classLogger.error(
-                    "DTRACE ERROR - Expected to find a child sub-span on the stack to complete, but the span stack was size {} instead (there should be at least 2 for " +
-                    "this method to be able to find a child sub-span). dtracer_error=true, bad_span_stack=true",
-                    stackSize, new Exception("from here")
+                    "WINGTIPS USAGE ERROR - Expected to find a child sub-span on the stack to complete, but the span stack was size {} instead (there should be at least 2 for " +
+                    "this method to be able to find a child sub-span). wingtips_usage_error=true, bad_span_stack=true",
+                    stackSize, new Exception("Stack trace for debugging purposes")
             );
             // Nothing to do
             return;
@@ -508,7 +508,17 @@ public class Tracer {
      */
     protected void completeAndLogSpan(Span span, boolean containsIncorrectTimingInfo) {
         // Complete the span.
-        span.complete();
+        if (span.isCompleted()) {
+            classLogger.error(
+                "WINGTIPS USAGE ERROR - An attempt was made to complete a span that was already completed. This call will be ignored. "
+                + "wingtips_usage_error=true, already_completed_span=true, trace_id={}, span_id={}",
+                span.getTraceId(), span.getSpanId(), new Exception("Stack trace for debugging purposes")
+            );
+            return;
+        }
+        else
+            span.complete();
+
         // Log the span if it was sampleable.
         if (span.isSampleable()) {
             String infoTag = containsIncorrectTimingInfo ? "[INCORRECT_TIMING] " : "";
@@ -750,14 +760,14 @@ public class Tracer {
                 }
 
                 // Output an error message
-                classLogger.error("DTRACE ERROR - We were asked to register a span stack with this thread (i.e. for systems that use threads asynchronously to perform work on " +
+                classLogger.error("WINGTIPS USAGE ERROR - We were asked to register a span stack with this thread (i.e. for systems that use threads asynchronously to perform work on " +
                                   "multiple requests at a time before any given request is completed) but there was already a non-empty span stack on this thread ({} total " +
                                   "spans when there should be zero). This probably means unregisterFromThread() was not called the last time this request's thread dropped it " +
                                   "to go work on a different request. Whenever a thread stops work on a request to go do something else when the request is not complete it " +
                                   "should unregisterFromThread() in a finally block or some other way to guarantee it doesn't leave an unfinished stack dangling. The bad " +
-                                  "request span/sub-spans were logged but the reported total time spent on them will not be correct. dtracer_error=true, dirty_span_stack=true, " +
+                                  "request span/sub-spans were logged but the reported total time spent on them will not be correct. wingtips_usage_error=true, dirty_span_stack=true, " +
                                   "bad_child_span_ids={}",
-                        originalSize,  badTraceIds.toString(), new Exception("from here")
+                        originalSize,  badTraceIds.toString(), new Exception("Stack trace for debugging purposes")
                 );
             }
 

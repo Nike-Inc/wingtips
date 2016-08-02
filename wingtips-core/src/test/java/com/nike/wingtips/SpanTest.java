@@ -3,6 +3,7 @@ package com.nike.wingtips;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import org.assertj.core.data.Offset;
 import org.junit.Test;
 import org.mockito.internal.util.reflection.Whitebox;
 
@@ -12,22 +13,28 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Fail.fail;
 
 /**
  * Tests the functionality of {@link Span}
  */
 public class SpanTest {
 
-    String traceId = TraceAndSpanIdGenerator.generateId();
-    String spanId = TraceAndSpanIdGenerator.generateId();
-    String parentSpanId = TraceAndSpanIdGenerator.generateId();
-    String spanName = "spanName-" + UUID.randomUUID().toString();
-    String userId = "userId-" + UUID.randomUUID().toString();
-    boolean sampleableForFullyCompleteSpan = false;
-    long startTimeNanosForFullyCompleteSpan = 42;
-    long endTimeNanosForFullyCompleteSpan = 4242;
+    private String traceId = TraceAndSpanIdGenerator.generateId();
+    private String spanId = TraceAndSpanIdGenerator.generateId();
+    private String parentSpanId = TraceAndSpanIdGenerator.generateId();
+    private String spanName = "spanName-" + UUID.randomUUID().toString();
+    private String userId = "userId-" + UUID.randomUUID().toString();
+    private boolean sampleableForFullyCompleteSpan = false;
+    private long startTimeEpochMicrosForFullyCompleteSpan = 42;
+    private long startTimeNanosForFullyCompleteSpan = calculateNanoStartTimeFromSpecifiedEpochMicrosStartTime(
+        startTimeEpochMicrosForFullyCompleteSpan,
+        TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis()),
+        System.nanoTime());
+    private long durationNanosForFullyCompletedSpan = 424242;
 
     private ObjectMapper objectMapper = new ObjectMapper();
 
@@ -44,40 +51,44 @@ public class SpanTest {
     }
 
     private Span createFilledOutSpan(boolean completed) {
-        Long endTime = (completed) ? endTimeNanosForFullyCompleteSpan : null;
-        return new Span(traceId, parentSpanId, spanId, spanName, sampleableForFullyCompleteSpan, userId, startTimeNanosForFullyCompleteSpan, endTime);
+        Long durationNanos = (completed) ? durationNanosForFullyCompletedSpan : null;
+        return new Span(traceId, parentSpanId, spanId, spanName, sampleableForFullyCompleteSpan, userId,
+                        startTimeEpochMicrosForFullyCompleteSpan, startTimeNanosForFullyCompleteSpan, durationNanos);
     }
 
     private void verifySpanEqualsDeserializedValues(Span span, Map<String, String> deserializedValues) {
-        assertThat(nullSafeStringValueOf(span.getSpanStartTimeNanos())).isEqualTo(deserializedValues.get(Span.START_TIME_NANOS_FIELD));
-        assertThat(span.isCompleted()).isEqualTo(deserializedValues.containsKey(Span.END_TIME_NANOS_FIELD));
-        assertThat(nullSafeStringValueOf(span.getSpanEndTimeNanos())).isEqualTo(nullSafeStringValueOf(deserializedValues.get(Span.END_TIME_NANOS_FIELD)));
+        assertThat(nullSafeStringValueOf(span.getSpanStartTimeEpochMicros())).isEqualTo(deserializedValues.get(Span.START_TIME_EPOCH_MICROS_FIELD));
+        assertThat(span.isCompleted()).isEqualTo(deserializedValues.containsKey(Span.DURATION_NANOS_FIELD));
         assertThat(nullSafeStringValueOf(span.getTraceId())).isEqualTo(deserializedValues.get(Span.TRACE_ID_FIELD));
         assertThat(nullSafeStringValueOf(span.getSpanId())).isEqualTo(deserializedValues.get(Span.SPAN_ID_FIELD));
         assertThat(nullSafeStringValueOf(span.getParentSpanId())).isEqualTo(deserializedValues.get(Span.PARENT_SPAN_ID_FIELD));
         assertThat(nullSafeStringValueOf(span.getSpanName())).isEqualTo(deserializedValues.get(Span.SPAN_NAME_FIELD));
         assertThat(nullSafeStringValueOf(span.isSampleable())).isEqualTo(deserializedValues.get(Span.SAMPLEABLE_FIELD));
         assertThat(nullSafeStringValueOf(span.getUserId())).isEqualTo(deserializedValues.get(Span.USER_ID_FIELD));
-        assertThat(nullSafeStringValueOf(span.getTimeSpentNanos())).isEqualTo(nullSafeStringValueOf(deserializedValues.get(Span.TIME_SPENT_NANOS_FIELD)));
+        assertThat(nullSafeStringValueOf(span.getDurationNanos())).isEqualTo(nullSafeStringValueOf(deserializedValues.get(Span.DURATION_NANOS_FIELD)));
     }
 
-    private void verifySpanDeepEquals(Span span1, Span span2) {
-        assertThat(span1.getSpanStartTimeNanos()).isEqualTo(span2.getSpanStartTimeNanos());
+    private void verifySpanDeepEquals(Span span1, Span span2, boolean allowStartTimeNanosFudgeFactor) {
+        assertThat(span1.getSpanStartTimeEpochMicros()).isEqualTo(span2.getSpanStartTimeEpochMicros());
+        if (allowStartTimeNanosFudgeFactor)
+            assertThat(span1.getSpanStartTimeNanos()).isCloseTo(span2.getSpanStartTimeNanos(), Offset.offset(TimeUnit.MILLISECONDS.toNanos(1)));
+        else
+            assertThat(span1.getSpanStartTimeNanos()).isEqualTo(span2.getSpanStartTimeNanos());
         assertThat(span1.isCompleted()).isEqualTo(span2.isCompleted());
-        assertThat(span1.getSpanEndTimeNanos()).isEqualTo(span2.getSpanEndTimeNanos());
         assertThat(span1.getTraceId()).isEqualTo(span2.getTraceId());
         assertThat(span1.getSpanId()).isEqualTo(span2.getSpanId());
         assertThat(span1.getParentSpanId()).isEqualTo(span2.getParentSpanId());
         assertThat(span1.getSpanName()).isEqualTo(span2.getSpanName());
         assertThat(span1.isSampleable()).isEqualTo(span2.isSampleable());
         assertThat(span1.getUserId()).isEqualTo(span2.getUserId());
-        assertThat(span1.getTimeSpentNanos()).isEqualTo(span2.getTimeSpentNanos());
+        assertThat(span1.getDurationNanos()).isEqualTo(span2.getDurationNanos());
     }
 
     @Test
     public void public_constructor_works_as_expected_for_completed_span() {
         // when
-        Span span = new Span(traceId, parentSpanId, spanId, spanName, sampleableForFullyCompleteSpan, userId, startTimeNanosForFullyCompleteSpan, endTimeNanosForFullyCompleteSpan);
+        Span span = new Span(traceId, parentSpanId, spanId, spanName, sampleableForFullyCompleteSpan, userId,
+                             startTimeEpochMicrosForFullyCompleteSpan, startTimeNanosForFullyCompleteSpan, durationNanosForFullyCompletedSpan);
 
         // then
         assertThat(span.getTraceId()).isEqualTo(traceId);
@@ -86,17 +97,18 @@ public class SpanTest {
         assertThat(span.getSpanName()).isEqualTo(spanName);
         assertThat(span.isSampleable()).isEqualTo(sampleableForFullyCompleteSpan);
         assertThat(span.getUserId()).isEqualTo(userId);
+        assertThat(span.getSpanStartTimeEpochMicros()).isEqualTo(startTimeEpochMicrosForFullyCompleteSpan);
         assertThat(span.getSpanStartTimeNanos()).isEqualTo(startTimeNanosForFullyCompleteSpan);
-        assertThat(span.getSpanEndTimeNanos()).isEqualTo(endTimeNanosForFullyCompleteSpan);
 
         assertThat(span.isCompleted()).isTrue();
-        assertThat(span.getTimeSpentNanos()).isEqualTo(endTimeNanosForFullyCompleteSpan - startTimeNanosForFullyCompleteSpan);
+        assertThat(span.getDurationNanos()).isEqualTo(durationNanosForFullyCompletedSpan);
     }
 
     @Test
     public void public_constructor_works_as_expected_for_incomplete_span() {
         // when
-        Span span = new Span(traceId, parentSpanId, spanId, spanName, sampleableForFullyCompleteSpan, userId, startTimeNanosForFullyCompleteSpan, null);
+        Span span = new Span(traceId, parentSpanId, spanId, spanName, sampleableForFullyCompleteSpan, userId,
+                             startTimeEpochMicrosForFullyCompleteSpan, startTimeNanosForFullyCompleteSpan, null);
 
         // then
         assertThat(span.getTraceId()).isEqualTo(traceId);
@@ -105,35 +117,53 @@ public class SpanTest {
         assertThat(span.getSpanName()).isEqualTo(spanName);
         assertThat(span.isSampleable()).isEqualTo(sampleableForFullyCompleteSpan);
         assertThat(span.getUserId()).isEqualTo(userId);
+        assertThat(span.getSpanStartTimeEpochMicros()).isEqualTo(startTimeEpochMicrosForFullyCompleteSpan);
         assertThat(span.getSpanStartTimeNanos()).isEqualTo(startTimeNanosForFullyCompleteSpan);
-        assertThat(span.getSpanEndTimeNanos()).isNull();
 
         assertThat(span.isCompleted()).isFalse();
-        assertThat(span.getTimeSpentNanos()).isNull();
+        assertThat(span.getDurationNanos()).isNull();
     }
 
     @Test(expected = IllegalArgumentException.class)
     public void public_constructor_throws_IllegalArgumentException_if_passed_null_trace_id() {
         // expect
-        new Span(null, parentSpanId, spanId, spanName, true, userId, 42, null);
+        new Span(null, parentSpanId, spanId, spanName, true, userId, 42, null, null);
     }
 
     @Test(expected = IllegalArgumentException.class)
     public void public_constructor_throws_IllegalArgumentException_if_passed_null_span_id() {
         // expect
-        new Span(traceId, parentSpanId, null, spanName, true, userId, 42, null);
+        new Span(traceId, parentSpanId, null, spanName, true, userId, 42, null, null);
     }
 
     @Test(expected = IllegalArgumentException.class)
     public void public_constructor_throws_IllegalArgumentException_if_passed_null_span_name() {
         // expect
-        new Span(traceId, parentSpanId, spanId, null, true, userId, 42, null);
+        new Span(traceId, parentSpanId, spanId, null, true, userId, 42, null, null);
     }
 
-    @Test(expected = IllegalArgumentException.class)
-    public void public_constructor_throws_IllegalArgumentException_if_end_time_is_before_start_time() {
-        // expect
-        new Span(traceId, parentSpanId, spanId, spanName, true, userId, 42, 41L);
+    @Test
+    public void public_constructor_calculates_start_time_nanos_if_passed_null() {
+        // given
+        long startTimeEpochMicrosUsed = 42;
+        long nanosBeforeCall = System.nanoTime();
+        long epochMicrosBeforeCall = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
+
+        // when
+        Span span = new Span(traceId, parentSpanId, spanId, spanName, true, userId, startTimeEpochMicrosUsed, null, 41L);
+        long epochMicrosAfterCall = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
+        long nanosAfterCall = System.nanoTime();
+
+        // then
+        long lowerBound = calculateNanoStartTimeFromSpecifiedEpochMicrosStartTime(startTimeEpochMicrosUsed, epochMicrosBeforeCall, nanosBeforeCall);
+        long upperBound = calculateNanoStartTimeFromSpecifiedEpochMicrosStartTime(startTimeEpochMicrosUsed, epochMicrosAfterCall, nanosAfterCall);
+        assertThat(span.getSpanStartTimeNanos()).isBetween(lowerBound, upperBound);
+    }
+
+    private long calculateNanoStartTimeFromSpecifiedEpochMicrosStartTime(long epochMicrosStartTime, long currentEpochMicros, long currentNanoTime) {
+        long currentDurationMicros = currentEpochMicros - epochMicrosStartTime;
+        long nanoStartTimeOffset = TimeUnit.MICROSECONDS.toNanos(currentDurationMicros);
+        return currentNanoTime - nanoStartTimeOffset;
     }
 
     @Test
@@ -145,7 +175,9 @@ public class SpanTest {
         Span result = new Span();
 
         // then
-        verifySpanDeepEquals(result, new Span(placeholderValue, null, placeholderValue, placeholderValue, false, null, -1, null));
+        verifySpanDeepEquals(result,
+                             new Span(placeholderValue, null, placeholderValue, placeholderValue, false, null, -1, -1L, -1L),
+                             false);
     }
 
     @Test
@@ -155,8 +187,10 @@ public class SpanTest {
 
         // when
         long beforeCallNanos = System.nanoTime();
+        long beforeCallEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
         Span result = Span.generateRootSpanForNewTrace(spanName).build();
         long afterCallNanos = System.nanoTime();
+        long afterCallEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
 
         // then
         assertThat(result.getTraceId()).isNotEmpty();
@@ -165,10 +199,10 @@ public class SpanTest {
         assertThat(result.getSpanName()).isEqualTo(spanName);
         assertThat(result.isSampleable()).isTrue();
         assertThat(result.getUserId()).isNull();
+        assertThat(result.getSpanStartTimeEpochMicros()).isBetween(beforeCallEpochMicros, afterCallEpochMicros);
         assertThat(result.getSpanStartTimeNanos()).isBetween(beforeCallNanos, afterCallNanos);
-        assertThat(result.getSpanEndTimeNanos()).isNull();
         assertThat(result.isCompleted()).isFalse();
-        assertThat(result.getTimeSpentNanos()).isNull();
+        assertThat(result.getDurationNanos()).isNull();
     }
 
     @Test
@@ -180,8 +214,10 @@ public class SpanTest {
 
         // when: generateChildSpan is used to create a child span with a new span name
         long beforeCallNanos = System.nanoTime();
+        long beforeCallEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
         Span childSpan = parentSpan.generateChildSpan(childSpanName);
         long afterCallNanos = System.nanoTime();
+        long afterCallEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
 
         // then: returned object contains the expected values
         //       (new span ID, expected span name, parent span ID equal to parent's span ID, start time generated during call, not completed, everything else the same as parent).
@@ -194,24 +230,25 @@ public class SpanTest {
         assertThat(childSpan.getUserId()).isEqualTo(parentSpan.getUserId());
         assertThat(childSpan.isSampleable()).isEqualTo(parentSpan.isSampleable());
 
+        assertThat(childSpan.getSpanStartTimeEpochMicros()).isBetween(beforeCallEpochMicros, afterCallEpochMicros);
         assertThat(childSpan.getSpanStartTimeNanos()).isBetween(beforeCallNanos, afterCallNanos);
         assertThat(childSpan.isCompleted()).isFalse();
-        assertThat(childSpan.getSpanEndTimeNanos()).isNull();
-        assertThat(childSpan.getTimeSpentNanos()).isNull();
+        assertThat(childSpan.getDurationNanos()).isNull();
     }
 
     @Test
     public void generateChildSpan_works_as_expected_for_completed_parent_span() {
         // given: span with known values that is completed
         Span parentSpan = createFilledOutSpan(true);
-        parentSpan.complete();
         String childSpanName = UUID.randomUUID().toString();
         assertThat(parentSpan.isCompleted()).isTrue();
 
         // when: generateChildSpan is used to create a child span with a new span name
         long beforeCallNanos = System.nanoTime();
+        long beforeCallEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
         Span childSpan = parentSpan.generateChildSpan(childSpanName);
         long afterCallNanos = System.nanoTime();
+        long afterCallEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
 
         // then: returned object contains the expected values
         //       (new span ID, expected span name, parent span ID equal to parent's span ID, start time generated during call, not completed, everything else the same as parent).
@@ -224,26 +261,43 @@ public class SpanTest {
         assertThat(childSpan.getUserId()).isEqualTo(parentSpan.getUserId());
         assertThat(childSpan.isSampleable()).isEqualTo(parentSpan.isSampleable());
 
+        assertThat(childSpan.getSpanStartTimeEpochMicros()).isBetween(beforeCallEpochMicros, afterCallEpochMicros);
         assertThat(childSpan.getSpanStartTimeNanos()).isBetween(beforeCallNanos, afterCallNanos);
         assertThat(childSpan.isCompleted()).isFalse();
-        assertThat(childSpan.getSpanEndTimeNanos()).isNull();
-        assertThat(childSpan.getTimeSpentNanos()).isNull();
+        assertThat(childSpan.getDurationNanos()).isNull();
     }
 
     @Test
-    public void complete_method_should_complete_the_span() {
+    public void complete_method_should_complete_the_span_with_correct_duration() throws InterruptedException {
+        for (int i = 0; i < 10; i++) {
+            // given
+            Span validSpan = Span.generateRootSpanForNewTrace(spanName).build();
+            assertThat(validSpan.isCompleted()).isFalse();
+
+            // when
+            Thread.sleep((long) (Math.random() * 10));
+            long beforeCompleteNanoTime = System.nanoTime();
+            validSpan.complete();
+            long afterCompleteNanoTime = System.nanoTime();
+
+            // then
+            assertThat(validSpan.isCompleted()).isTrue();
+            long lowerBoundDuration = beforeCompleteNanoTime - validSpan.getSpanStartTimeNanos();
+            long upperBoundDuration = afterCompleteNanoTime - validSpan.getSpanStartTimeNanos();
+            assertThat(validSpan.getDurationNanos()).isBetween(lowerBoundDuration, upperBoundDuration);
+        }
+    }
+
+    @Test(expected = IllegalStateException.class)
+    public void complete_should_throw_IllegalStateException_if_span_is_already_completed() {
         // given
         Span validSpan = Span.generateRootSpanForNewTrace(spanName).build();
-        assertThat(validSpan.isCompleted()).isFalse();
-
-        // when
-        long beforeCompleteTime = System.nanoTime();
         validSpan.complete();
-        long afterCompleteTime = System.nanoTime();
-
-        // then
         assertThat(validSpan.isCompleted()).isTrue();
-        assertThat(validSpan.getSpanEndTimeNanos()).isBetween(beforeCompleteTime, afterCompleteTime);
+
+        // expect
+        validSpan.complete();
+        fail("Expected IllegalStateException but no exception was thrown");
     }
 
     @Test
@@ -267,32 +321,30 @@ public class SpanTest {
         assertThat(validSpan.getParentSpanId()).isNotEmpty();
         assertThat(validSpan.getSpanName()).isNotEmpty();
         assertThat(validSpan.getSpanId()).isNotEmpty();
-        assertThat(validSpan.getSpanEndTimeNanos()).isNotNull();
-        assertThat(validSpan.getTimeSpentNanos()).isNotNull();
+        assertThat(validSpan.getDurationNanos()).isNotNull();
         assertThat(validSpan.isCompleted()).isTrue();
         String json = validSpan.toJSON();
 
         // when: jackson is used to deserialize that JSON
-        Map<String, String> tcValuesFromJackson = objectMapper.readValue(json, new TypeReference<Map<String, String>>() { });
+        Map<String, String> spanValuesFromJackson = objectMapper.readValue(json, new TypeReference<Map<String, String>>() { });
 
         // then: the original span and jackson's span values should be exactly the same
-        verifySpanEqualsDeserializedValues(validSpan, tcValuesFromJackson);
+        verifySpanEqualsDeserializedValues(validSpan, spanValuesFromJackson);
     }
 
     @Test
     public void toJson_should_function_properly_when_there_are_null_values() throws IOException {
         // given: valid span with null values and JSON string from Span.toJson()
         Span validSpan = Span.generateRootSpanForNewTrace(spanName).build();
-        assertThat(validSpan.getSpanEndTimeNanos()).isNull();
         assertThat(validSpan.getParentSpanId()).isNull();
         assertThat(validSpan.getUserId()).isNull();
         String json = validSpan.toJSON();
 
         // when: jackson is used to deserialize that JSON
-        Map<String, String> tcValuesFromJackson = objectMapper.readValue(json, new TypeReference<Map<String, String>>() {});
+        Map<String, String> spanValuesFromJackson = objectMapper.readValue(json, new TypeReference<Map<String, String>>() {});
 
         // then: the original span context and jackson's span context values should be exactly the same
-        verifySpanEqualsDeserializedValues(validSpan, tcValuesFromJackson);
+        verifySpanEqualsDeserializedValues(validSpan, spanValuesFromJackson);
     }
 
     @Test
@@ -301,12 +353,13 @@ public class SpanTest {
         Span validSpan = Span.generateRootSpanForNewTrace(spanName).build();
         String json = validSpan.toJSON();
         assertThat(validSpan.isCompleted()).isFalse();
+        assertThat(validSpan.getDurationNanos()).isNull();
 
         // when: jackson is used to deserialize that JSON
-        Map<String, String> tcValuesFromJackson = objectMapper.readValue(json, new TypeReference<Map<String, String>>() {});
+        Map<String, String> spanValuesFromJackson = objectMapper.readValue(json, new TypeReference<Map<String, String>>() {});
 
         // then: the original span and jackson's span values should be exactly the same
-        verifySpanEqualsDeserializedValues(validSpan, tcValuesFromJackson);
+        verifySpanEqualsDeserializedValues(validSpan, spanValuesFromJackson);
     }
 
     @Test
@@ -315,13 +368,14 @@ public class SpanTest {
         Span validSpan = Span.generateRootSpanForNewTrace(spanName).build();
         validSpan.complete();
         assertThat(validSpan.isCompleted()).isTrue();
+        assertThat(validSpan.getDurationNanos()).isNotNull();
         String json = validSpan.toJSON();
 
         // when: jackson is used to deserialize that JSON
-        Map<String, String> tcValuesFromJackson = objectMapper.readValue(json, new TypeReference<Map<String, String>>() {});
+        Map<String, String> spanValuesFromJackson = objectMapper.readValue(json, new TypeReference<Map<String, String>>() {});
 
         // then: the original span and jackson's span values should be exactly the same
-        verifySpanEqualsDeserializedValues(validSpan, tcValuesFromJackson);
+        verifySpanEqualsDeserializedValues(validSpan, spanValuesFromJackson);
     }
 
     @Test
@@ -353,8 +407,8 @@ public class SpanTest {
         String afterCompleteJson = validSpan.toJSON();
         assertThat(afterCompleteJson).isNotEqualTo(beforeCompleteJson);
         assertThat(afterCompleteJson).isNotEqualTo(uuidString);
-        Map<String, String> tcValuesFromJackson = objectMapper.readValue(afterCompleteJson, new TypeReference<Map<String, String>>() { });
-        verifySpanEqualsDeserializedValues(validSpan, tcValuesFromJackson);
+        Map<String, String> spanValuesFromJackson = objectMapper.readValue(afterCompleteJson, new TypeReference<Map<String, String>>() { });
+        verifySpanEqualsDeserializedValues(validSpan, spanValuesFromJackson);
     }
 
     @Test
@@ -367,8 +421,7 @@ public class SpanTest {
         assertThat(validSpan.getParentSpanId()).isNotNull();
         assertThat(validSpan.getSpanName()).isNotNull();
         assertThat(validSpan.getSpanId()).isNotNull();
-        assertThat(validSpan.getSpanEndTimeNanos()).isNotNull();
-        assertThat(validSpan.getTimeSpentNanos()).isNotNull();
+        assertThat(validSpan.getDurationNanos()).isNotNull();
         assertThat(validSpan.isCompleted()).isTrue();
         String json = validSpan.toJSON();
 
@@ -376,23 +429,23 @@ public class SpanTest {
         Span spanFromJson = Span.fromJSON(json);
 
         // then: the original span and the fromJson() span values should be exactly the same
-        verifySpanDeepEquals(validSpan, spanFromJson);
+        verifySpanDeepEquals(validSpan, spanFromJson, true);
     }
 
     @Test
     public void fromJson_should_function_properly_when_there_are_null_values() throws IOException {
         // given: valid span with null values and JSON string from Span.toJson()
         Span validSpan = Span.generateRootSpanForNewTrace(spanName).build();
-        assertThat(validSpan.getSpanEndTimeNanos()).isNull();
         assertThat(validSpan.getParentSpanId()).isNull();
         assertThat(validSpan.getUserId()).isNull();
+        assertThat(validSpan.getDurationNanos()).isNull();
         String json = validSpan.toJSON();
 
         // when: fromJson is called
         Span spanFromJson = Span.fromJSON(json);
 
         // then: the original span and the fromJson() span values should be exactly the same
-        verifySpanDeepEquals(validSpan, spanFromJson);
+        verifySpanDeepEquals(validSpan, spanFromJson, true);
     }
 
     @Test
@@ -406,7 +459,7 @@ public class SpanTest {
         Span spanFromJson = Span.fromJSON(json);
 
         // then: the original span and the fromJson() span values should be exactly the same
-        verifySpanDeepEquals(validSpan, spanFromJson);
+        verifySpanDeepEquals(validSpan, spanFromJson, true);
     }
 
         @Test
@@ -418,10 +471,10 @@ public class SpanTest {
         String json = validSpan.toJSON();
 
         // when: fromJson is called
-        Span tcFromJson = Span.fromJSON(json);
+        Span spanFromJson = Span.fromJSON(json);
 
         // then: the original span and the fromJson() span values should be exactly the same
-        verifySpanDeepEquals(validSpan, tcFromJson);
+        verifySpanDeepEquals(validSpan, spanFromJson, true);
     }
 
     @Test
@@ -430,10 +483,10 @@ public class SpanTest {
         String garbageInput = "garbagio";
 
         // when: fromJson is called
-        Span tcFromJson = Span.fromJSON(garbageInput);
+        Span spanFromJson = Span.fromJSON(garbageInput);
 
         // then: the return value should be null
-        assertThat(tcFromJson).isNull();
+        assertThat(spanFromJson).isNull();
     }
 
     @Test
@@ -451,11 +504,14 @@ public class SpanTest {
     }
 
     @Test
-    public void fromJson_returns_null_if_startTimeNanos_field_is_missing() throws IOException {
+    public void fromJson_returns_null_if_startTimeEpochMicros_field_is_missing() throws IOException {
         // given
         Span validSpan = createFilledOutSpan(true);
         String validJson = validSpan.toJSON();
-        String invalidJson = validJson.replace(String.format(",\"%s\":\"%s\"", Span.START_TIME_NANOS_FIELD, String.valueOf(validSpan.getSpanStartTimeNanos())), "");
+        String invalidJson = validJson.replace(
+            String.format(",\"%s\":\"%s\"", Span.START_TIME_EPOCH_MICROS_FIELD, String.valueOf(validSpan.getSpanStartTimeEpochMicros())),
+            ""
+        );
 
         // when
         Span result = Span.fromJSON(invalidJson);
@@ -483,8 +539,7 @@ public class SpanTest {
         assertThat(validSpan.getParentSpanId()).isNotEmpty();
         assertThat(validSpan.getSpanName()).isNotEmpty();
         assertThat(validSpan.getSpanId()).isNotEmpty();
-        assertThat(validSpan.getSpanEndTimeNanos()).isNotNull();
-        assertThat(validSpan.getTimeSpentNanos()).isNotNull();
+        assertThat(validSpan.getDurationNanos()).isNotNull();
         assertThat(validSpan.isCompleted()).isTrue();
         String keyValueStr = validSpan.toKeyValueString();
 
@@ -499,9 +554,9 @@ public class SpanTest {
     public void toKeyValueString_should_function_properly_when_there_are_null_values() throws IOException {
         // given: valid span with null values and key/value string from Span.toKeyValueString()
         Span validSpan = Span.generateRootSpanForNewTrace(spanName).build();
-        assertThat(validSpan.getSpanEndTimeNanos()).isNull();
         assertThat(validSpan.getParentSpanId()).isNull();
         assertThat(validSpan.getUserId()).isNull();
+        assertThat(validSpan.getDurationNanos()).isNull();
         String keyValueStr = validSpan.toKeyValueString();
 
         // when: the string is deserialized into a map
@@ -583,8 +638,7 @@ public class SpanTest {
         assertThat(validSpan.getParentSpanId()).isNotNull();
         assertThat(validSpan.getSpanName()).isNotNull();
         assertThat(validSpan.getSpanId()).isNotNull();
-        assertThat(validSpan.getSpanEndTimeNanos()).isNotNull();
-        assertThat(validSpan.getTimeSpentNanos()).isNotNull();
+        assertThat(validSpan.getDurationNanos()).isNotNull();
         assertThat(validSpan.isCompleted()).isTrue();
         String keyValStr = validSpan.toKeyValueString();
 
@@ -592,23 +646,23 @@ public class SpanTest {
         Span spanFromKeyValStr = Span.fromKeyValueString(keyValStr);
 
         // then: the original span and the fromKeyValueString() span values should be exactly the same
-        verifySpanDeepEquals(validSpan, spanFromKeyValStr);
+        verifySpanDeepEquals(validSpan, spanFromKeyValStr, true);
     }
 
     @Test
     public void fromKeyValueString_should_function_properly_when_there_are_null_values() throws IOException {
         // given: valid span with null values and key/value string from Span.fromKeyValueString()
         Span validSpan = Span.generateRootSpanForNewTrace(spanName).build();
-        assertThat(validSpan.getSpanEndTimeNanos()).isNull();
         assertThat(validSpan.getParentSpanId()).isNull();
         assertThat(validSpan.getUserId()).isNull();
+        assertThat(validSpan.getDurationNanos()).isNull();
         String keyValStr = validSpan.toKeyValueString();
 
         // when: toKeyValueString is called
         Span spanFromKeyValStr = Span.fromKeyValueString(keyValStr);
 
         // then: the original span and the fromKeyValueString() span values should be exactly the same
-        verifySpanDeepEquals(validSpan, spanFromKeyValStr);
+        verifySpanDeepEquals(validSpan, spanFromKeyValStr, true);
     }
 
     @Test
@@ -622,7 +676,7 @@ public class SpanTest {
         Span spanFromKeyValStr = Span.fromKeyValueString(keyValStr);
 
         // then: the original span and the fromKeyValueString() span values should be exactly the same
-        verifySpanDeepEquals(validSpan, spanFromKeyValStr);
+        verifySpanDeepEquals(validSpan, spanFromKeyValStr, true);
     }
 
     @Test
@@ -637,7 +691,7 @@ public class SpanTest {
         Span spanFromKeyValStr = Span.fromKeyValueString(keyValStr);
 
         // then: the original span and the fromKeyValueString() span values should be exactly the same
-        verifySpanDeepEquals(validSpan, spanFromKeyValStr);
+        verifySpanDeepEquals(validSpan, spanFromKeyValStr, true);
     }
 
     @Test
@@ -646,10 +700,10 @@ public class SpanTest {
         String garbageInput = "garbagio";
 
         // when: fromKeyValueString is called
-        Span tcFromKeyValStr = Span.fromKeyValueString(garbageInput);
+        Span spanFromKeyValStr = Span.fromKeyValueString(garbageInput);
 
         // then: the return value should be null
-        assertThat(tcFromKeyValStr).isNull();
+        assertThat(spanFromKeyValStr).isNull();
     }
 
     @Test
@@ -667,11 +721,14 @@ public class SpanTest {
     }
 
     @Test
-    public void fromKeyValueString_returns_null_if_startTimeNanos_field_is_missing() throws IOException {
+    public void fromKeyValueString_returns_null_if_startTimeEpochMicros_field_is_missing() throws IOException {
         // given
         Span validSpan = createFilledOutSpan(true);
         String validKeyValStr = validSpan.toKeyValueString();
-        String invalidKeyValStr = validKeyValStr.replace(String.format(",%s=%s", Span.START_TIME_NANOS_FIELD, String.valueOf(validSpan.getSpanStartTimeNanos())), "");
+        String invalidKeyValStr = validKeyValStr.replace(
+            String.format(",%s=%s", Span.START_TIME_EPOCH_MICROS_FIELD, String.valueOf(validSpan.getSpanStartTimeEpochMicros())),
+            ""
+        );
 
         // when
         Span result = Span.fromKeyValueString(invalidKeyValStr);
@@ -681,18 +738,16 @@ public class SpanTest {
     }
 
     @Test
-    public void getTimeSpentNanos_should_be_null_until_span_is_completed() {
+    public void getDuration_should_be_null_until_span_is_completed() {
         // given
         Span validSpan = Span.generateRootSpanForNewTrace(spanName).build();
-        assertThat(validSpan.getTimeSpentNanos()).isNull();
+        assertThat(validSpan.getDurationNanos()).isNull();
 
         // when
         validSpan.complete();
 
         // then
-        assertThat(validSpan.getTimeSpentNanos()).isNotNull();
-        Long startTimeNanos = (Long) Whitebox.getInternalState(validSpan, "spanStartTimeNanos");
-        assertThat(validSpan.getTimeSpentNanos()).isEqualTo(validSpan.getSpanEndTimeNanos() - startTimeNanos);
+        assertThat(validSpan.getDurationNanos()).isNotNull();
     }
 
     @Test
@@ -753,11 +808,11 @@ public class SpanTest {
     }
 
     @Test
-    public void equals_returns_false_and_hashCode_different_if_spanStartTimeNanos_is_different() {
+    public void equals_returns_false_and_hashCode_different_if_spanStartTimeEpochMicros_is_different() {
         // given
         Span fullSpan1 = createFilledOutSpan(true);
         Span fullSpan2 = createFilledOutSpan(true);
-        Whitebox.setInternalState(fullSpan2, "spanStartTimeNanos", fullSpan1.getSpanStartTimeNanos() + 1);
+        Whitebox.setInternalState(fullSpan2, "spanStartTimeEpochMicros", fullSpan1.getSpanStartTimeEpochMicros() + 1);
 
         // expect
         assertThat(fullSpan1.equals(fullSpan2)).isFalse();
@@ -823,14 +878,14 @@ public class SpanTest {
     }
 
     @Test
-    public void equals_returns_false_and_hashCode_different_if_spanEndTimeNanos_is_different() {
+    public void equals_returns_false_and_hashCode_different_if_durationNanos_is_different() {
         // given
         Span fullSpan1 = createFilledOutSpan(true);
         Span fullSpan2 = createFilledOutSpan(true);
-        List<Long> badDataList = Arrays.asList(fullSpan1.getSpanEndTimeNanos() + 1, null);
+        List<Long> badDataList = Arrays.asList(fullSpan1.getDurationNanos() + 1, null);
 
         for (Long badData : badDataList) {
-            Whitebox.setInternalState(fullSpan2, "spanEndTimeNanos", badData);
+            Whitebox.setInternalState(fullSpan2, "durationNanos", badData);
 
             // expect
             assertThat(fullSpan1.equals(fullSpan2)).isFalse();
@@ -846,8 +901,10 @@ public class SpanTest {
 
         // when
         long beforeCallNanos = System.nanoTime();
+        long beforeCallEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
         Span result = Span.newBuilder(spanName).build();
         long afterCallNanos = System.nanoTime();
+        long afterCallEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
 
         // then
         assertThat(result.getTraceId()).isNotEmpty();
@@ -856,8 +913,9 @@ public class SpanTest {
         assertThat(result.getSpanName()).isEqualTo(spanName);
         assertThat(result.isSampleable()).isTrue();
         assertThat(result.getUserId()).isNull();
+        assertThat(result.getSpanStartTimeEpochMicros()).isBetween(beforeCallEpochMicros, afterCallEpochMicros);
         assertThat(result.getSpanStartTimeNanos()).isBetween(beforeCallNanos, afterCallNanos);
-        assertThat(result.getSpanEndTimeNanos()).isNull();
+        assertThat(result.getDurationNanos()).isNull();
         assertThat(result.isCompleted()).isFalse();
     }
 
@@ -870,7 +928,7 @@ public class SpanTest {
         Span copySpan = Span.newBuilder(origSpan).build();
 
         // then
-        verifySpanDeepEquals(origSpan, copySpan);
+        verifySpanDeepEquals(origSpan, copySpan, false);
     }
 
     @Test
@@ -884,8 +942,9 @@ public class SpanTest {
                 .withSpanName(spanName)
                 .withSampleable(sampleableForFullyCompleteSpan)
                 .withUserId(userId)
+                .withSpanStartTimeEpochMicros(startTimeEpochMicrosForFullyCompleteSpan)
                 .withSpanStartTimeNanos(startTimeNanosForFullyCompleteSpan)
-                .withSpanEndTimeNanos(endTimeNanosForFullyCompleteSpan);
+                .withDurationNanos(durationNanosForFullyCompletedSpan);
 
         // when
         Span span = builder.build();
@@ -897,8 +956,29 @@ public class SpanTest {
         assertThat(span.getSpanName()).isEqualTo(spanName);
         assertThat(span.isSampleable()).isEqualTo(sampleableForFullyCompleteSpan);
         assertThat(span.getUserId()).isEqualTo(userId);
+        assertThat(span.getSpanStartTimeEpochMicros()).isEqualTo(startTimeEpochMicrosForFullyCompleteSpan);
         assertThat(span.getSpanStartTimeNanos()).isEqualTo(startTimeNanosForFullyCompleteSpan);
-        assertThat(span.getSpanEndTimeNanos()).isEqualTo(endTimeNanosForFullyCompleteSpan);
+        assertThat(span.getDurationNanos()).isEqualTo(durationNanosForFullyCompletedSpan);
+    }
+
+    @Test
+    public void builder_build_ignores_passed_in_spanStartTimeNanos_if_spanStartTimeEpochMicros_is_null() {
+        // given
+        Span.Builder builder = Span
+            .newBuilder("stuff")
+            .withSpanStartTimeNanos(42L)
+            .withSpanStartTimeEpochMicros(null);
+
+        // when
+        long beforeNanos = System.nanoTime();
+        long beforeEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
+        Span span = builder.build();
+        long afterNanos = System.nanoTime();
+        long afterEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
+
+        // then
+        assertThat(span.getSpanStartTimeNanos()).isBetween(beforeNanos, afterNanos);
+        assertThat(span.getSpanStartTimeEpochMicros()).isBetween(beforeEpochMicros, afterEpochMicros);
     }
 }
 

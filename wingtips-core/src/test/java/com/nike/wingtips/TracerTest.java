@@ -23,10 +23,12 @@ import java.util.Deque;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.fail;
+import static org.assertj.core.api.Fail.fail;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -89,8 +91,10 @@ public class TracerTest {
 
         // when: Tracer.startRequestWithRootSpan(String) is called to start a span without a parent
         long beforeNanoTime = System.nanoTime();
+        long beforeEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
         Tracer.getInstance().startRequestWithRootSpan("noparent");
         long afterNanoTime = System.nanoTime();
+        long afterEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
 
         // then: a new span is started that has no parent but is otherwise valid, and the MDC is updated
         assertThat(getSpanStackSize()).isEqualTo(1);
@@ -98,9 +102,10 @@ public class TracerTest {
         assertThat(span).isNotNull();
         assertThat(span.getSpanName()).isEqualTo("noparent");
         assertThat(span.getParentSpanId()).isNull();
+        assertThat(span.getSpanStartTimeEpochMicros()).isBetween(beforeEpochMicros, afterEpochMicros);
         assertThat(span.getSpanStartTimeNanos()).isBetween(beforeNanoTime, afterNanoTime);
         assertThat(span.isCompleted()).isFalse();
-        assertThat(span.getSpanEndTimeNanos()).isNull();
+        assertThat(span.getDurationNanos()).isNull();
         assertThat(span.getTraceId()).isNotNull();
         assertThat(span.getSpanId()).isNotNull();
         assertThat(span.isSampleable()).isTrue();
@@ -119,8 +124,10 @@ public class TracerTest {
 
         // when: Tracer.startRequestWithRootSpan(String) is called to start a span without a parent
         long beforeNanoTime = System.nanoTime();
+        long beforeEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
         Tracer.getInstance().startRequestWithRootSpan("noparent", "testUserId");
         long afterNanoTime = System.nanoTime();
+        long afterEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
 
         // then: a new span is started that has no parent but is otherwise valid, it has the expected user ID, and the MDC is updated
         assertThat(getSpanStackSize()).isEqualTo(1);
@@ -128,9 +135,10 @@ public class TracerTest {
         assertThat(span).isNotNull();
         assertThat(span.getSpanName()).isEqualTo("noparent");
         assertThat(span.getParentSpanId()).isNull();
+        assertThat(span.getSpanStartTimeEpochMicros()).isBetween(beforeEpochMicros, afterEpochMicros);
         assertThat(span.getSpanStartTimeNanos()).isBetween(beforeNanoTime, afterNanoTime);
         assertThat(span.isCompleted()).isFalse();
-        assertThat(span.getSpanEndTimeNanos()).isNull();
+        assertThat(span.getDurationNanos()).isNull();
         assertThat(span.getTraceId()).isNotNull();
         assertThat(span.getSpanId()).isNotNull();
         assertThat(span.isSampleable()).isTrue();
@@ -167,8 +175,10 @@ public class TracerTest {
 
         // when: Tracer.startRequestWithChildSpan(Span, String) is called to start a span with a parent
         long beforeNanoTime = System.nanoTime();
+        long beforeEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
         Tracer.getInstance().startRequestWithChildSpan(parentSpan, "childspan");
         long afterNanoTime = System.nanoTime();
+        long afterEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
 
         // then: a new span is started that has the given parent and is otherwise valid, and the MDC is updated
         assertThat(getSpanStackSize()).isEqualTo(1);
@@ -176,9 +186,10 @@ public class TracerTest {
         assertThat(span).isNotNull();
         assertThat(span.getSpanName()).isEqualTo("childspan");
         assertThat(span.getParentSpanId()).isEqualTo(parentSpan.getSpanId());
+        assertThat(span.getSpanStartTimeEpochMicros()).isBetween(beforeEpochMicros, afterEpochMicros);
         assertThat(span.getSpanStartTimeNanos()).isBetween(beforeNanoTime, afterNanoTime);
         assertThat(span.isCompleted()).isFalse();
-        assertThat(span.getSpanEndTimeNanos()).isNull();
+        assertThat(span.getDurationNanos()).isNull();
         assertThat(span.getTraceId()).isEqualTo(parentSpan.getTraceId());
         assertThat(span.getSpanId()).isNotNull();
         assertThat(span.getSpanId()).isNotEqualTo(parentSpan.getSpanId());
@@ -198,8 +209,10 @@ public class TracerTest {
 
         // when: Tracer.startRequestWithChildSpan(Span, String) is called to start a span with a parent
         long beforeNanoTime = System.nanoTime();
+        long beforeEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
         Tracer.getInstance().startRequestWithChildSpan(parentSpan, "childspan");
         long afterNanoTime = System.nanoTime();
+        long afterEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
 
         // then: a new span is started that has the given parent and is otherwise valid, has the expected user ID, and the MDC is updated
         assertThat(getSpanStackSize()).isEqualTo(1);
@@ -207,9 +220,10 @@ public class TracerTest {
         assertThat(span).isNotNull();
         assertThat(span.getSpanName()).isEqualTo("childspan");
         assertThat(span.getParentSpanId()).isEqualTo(parentSpan.getSpanId());
+        assertThat(span.getSpanStartTimeEpochMicros()).isBetween(beforeEpochMicros, afterEpochMicros);
         assertThat(span.getSpanStartTimeNanos()).isBetween(beforeNanoTime, afterNanoTime);
         assertThat(span.isCompleted()).isFalse();
-        assertThat(span.getSpanEndTimeNanos()).isNull();
+        assertThat(span.getDurationNanos()).isNull();
         assertThat(span.getTraceId()).isEqualTo(parentSpan.getTraceId());
         assertThat(span.getSpanId()).isNotNull();
         assertThat(span.getSpanId()).isNotEqualTo(parentSpan.getSpanId());
@@ -259,9 +273,11 @@ public class TracerTest {
 
         // when
         long beforeNanoTime = System.nanoTime();
+        long beforeEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
         @SuppressWarnings("ConstantConditions")
         Span span = Tracer.getInstance().startRequestWithSpanInfo(traceId, parentSpanId, spanName, sampleable, userId);
         long afterNanoTime = System.nanoTime();
+        long afterEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
 
         // then
         assertThat(Tracer.getInstance().getCurrentSpan()).isEqualTo(span);
@@ -274,9 +290,10 @@ public class TracerTest {
         //noinspection ConstantConditions
         assertThat(span.isSampleable()).isEqualTo(sampleable);
         assertThat(span.getUserId()).isEqualTo(userId);
+        assertThat(span.getSpanStartTimeEpochMicros()).isBetween(beforeEpochMicros, afterEpochMicros);
         assertThat(span.getSpanStartTimeNanos()).isBetween(beforeNanoTime, afterNanoTime);
         assertThat(span.isCompleted()).isFalse();
-        assertThat(span.getSpanEndTimeNanos()).isNull();
+        assertThat(span.getDurationNanos()).isNull();
     }
 
     @Test
@@ -289,8 +306,10 @@ public class TracerTest {
 
         // when: Tracer.startSubSpan(String) is called to start a subspan
         long beforeNanoTime = System.nanoTime();
+        long beforeEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
         Tracer.getInstance().startSubSpan("subspan");
         long afterNanoTime = System.nanoTime();
+        long afterEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
 
         // then: a new subspan is started that uses the first span as its parent, and the MDC is updated
         assertThat(getSpanStackSize()).isEqualTo(2);
@@ -298,9 +317,10 @@ public class TracerTest {
         assertThat(subspan).isNotNull();
         assertThat(subspan.getSpanName()).isEqualTo("subspan");
         assertThat(subspan.getParentSpanId()).isEqualTo(firstSpan.getSpanId());
+        assertThat(subspan.getSpanStartTimeEpochMicros()).isBetween(beforeEpochMicros, afterEpochMicros);
         assertThat(subspan.getSpanStartTimeNanos()).isBetween(beforeNanoTime, afterNanoTime);
         assertThat(subspan.isCompleted()).isFalse();
-        assertThat(subspan.getSpanEndTimeNanos()).isNull();
+        assertThat(subspan.getDurationNanos()).isNull();
         assertThat(subspan.getTraceId()).isNotNull();
         assertThat(subspan.getSpanId()).isNotNull();
         assertThat(subspan.isSampleable()).isEqualTo(firstSpan.isSampleable());
@@ -317,8 +337,10 @@ public class TracerTest {
 
         // when: Tracer.startSubSpan(String) is called to start a subspan
         long beforeNanoTime = System.nanoTime();
+        long beforeEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
         Tracer.getInstance().startSubSpan("subspan");
         long afterNanoTime = System.nanoTime();
+        long afterEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
 
         // then: a new span is started even though there was no parent, and the MDC is updated.
         assertThat(getSpanStackSize()).isEqualTo(1);
@@ -326,9 +348,10 @@ public class TracerTest {
         assertThat(subspan).isNotNull();
         assertThat(subspan.getSpanName()).isEqualTo("subspan");
         assertThat(subspan.getParentSpanId()).isNull();
+        assertThat(subspan.getSpanStartTimeEpochMicros()).isBetween(beforeEpochMicros, afterEpochMicros);
         assertThat(subspan.getSpanStartTimeNanos()).isBetween(beforeNanoTime, afterNanoTime);
         assertThat(subspan.isCompleted()).isFalse();
-        assertThat(subspan.getSpanEndTimeNanos()).isNull();
+        assertThat(subspan.getDurationNanos()).isNull();
         assertThat(subspan.getTraceId()).isNotNull();
         assertThat(subspan.getSpanId()).isNotNull();
         assertThat(subspan.isSampleable()).isTrue();
@@ -490,6 +513,13 @@ public class TracerTest {
         assertThat(span.getTraceId()).isNotEqualTo(spanFromTracer.getTraceId());
     }
 
+    private void verifyDurationBetweenLowerAndUpperBounds(Span span, long beforeCompletionCallNanoTime, long afterCompletionCallNanoTime) {
+        long durationLowerBound = beforeCompletionCallNanoTime - span.getSpanStartTimeNanos();
+        long durationUpperBound = afterCompletionCallNanoTime - span.getSpanStartTimeNanos();
+        assertThat(span.getDurationNanos()).isNotNull();
+        assertThat(span.getDurationNanos()).isBetween(durationLowerBound, durationUpperBound);
+    }
+
     @Test
     public void completeRequestSpan_should_complete_the_span() {
         // given: an already-started span
@@ -506,8 +536,7 @@ public class TracerTest {
 
         // then: the span should be completed, the stack emptied, and the MDC unconfigured
         assertThat(span.isCompleted()).isTrue();
-        assertThat(span.getSpanEndTimeNanos()).isNotNull();
-        assertThat(span.getSpanEndTimeNanos()).isBetween(beforeNanoTime, afterNanoTime);
+        verifyDurationBetweenLowerAndUpperBounds(span, beforeNanoTime, afterNanoTime);
         assertThat(Tracer.getInstance().getCurrentSpan()).isNull();
         assertThat(getSpanStackSize()).isEqualTo(0);
         assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isNull();
@@ -540,12 +569,9 @@ public class TracerTest {
         assertThat(parentSpan.isCompleted()).isTrue();
         assertThat(subspan1.isCompleted()).isTrue();
         assertThat(subspan2.isCompleted()).isTrue();
-        assertThat(parentSpan.getSpanEndTimeNanos()).isNotNull();
-        assertThat(parentSpan.getSpanEndTimeNanos()).isBetween(beforeNanoTime, afterNanoTime);
-        assertThat(subspan1.getSpanEndTimeNanos()).isNotNull();
-        assertThat(subspan1.getSpanEndTimeNanos()).isBetween(beforeNanoTime, afterNanoTime);
-        assertThat(subspan2.getSpanEndTimeNanos()).isNotNull();
-        assertThat(subspan2.getSpanEndTimeNanos()).isBetween(beforeNanoTime, afterNanoTime);
+        verifyDurationBetweenLowerAndUpperBounds(parentSpan, beforeNanoTime, afterNanoTime);
+        verifyDurationBetweenLowerAndUpperBounds(subspan1, beforeNanoTime, afterNanoTime);
+        verifyDurationBetweenLowerAndUpperBounds(subspan2, beforeNanoTime, afterNanoTime);
         assertThat(Tracer.getInstance().getCurrentSpan()).isNull();
         assertThat(getSpanStackSize()).isEqualTo(0);
         assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isNull();
@@ -591,8 +617,7 @@ public class TracerTest {
         // then: only the subspan should be completed, the stack decremented by 1, the current span set to the parent, and the MDC configured to point to the parent
         assertThat(parentSpan.isCompleted()).isFalse();
         assertThat(subspan.isCompleted()).isTrue();
-        assertThat(subspan.getSpanEndTimeNanos()).isNotNull();
-        assertThat(subspan.getSpanEndTimeNanos() >= beforeNanoTime && subspan.getSpanEndTimeNanos() <= afterNanoTime).isTrue();
+        verifyDurationBetweenLowerAndUpperBounds(subspan, beforeNanoTime, afterNanoTime);
         assertThat(Tracer.getInstance().getCurrentSpan()).isNotNull();
         assertThat(Tracer.getInstance().getCurrentSpan()).isSameAs(parentSpan);
         assertThat(getSpanStackSize()).isEqualTo(1);
@@ -855,6 +880,29 @@ public class TracerTest {
     }
 
     @Test
+    public void spanLifecycleListener_spanCompleted_is_not_called_when_request_span_was_completed_already() {
+        // given
+        SpanLifecycleListener listener1 = mock(SpanLifecycleListener.class);
+        SpanLifecycleListener listener2 = mock(SpanLifecycleListener.class);
+        Tracer tracer = Tracer.getInstance();
+        tracer.addSpanLifecycleListener(listener1);
+        tracer.addSpanLifecycleListener(listener2);
+        Span span = tracer.startRequestWithRootSpan("newspan");
+        span.complete();
+        verify(listener1).spanStarted(span);
+        verify(listener1, times(0)).spanCompleted(span);
+        verify(listener2).spanStarted(span);
+        verify(listener2, times(0)).spanCompleted(span);
+
+        // when
+        tracer.completeRequestSpan();
+
+        // then
+        verify(listener1, never()).spanCompleted(span);
+        verify(listener2, never()).spanCompleted(span);
+    }
+
+    @Test
     public void spanLifecycleListener_spanStarted_is_called_when_subspan_is_started() {
         // given
         SpanLifecycleListener listener1 = mock(SpanLifecycleListener.class);
@@ -940,6 +988,30 @@ public class TracerTest {
         // then
         verify(listener1).spanCompleted(subspan);
         verify(listener2).spanCompleted(subspan);
+    }
+
+    @Test
+    public void spanLifecycleListener_spanCompleted_is_not_called_if_subspan_was_already_completed() {
+        // given
+        SpanLifecycleListener listener1 = mock(SpanLifecycleListener.class);
+        SpanLifecycleListener listener2 = mock(SpanLifecycleListener.class);
+        Tracer tracer = Tracer.getInstance();
+        tracer.addSpanLifecycleListener(listener1);
+        tracer.addSpanLifecycleListener(listener2);
+        tracer.startRequestWithRootSpan("newspan");
+        Span subspan = tracer.startSubSpan("subspan");
+        subspan.complete();
+        verify(listener1).spanStarted(subspan);
+        verify(listener1, times(0)).spanCompleted(subspan);
+        verify(listener2).spanStarted(subspan);
+        verify(listener2, times(0)).spanCompleted(subspan);
+
+        // when
+        tracer.completeSubSpan();
+
+        // then
+        verify(listener1, never()).spanCompleted(subspan);
+        verify(listener2, never()).spanCompleted(subspan);
     }
 
     @Test
