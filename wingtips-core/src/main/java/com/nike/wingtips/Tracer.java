@@ -1,5 +1,6 @@
 package com.nike.wingtips;
 
+import com.nike.wingtips.Span.SpanPurpose;
 import com.nike.wingtips.lifecyclelistener.SpanLifecycleListener;
 import com.nike.wingtips.sampling.RootSpanSamplingStrategy;
 import com.nike.wingtips.sampling.SampleAllTheThingsStrategy;
@@ -44,8 +45,8 @@ import java.util.List;
  * </p>
  * <p>
  *     The span information is associated with a thread and is modeled as a stack, so it's possible to have nested spans inside an overall request span. These nested spans are
- *     referred to as "sub-spans" in this class. Sub-spans are started via {@link #startSubSpan(String)} and completed via {@link #completeSubSpan()}. See the recommended usage
- *     section below for more information.
+ *     referred to as "sub-spans" in this class. Sub-spans are started via {@link #startSubSpan(String, SpanPurpose)} and completed via {@link #completeSubSpan()}.
+ *     See the recommended usage section below for more information.
  * </p>
  * <p>
  *     <b>RECOMMENDED USAGE:</b> In a typical usage scenario you'll want to call one of the {@code startRequest...()} methods as soon as possible when a request enters your
@@ -60,12 +61,12 @@ import java.util.List;
  * </p>
  * <p>
  *     The "request span" described above is intended to track the work done for the overall request. If you have work inside the request that you want tracked as a
- *     separate nested span with the overall-request-span as its parent you can do so via the "sub-span" methods: {@link #startSubSpan(String)} and {@link #completeSubSpan()}.
- *     These nested sub-spans are pushed onto the span stack associated with the current thread and you can have them as deeply nested as you want, but just like
- *     with the overall-request-span you'll want to make sure the completion method is called in a finally block or otherwise guaranteed to be executed even if an error occurs.
- *     Each call to {@link #startSubSpan(String)} causes the "current span" to be the new sub-span's parent, and causes the new sub-span to become the "current span" by
- *     pushing it onto the span stack. Each call to {@link #completeSubSpan()} does the reverse by popping the current span off the span stack and completing and logging it,
- *     thus causing its parent to become the current span again.
+ *     separate nested span with the overall-request-span as its parent you can do so via the "sub-span" methods: {@link #startSubSpan(String, SpanPurpose)} and
+ *     {@link #completeSubSpan()}. These nested sub-spans are pushed onto the span stack associated with the current thread and you can have them as deeply nested as you want,
+ *     but just like with the overall-request-span you'll want to make sure the completion method is called in a finally block or otherwise guaranteed to be executed even if
+ *     an error occurs. Each call to {@link #startSubSpan(String, SpanPurpose)} causes the "current span" to be the new sub-span's parent, and causes the new sub-span to
+ *     become the "current span" by pushing it onto the span stack. Each call to {@link #completeSubSpan()} does the reverse by popping the current span off the span stack
+ *     and completing and logging it, thus causing its parent to become the current span again.
  * </p>
  * <p>
  *     One common use case for sub-spans is to track downstream calls separately from the overall request (e.g. HTTP calls to another service, database calls, or any other
@@ -191,14 +192,15 @@ public class Tracer {
     /**
      * Starts new span stack (i.e. new incoming request) without a parent span by creating a root span with the given span name.
      * If you have parent span info then you should call {@link #startRequestWithChildSpan(Span, String)} or
-     * {@link #startRequestWithSpanInfo(String, String, String, boolean, String)} instead).
+     * {@link #startRequestWithSpanInfo(String, String, String, boolean, String, SpanPurpose)} instead). The newly created root span will have a
+     * span purpose of {@link SpanPurpose#SERVER}.
      * <p/>
      * NOTE: This method will cause the returned span's {@link Span#getUserId()} to contain null. If you have a user ID you should use
      * {@link #startRequestWithRootSpan(String, String)} instead.
      * <p/>
      * <b>WARNING:</b> This wipes out any existing spans on the span stack for this thread and starts fresh, therefore this should only be called at the request's
      * entry point when it's expected that the span stack should be empty. If you need to start a child span in the middle of a request somewhere then you should call
-     * {@link #startSubSpan(String)} instead.
+     * {@link #startSubSpan(String, SpanPurpose)} instead.
      *
      * @param spanName - The span name to use for the new span - should never be null.
      * @return The new span (which is now also the current one that will be returned by {@link #getCurrentSpan()}).
@@ -210,11 +212,12 @@ public class Tracer {
     /**
      * Similar to {@link #startRequestWithRootSpan(String)} but takes in an optional {@code userId} to populate the returned {@link Span#getUserId()}.
      * If {@code userId} is null then this method is equivalent to calling {@link #startRequestWithRootSpan(String)}. If you have parent span info then you should call
-     * {@link #startRequestWithChildSpan(Span, String)} or {@link #startRequestWithSpanInfo(String, String, String, boolean, String)} instead).
+     * {@link #startRequestWithChildSpan(Span, String)} or {@link #startRequestWithSpanInfo(String, String, String, boolean, String, SpanPurpose)} instead).
+     * The newly created root span will have a span purpose of {@link SpanPurpose#SERVER}.
      * <p/>
      * <b>WARNING:</b> This wipes out any existing spans on the span stack for this thread and starts fresh, therefore this should only be called at the request's
      * entry point when it's expected that the span stack should be empty. If you need to start a child span in the middle of a request somewhere then you should call
-     * {@link #startSubSpan(String)} instead.
+     * {@link #startSubSpan(String, SpanPurpose)} instead.
      *
      * @param spanName - The span name to use for the new span - should never be null.
      * @param userId - The ID of the user that should be associated with the {@link Span} - can be null.
@@ -223,16 +226,17 @@ public class Tracer {
     public Span startRequestWithRootSpan(String spanName, String userId) {
         boolean sampleable = isNextRootSpanSampleable();
         String traceId = TraceAndSpanIdGenerator.generateId();
-        return doNewRequestSpan(traceId, null, spanName, sampleable, userId);
+        return doNewRequestSpan(traceId, null, spanName, sampleable, userId, SpanPurpose.SERVER);
     }
 
     /**
      * Starts a new span stack (i.e. new incoming request) with the given span as the new child span's parent (if you do not have a parent then you should call
-     * {@link #startRequestWithRootSpan(String)} or {@link #startRequestWithRootSpan(String, String)} instead).
+     * {@link #startRequestWithRootSpan(String)} or {@link #startRequestWithRootSpan(String, String)} instead). The newly created child span will have a
+     * span purpose of {@link SpanPurpose#SERVER}.
      * <p/>
      * <b>WARNING:</b> This wipes out any existing spans on the span stack for this thread and starts fresh, therefore this should only be called at the request's
      * entry point when it's expected that the span stack should be empty. If you need to start a child span in the middle of a request somewhere then you should call
-     * {@link #startSubSpan(String)} instead.
+     * {@link #startSubSpan(String, SpanPurpose)} instead.
      *
      * @param parentSpan The span to use as the parent span - should never be null (if you need to start a span without a parent then call
      *                   {@link #startRequestWithRootSpan(String)} instead).
@@ -245,7 +249,8 @@ public class Tracer {
                             "If you don't have a parent span then you should call one of the startRequestWithRootSpan(...) methods instead.");
         }
 
-        return startRequestWithSpanInfo(parentSpan.getTraceId(), parentSpan.getSpanId(), childSpanName, parentSpan.isSampleable(), parentSpan.getUserId());
+        return startRequestWithSpanInfo(parentSpan.getTraceId(), parentSpan.getSpanId(), childSpanName, parentSpan.isSampleable(), parentSpan.getUserId(),
+                                        SpanPurpose.SERVER);
     }
 
     /**
@@ -256,7 +261,7 @@ public class Tracer {
      * <p/>
      * <b>WARNING:</b> This wipes out any existing spans on the span stack for this thread and starts fresh, therefore this should only be called at the request's
      * entry point when it's expected that the span stack should be empty. If you need to start a child span in the middle of a request somewhere then you should call
-     * {@link #startSubSpan(String)} instead.
+     * {@link #startSubSpan(String, SpanPurpose)} instead.
      *
      * @param traceId The new span's {@link Span#getTraceId()} - if this is null then a new random trace ID will be generated for the returned span. If you have parent span info
      *                then this should be the parent span's <b>trace</b> ID (not the parent span's span ID).
@@ -265,11 +270,13 @@ public class Tracer {
      * @param newSpanName The span name to use for the new span - should never be null.
      * @param sampleable The new span's {@link Span#isSampleable()} value. Determines whether or not this span should be logged when it is completed.
      * @param userId The new span's {@link Span#getUserId()} value.
+     * @param spanPurpose The span's purpose, or null if the purpose is unknown. See the javadocs for {@link SpanPurpose} for details on what each enum option means.
+     *                    For new request spans, this should usually be {@link SpanPurpose#SERVER}.
      *
      * @return The new span (which is now also the current one that will be returned by {@link #getCurrentSpan()}).
      */
-    public Span startRequestWithSpanInfo(String traceId, String parentSpanId, String newSpanName, boolean sampleable, String userId) {
-        return doNewRequestSpan(traceId, parentSpanId, newSpanName, sampleable, userId);
+    public Span startRequestWithSpanInfo(String traceId, String parentSpanId, String newSpanName, boolean sampleable, String userId, SpanPurpose spanPurpose) {
+        return doNewRequestSpan(traceId, parentSpanId, newSpanName, sampleable, userId, spanPurpose);
     }
 
     /**
@@ -282,9 +289,12 @@ public class Tracer {
      * instead.
      *
      * @param spanName The {@link Span#getSpanName()} to use for the new child sub-span.
+     * @param spanPurpose The {@link SpanPurpose} for the new sub-span. Since this is a sub-span it should almost always be either {@link SpanPurpose#CLIENT}
+     *                    (if this sub-span encompasses an outbound/downstream/out-of-process call), or {@link SpanPurpose#LOCAL_ONLY}. See the javadocs
+     *                    for {@link SpanPurpose} for full details on what each enum option means.
      * @return The new child sub-span (which is now also the current one that will be returned by {@link #getCurrentSpan()}).
      */
-    public Span startSubSpan(String spanName) {
+    public Span startSubSpan(String spanName, SpanPurpose spanPurpose) {
         Span parentSpan = getCurrentSpan();
         if (parentSpan == null) {
             classLogger.error(
@@ -295,8 +305,8 @@ public class Tracer {
         }
 
         Span childSpan = (parentSpan != null)
-                ? parentSpan.generateChildSpan(spanName)
-                : Span.generateRootSpanForNewTrace(spanName).withSampleable(isNextRootSpanSampleable()).build();
+                ? parentSpan.generateChildSpan(spanName, spanPurpose)
+                : Span.generateRootSpanForNewTrace(spanName, spanPurpose).withSampleable(isNextRootSpanSampleable()).build();
 
         pushSpanOntoCurrentSpanStack(childSpan);
 
@@ -311,7 +321,7 @@ public class Tracer {
      * <p/>
      * <b>WARNING:</b> This wipes out any existing spans on the span stack for this thread and starts fresh, therefore this should only be called at the request's
      * entry point when it's expected that the span stack should be empty. If you need to start a child span in the middle of a request somewhere then you should call
-     * {@link #startSubSpan(String)} instead.
+     * {@link #startSubSpan(String, SpanPurpose)} instead.
      *
      * @param traceId The new span's {@link Span#getTraceId()} - if this is null then a new random trace ID will be generated for the returned span. If you have parent span info
      *                then this should be the parent span's <b>trace</b> ID (not the parent span's span ID).
@@ -320,14 +330,21 @@ public class Tracer {
      * @param newSpanName The span name to use for the new span - should never be null.
      * @param sampleable The new span's {@link Span#isSampleable()} value. Determines whether or not this span should be logged when it is completed.
      * @param userId The new span's {@link Span#getUserId()} value.
+     * @param spanPurpose The span's purpose, or null if the purpose is unknown. See the javadocs for {@link SpanPurpose} for details on what each enum option means.
      *
      * @return The new span (which is now also the current one that will be returned by {@link #getCurrentSpan()}).
      */
-    protected Span doNewRequestSpan(String traceId, String parentSpanId, String newSpanName, boolean sampleable, String userId) {
+    protected Span doNewRequestSpan(String traceId, String parentSpanId, String newSpanName, boolean sampleable, String userId, SpanPurpose spanPurpose) {
         if (newSpanName == null)
             throw new IllegalArgumentException("spanName cannot be null");
 
-        Span span = Span.newBuilder(newSpanName).withTraceId(traceId).withParentSpanId(parentSpanId).withSampleable(sampleable).withUserId(userId).build();
+        Span span = Span
+            .newBuilder(newSpanName, spanPurpose)
+            .withTraceId(traceId)
+            .withParentSpanId(parentSpanId)
+            .withSampleable(sampleable)
+            .withUserId(userId)
+            .build();
 
         // Since this is a "starting from scratch/new request" call we clear out and restart the current span stack even if it already had something in it.
         startNewSpanStack(span);

@@ -1,5 +1,6 @@
 package com.nike.wingtips;
 
+import com.nike.wingtips.Span.SpanPurpose;
 import com.nike.wingtips.lifecyclelistener.SpanLifecycleListener;
 import com.nike.wingtips.sampling.RootSpanSamplingStrategy;
 import com.nike.wingtips.sampling.SampleAllTheThingsStrategy;
@@ -110,6 +111,7 @@ public class TracerTest {
         assertThat(span.getSpanId()).isNotNull();
         assertThat(span.isSampleable()).isTrue();
         assertThat(span.getUserId()).isNull();
+        assertThat(span.getSpanPurpose()).isEqualTo(SpanPurpose.SERVER);
         assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(span.getTraceId());
         assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(span.toJSON());
     }
@@ -143,6 +145,7 @@ public class TracerTest {
         assertThat(span.getSpanId()).isNotNull();
         assertThat(span.isSampleable()).isTrue();
         assertThat(span.getUserId()).isEqualTo("testUserId");
+        assertThat(span.getSpanPurpose()).isEqualTo(SpanPurpose.SERVER);
         assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(span.getTraceId());
         assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(span.toJSON());
     }
@@ -151,7 +154,7 @@ public class TracerTest {
     public void startRequestWithRootSpan_wipes_out_any_existing_spans_on_the_stack() {
         // given: Tracer already has some Spans on the stack
         Tracer.getInstance().startRequestWithRootSpan("span1");
-        Tracer.getInstance().startSubSpan("span2");
+        Tracer.getInstance().startSubSpan("span2", SpanPurpose.LOCAL_ONLY);
         assertThat(getSpanStackSize()).isEqualTo(2);
 
         // when: Tracer.startRequestWithRootSpan(String) is called to start a span without a parent
@@ -167,7 +170,7 @@ public class TracerTest {
     @Test
     public void startRequestWithChildSpan_should_start_valid_child_span_with_parent() {
         // given: no span started and a parent span exists
-        Span parentSpan = Span.generateRootSpanForNewTrace("parentspan").build();
+        Span parentSpan = Span.generateRootSpanForNewTrace("parentspan", SpanPurpose.LOCAL_ONLY).build();
         assertThat(Tracer.getInstance().getCurrentSpan()).isNull();
         assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isNull();
         assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isNull();
@@ -194,6 +197,8 @@ public class TracerTest {
         assertThat(span.getSpanId()).isNotNull();
         assertThat(span.getSpanId()).isNotEqualTo(parentSpan.getSpanId());
         assertThat(span.isSampleable()).isEqualTo(parentSpan.isSampleable());
+        assertThat(span.getUserId()).isNull();
+        assertThat(span.getSpanPurpose()).isEqualTo(SpanPurpose.SERVER);
         assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(span.getTraceId());
         assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(span.toJSON());
     }
@@ -201,7 +206,9 @@ public class TracerTest {
     @Test
     public void startRequestWithChildSpan_should_start_valid_child_span_with_parent_and_user_id() {
         // given: no span started and a parent span exists
-        Span parentSpan = Span.generateRootSpanForNewTrace("parentspan").withUserId("testUserId").build();
+        Span parentSpan = Span.generateRootSpanForNewTrace("parentspan", SpanPurpose.LOCAL_ONLY)
+                              .withUserId("testUserId")
+                              .build();
         assertThat(Tracer.getInstance().getCurrentSpan()).isNull();
         assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isNull();
         assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isNull();
@@ -229,6 +236,7 @@ public class TracerTest {
         assertThat(span.getSpanId()).isNotEqualTo(parentSpan.getSpanId());
         assertThat(span.isSampleable()).isEqualTo(parentSpan.isSampleable());
         assertThat(span.getUserId()).isEqualTo("testUserId");
+        assertThat(span.getSpanPurpose()).isEqualTo(SpanPurpose.SERVER);
         assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(span.getTraceId());
         assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(span.toJSON());
     }
@@ -237,10 +245,10 @@ public class TracerTest {
     public void startRequestWithChildSpan_wipes_out_any_existing_spans_on_the_stack() {
         // given: Tracer already has some Spans on the stack, and we have a parent span we're going to use
         Tracer.getInstance().startRequestWithRootSpan("span1");
-        Tracer.getInstance().startSubSpan("span2");
+        Tracer.getInstance().startSubSpan("span2", SpanPurpose.LOCAL_ONLY);
         assertThat(getSpanStackSize()).isEqualTo(2);
 
-        Span newSpanParent = Span.generateRootSpanForNewTrace("parentspan").build();
+        Span newSpanParent = Span.generateRootSpanForNewTrace("parentspan", SpanPurpose.CLIENT).build();
 
         // when: Tracer.startRequestWithChildSpan(Span, String) is called to start a span with a parent
         Tracer.getInstance().startRequestWithChildSpan(newSpanParent, "childspan");
@@ -259,8 +267,14 @@ public class TracerTest {
         fail("Expected IllegalArgumentException but no exception was thrown");
     }
 
+    @DataProvider(value = {
+        "SERVER",
+        "CLIENT",
+        "LOCAL_ONLY",
+        "UNKNOWN"
+    }, splitBy = "\\|")
     @Test
-    public void startRequestWithSpanInfo_should_start_valid_span_with_given_data() {
+    public void startRequestWithSpanInfo_should_start_valid_span_with_given_data(SpanPurpose spanPurpose) {
         // given
         String traceId = UUID.randomUUID().toString();
         String parentSpanId = UUID.randomUUID().toString();
@@ -275,7 +289,7 @@ public class TracerTest {
         long beforeNanoTime = System.nanoTime();
         long beforeEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
         @SuppressWarnings("ConstantConditions")
-        Span span = Tracer.getInstance().startRequestWithSpanInfo(traceId, parentSpanId, spanName, sampleable, userId);
+        Span span = Tracer.getInstance().startRequestWithSpanInfo(traceId, parentSpanId, spanName, sampleable, userId, spanPurpose);
         long afterNanoTime = System.nanoTime();
         long afterEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
 
@@ -290,14 +304,21 @@ public class TracerTest {
         //noinspection ConstantConditions
         assertThat(span.isSampleable()).isEqualTo(sampleable);
         assertThat(span.getUserId()).isEqualTo(userId);
+        assertThat(span.getSpanPurpose()).isEqualTo(spanPurpose);
         assertThat(span.getSpanStartTimeEpochMicros()).isBetween(beforeEpochMicros, afterEpochMicros);
         assertThat(span.getSpanStartTimeNanos()).isBetween(beforeNanoTime, afterNanoTime);
         assertThat(span.isCompleted()).isFalse();
         assertThat(span.getDurationNanos()).isNull();
     }
 
+    @DataProvider(value = {
+        "SERVER",
+        "CLIENT",
+        "LOCAL_ONLY",
+        "UNKNOWN"
+    }, splitBy = "\\|")
     @Test
-    public void startSubSpan_should_start_valid_sub_span() {
+    public void startSubSpan_should_start_valid_sub_span(SpanPurpose spanPurpose) {
         // given: an already-started span
         assertThat(getSpanStackSize()).isEqualTo(0);
         Tracer.getInstance().startRequestWithRootSpan("firstspan");
@@ -307,7 +328,7 @@ public class TracerTest {
         // when: Tracer.startSubSpan(String) is called to start a subspan
         long beforeNanoTime = System.nanoTime();
         long beforeEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
-        Tracer.getInstance().startSubSpan("subspan");
+        Tracer.getInstance().startSubSpan("subspan", spanPurpose);
         long afterNanoTime = System.nanoTime();
         long afterEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
 
@@ -324,12 +345,19 @@ public class TracerTest {
         assertThat(subspan.getTraceId()).isNotNull();
         assertThat(subspan.getSpanId()).isNotNull();
         assertThat(subspan.isSampleable()).isEqualTo(firstSpan.isSampleable());
+        assertThat(subspan.getSpanPurpose()).isEqualTo(spanPurpose);
         assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(subspan.getTraceId());
         assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(subspan.toJSON());
     }
 
+    @DataProvider(value = {
+        "SERVER",
+        "CLIENT",
+        "LOCAL_ONLY",
+        "UNKNOWN"
+    }, splitBy = "\\|")
     @Test
-    public void startSubSpan_should_function_like_startRequestWithRootSpan_when_there_is_no_parent_span() {
+    public void startSubSpan_should_function_like_startRequestWithRootSpan_when_there_is_no_parent_span(SpanPurpose spanPurpose) {
         // given: no span started
         assertThat(Tracer.getInstance().getCurrentSpan()).isNull();
         assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isNull();
@@ -338,7 +366,7 @@ public class TracerTest {
         // when: Tracer.startSubSpan(String) is called to start a subspan
         long beforeNanoTime = System.nanoTime();
         long beforeEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
-        Tracer.getInstance().startSubSpan("subspan");
+        Tracer.getInstance().startSubSpan("subspan", spanPurpose);
         long afterNanoTime = System.nanoTime();
         long afterEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
 
@@ -355,6 +383,7 @@ public class TracerTest {
         assertThat(subspan.getTraceId()).isNotNull();
         assertThat(subspan.getSpanId()).isNotNull();
         assertThat(subspan.isSampleable()).isTrue();
+        assertThat(subspan.getSpanPurpose()).isEqualTo(spanPurpose);
         assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(subspan.getTraceId());
         assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(subspan.toJSON());
     }
@@ -368,8 +397,8 @@ public class TracerTest {
 
     @DataProvider
     public static Object[][] spanStackDataProvider() {
-        Span rootSpan = Span.generateRootSpanForNewTrace("rootspan").build();
-        Span childSpan = rootSpan.generateChildSpan("childSpan");
+        Span rootSpan = Span.generateRootSpanForNewTrace("rootspan", SpanPurpose.SERVER).build();
+        Span childSpan = rootSpan.generateChildSpan("childSpan", SpanPurpose.CLIENT);
 
         return new Object[][] {
                 { null },
@@ -400,7 +429,7 @@ public class TracerTest {
     @Test
     public void configureMDC_should_set_span_values_on_MDC() throws Exception {
         // given
-        Span span = Span.newBuilder("test-span").withParentSpanId("3").build();
+        Span span = Span.newBuilder("test-span", SpanPurpose.LOCAL_ONLY).withParentSpanId("3").build();
         String expected = span.toJSON();
 
         // when
@@ -413,7 +442,7 @@ public class TracerTest {
     @Test
     public void unconfigureMDC_should_unset_span_values_on_MDC() throws Exception {
         // given
-        Span span = Span.newBuilder("test-span").withParentSpanId("3").build();
+        Span span = Span.newBuilder("test-span", SpanPurpose.LOCAL_ONLY).withParentSpanId("3").build();
         Tracer.configureMDC(span);
 
         // when
@@ -445,7 +474,7 @@ public class TracerTest {
         assertThat(getSpanStackSize()).isEqualTo(0);
         assertThat(getSpanStackFromTracer()).isNull();
 
-        Span mdcSpan = Span.generateRootSpanForNewTrace("mdcSpan").build();
+        Span mdcSpan = Span.generateRootSpanForNewTrace("mdcSpan", SpanPurpose.LOCAL_ONLY).build();
         MDC.put(Tracer.TRACE_ID_MDC_KEY, mdcSpan.getTraceId());
         MDC.put(Tracer.SPAN_JSON_MDC_KEY, mdcSpan.toJSON());
         assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(mdcSpan.getTraceId());
@@ -470,7 +499,7 @@ public class TracerTest {
         assertThat(getSpanStackSize()).isEqualTo(0);
         assertThat(Tracer.getInstance().getCurrentSpan()).isNull();
 
-        Span span = Span.generateRootSpanForNewTrace("mdcSpan").build();
+        Span span = Span.generateRootSpanForNewTrace("mdcSpan", SpanPurpose.LOCAL_ONLY).build();
         MDC.put(Tracer.TRACE_ID_MDC_KEY, span.getTraceId());
         MDC.put(Tracer.SPAN_JSON_MDC_KEY, span.toJSON());
         assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(span.getTraceId());
@@ -490,12 +519,12 @@ public class TracerTest {
     @Test
     public void setCurrentSpanFromMdcIfNotAlreadySet_should_do_nothing_if_stack_is_not_empty() {
         // given: span stack has something on it and the MDC is setup with a different span for some reason
-        Tracer.getInstance().startSubSpan("somespan");
+        Tracer.getInstance().startSubSpan("somespan", SpanPurpose.LOCAL_ONLY);
         assertThat(Tracer.getInstance().getCurrentSpan()).isNotNull();
         assertThat(getSpanStackSize()).isEqualTo(1);
         Span spanFromTracer = Tracer.getInstance().getCurrentSpan();
 
-        Span span = Span.generateRootSpanForNewTrace("mdcSpan").build();
+        Span span = Span.generateRootSpanForNewTrace("mdcSpan", SpanPurpose.LOCAL_ONLY).build();
         MDC.put(Tracer.TRACE_ID_MDC_KEY, span.getTraceId());
         MDC.put(Tracer.SPAN_JSON_MDC_KEY, span.toJSON());
         assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(span.getTraceId());
@@ -549,10 +578,10 @@ public class TracerTest {
         Tracer.getInstance().startRequestWithRootSpan("parentspan");
         Span parentSpan = Tracer.getInstance().getCurrentSpan();
         assertThat(parentSpan.getSpanName()).isEqualTo("parentspan");
-        Tracer.getInstance().startSubSpan("subspan1");
+        Tracer.getInstance().startSubSpan("subspan1", SpanPurpose.LOCAL_ONLY);
         Span subspan1 = Tracer.getInstance().getCurrentSpan();
         assertThat(subspan1.getSpanName()).isEqualTo("subspan1");
-        Tracer.getInstance().startSubSpan("subspan2");
+        Tracer.getInstance().startSubSpan("subspan2", SpanPurpose.LOCAL_ONLY);
         Span subspan2 = Tracer.getInstance().getCurrentSpan();
         assertThat(subspan2.getSpanName()).isEqualTo("subspan2");
         assertThat(getSpanStackSize()).isEqualTo(3);
@@ -602,7 +631,7 @@ public class TracerTest {
         Tracer.getInstance().startRequestWithRootSpan("parentspan");
         Span parentSpan = Tracer.getInstance().getCurrentSpan();
         assertThat(parentSpan.getSpanName()).isEqualTo("parentspan");
-        Tracer.getInstance().startSubSpan("subspan");
+        Tracer.getInstance().startSubSpan("subspan", SpanPurpose.LOCAL_ONLY);
         Span subspan = Tracer.getInstance().getCurrentSpan();
         assertThat(subspan.getSpanName()).isEqualTo("subspan");
         assertThat(getSpanStackSize()).isEqualTo(2);
@@ -824,7 +853,7 @@ public class TracerTest {
         tracer.addSpanLifecycleListener(listener2);
 
         // when
-        Span span = tracer.startRequestWithSpanInfo("t", "p", "n", true, "u");
+        Span span = tracer.startRequestWithSpanInfo("t", "p", "n", true, "u", SpanPurpose.LOCAL_ONLY);
 
         // then
         verify(listener1).spanStarted(span);
@@ -846,7 +875,7 @@ public class TracerTest {
         tracer.addSpanLifecycleListener(listener2);
 
         // when
-        Span span = tracer.startRequestWithSpanInfo("t", "p", "n", false, "u");
+        Span span = tracer.startRequestWithSpanInfo("t", "p", "n", false, "u", SpanPurpose.LOCAL_ONLY);
 
         // then
         verify(listener1).spanStarted(span);
@@ -913,7 +942,7 @@ public class TracerTest {
         tracer.startRequestWithRootSpan("newspan");
 
         // when
-        Span subspan = tracer.startSubSpan("subspan");
+        Span subspan = tracer.startSubSpan("subspan", SpanPurpose.LOCAL_ONLY);
 
         // then
         verify(listener1).spanStarted(subspan);
@@ -930,10 +959,10 @@ public class TracerTest {
         Tracer tracer = Tracer.getInstance();
         tracer.addSpanLifecycleListener(listener1);
         tracer.addSpanLifecycleListener(listener2);
-        tracer.startRequestWithSpanInfo("t", "p", "n", true, "u");
+        tracer.startRequestWithSpanInfo("t", "p", "n", true, "u", SpanPurpose.LOCAL_ONLY);
 
         // when
-        Span subspan = tracer.startSubSpan("subspan");
+        Span subspan = tracer.startSubSpan("subspan", SpanPurpose.LOCAL_ONLY);
 
         // then
         verify(listener1).spanStarted(subspan);
@@ -953,10 +982,10 @@ public class TracerTest {
         Tracer tracer = Tracer.getInstance();
         tracer.addSpanLifecycleListener(listener1);
         tracer.addSpanLifecycleListener(listener2);
-        tracer.startRequestWithSpanInfo("t", "p", "n", false, "u");
+        tracer.startRequestWithSpanInfo("t", "p", "n", false, "u", SpanPurpose.LOCAL_ONLY);
 
         // when
-        Span subspan = tracer.startSubSpan("subspan");
+        Span subspan = tracer.startSubSpan("subspan", SpanPurpose.LOCAL_ONLY);
 
         // then
         verify(listener1).spanStarted(subspan);
@@ -976,7 +1005,7 @@ public class TracerTest {
         tracer.addSpanLifecycleListener(listener1);
         tracer.addSpanLifecycleListener(listener2);
         tracer.startRequestWithRootSpan("newspan");
-        Span subspan = tracer.startSubSpan("subspan");
+        Span subspan = tracer.startSubSpan("subspan", SpanPurpose.LOCAL_ONLY);
         verify(listener1).spanStarted(subspan);
         verify(listener1, times(0)).spanCompleted(subspan);
         verify(listener2).spanStarted(subspan);
@@ -999,7 +1028,7 @@ public class TracerTest {
         tracer.addSpanLifecycleListener(listener1);
         tracer.addSpanLifecycleListener(listener2);
         tracer.startRequestWithRootSpan("newspan");
-        Span subspan = tracer.startSubSpan("subspan");
+        Span subspan = tracer.startSubSpan("subspan", SpanPurpose.LOCAL_ONLY);
         subspan.complete();
         verify(listener1).spanStarted(subspan);
         verify(listener1, times(0)).spanCompleted(subspan);
@@ -1019,7 +1048,7 @@ public class TracerTest {
         // given
         Tracer tracer = Tracer.getInstance();
         Span parentSpan = tracer.startRequestWithRootSpan("foo");
-        Span subspan = tracer.startSubSpan("bar");
+        Span subspan = tracer.startSubSpan("bar", SpanPurpose.LOCAL_ONLY);
         assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(subspan.getTraceId());
         assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(subspan.toJSON());
         assertThat(getSpanStackSize()).isEqualTo(2);
@@ -1043,8 +1072,8 @@ public class TracerTest {
         Tracer tracer = Tracer.getInstance();
 
         Deque<Span> newSpanStack = new LinkedList<>();
-        Span parentSpan = Span.newBuilder("foo").build();
-        Span subspan = Span.newBuilder("bar").build();
+        Span parentSpan = Span.newBuilder("foo", SpanPurpose.LOCAL_ONLY).build();
+        Span subspan = Span.newBuilder("bar", SpanPurpose.LOCAL_ONLY).build();
         newSpanStack.push(parentSpan);
         newSpanStack.push(subspan);
 
@@ -1065,7 +1094,7 @@ public class TracerTest {
         assertThat(Tracer.getInstance().containsSameSpansInSameOrder(spanStack, newSpanStack)).isTrue();
         assertThat(spanStack).isNotSameAs(newSpanStack);
 
-        newSpanStack.push(subspan.generateChildSpan("subsub"));
+        newSpanStack.push(subspan.generateChildSpan("subsub", SpanPurpose.LOCAL_ONLY));
         assertThat(newSpanStack).hasSize(3);
         assertThat(spanStack).hasSize(2);
     }
@@ -1077,8 +1106,8 @@ public class TracerTest {
         Tracer tracer = Tracer.getInstance();
 
         Deque<Span> newSpanStack = new LinkedList<>();
-        Span parentSpan = Span.newBuilder("foo").build();
-        Span subspan = Span.newBuilder("bar").build();
+        Span parentSpan = Span.newBuilder("foo", SpanPurpose.LOCAL_ONLY).build();
+        Span subspan = Span.newBuilder("bar", SpanPurpose.LOCAL_ONLY).build();
         newSpanStack.push(parentSpan);
         newSpanStack.push(subspan);
 
@@ -1099,7 +1128,7 @@ public class TracerTest {
         assertThat(Tracer.getInstance().containsSameSpansInSameOrder(spanStack, newSpanStack)).isTrue();
         assertThat(spanStack).isNotSameAs(newSpanStack);
 
-        newSpanStack.push(subspan.generateChildSpan("subsub"));
+        newSpanStack.push(subspan.generateChildSpan("subsub", SpanPurpose.LOCAL_ONLY));
         assertThat(newSpanStack).hasSize(3);
         assertThat(spanStack).hasSize(2);
     }
@@ -1111,8 +1140,8 @@ public class TracerTest {
         Span existingSpan = tracer.startRequestWithRootSpan("old");
 
         Deque<Span> newSpanStack = new LinkedList<>();
-        Span parentSpan = Span.newBuilder("foo").build();
-        Span subspan = Span.newBuilder("bar").build();
+        Span parentSpan = Span.newBuilder("foo", SpanPurpose.LOCAL_ONLY).build();
+        Span subspan = Span.newBuilder("bar", SpanPurpose.LOCAL_ONLY).build();
         newSpanStack.push(parentSpan);
         newSpanStack.push(subspan);
 
@@ -1135,7 +1164,7 @@ public class TracerTest {
         // given
         Tracer tracer = Tracer.getInstance();
         tracer.startRequestWithRootSpan("foo");
-        Span subspan = tracer.startSubSpan("bar");
+        Span subspan = tracer.startSubSpan("bar", SpanPurpose.LOCAL_ONLY);
         assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(subspan.getTraceId());
         assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(subspan.toJSON());
 
@@ -1154,7 +1183,7 @@ public class TracerTest {
         // given
         Tracer tracer = Tracer.getInstance();
         tracer.startRequestWithRootSpan("foo");
-        Span subspan = tracer.startSubSpan("bar");
+        Span subspan = tracer.startSubSpan("bar", SpanPurpose.LOCAL_ONLY);
         assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(subspan.getTraceId());
         assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(subspan.toJSON());
 
@@ -1173,7 +1202,7 @@ public class TracerTest {
         // given
         Tracer tracer = Tracer.getInstance();
         tracer.startRequestWithRootSpan("foo");
-        Span subspan = tracer.startSubSpan("bar");
+        Span subspan = tracer.startSubSpan("bar", SpanPurpose.LOCAL_ONLY);
         assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(subspan.getTraceId());
         assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(subspan.toJSON());
 
@@ -1191,7 +1220,7 @@ public class TracerTest {
         // given
         Tracer tracer = Tracer.getInstance();
         tracer.startRequestWithRootSpan("foo");
-        Span subspan = tracer.startSubSpan("bar");
+        Span subspan = tracer.startSubSpan("bar", SpanPurpose.LOCAL_ONLY);
         assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(subspan.getTraceId());
         assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(subspan.toJSON());
 
@@ -1207,9 +1236,9 @@ public class TracerTest {
 
     @DataProvider
     public static Object[][] dataProviderForContainsSameSpansInSameOrder() {
-        Span spanA = Span.newBuilder("span-A").withTraceId("A").build();
-        Span spanB = Span.newBuilder("span-B").withTraceId("B").build();
-        Span spanC = Span.newBuilder("span-C").withTraceId("C").build();
+        Span spanA = Span.newBuilder("span-A", SpanPurpose.LOCAL_ONLY).withTraceId("A").build();
+        Span spanB = Span.newBuilder("span-B", SpanPurpose.SERVER).withTraceId("B").build();
+        Span spanC = Span.newBuilder("span-C", SpanPurpose.CLIENT).withTraceId("C").build();
 
         Span otherSpanA = Span.newBuilder(spanA).build();
         Span otherSpanB = Span.newBuilder(spanB).build();
@@ -1248,7 +1277,7 @@ public class TracerTest {
 
         // Start some spans for request A
         Span reqAParentSpan = tracer.startRequestWithRootSpan("req_A_foo");
-        Span reqASubSpan = tracer.startSubSpan("req_A_bar");
+        Span reqASubSpan = tracer.startSubSpan("req_A_bar", SpanPurpose.LOCAL_ONLY);
         assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(reqASubSpan.getTraceId());
         assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(reqASubSpan.toJSON());
         assertThat(tracer.getCurrentSpan()).isEqualTo(reqASubSpan);
@@ -1262,7 +1291,7 @@ public class TracerTest {
 
         // Start some spans for request B
         Span reqBParentSpan = tracer.startRequestWithRootSpan("req_B_foo");
-        Span reqBSubSpan = tracer.startSubSpan("req_B_bar");
+        Span reqBSubSpan = tracer.startSubSpan("req_B_bar", SpanPurpose.LOCAL_ONLY);
 
         assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(reqBSubSpan.getTraceId());
         assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(reqBSubSpan.toJSON());
@@ -1327,7 +1356,7 @@ public class TracerTest {
         // given
         Tracer tracer = Tracer.getInstance();
         Span parentSpan = tracer.startRequestWithRootSpan("foo");
-        Span subspan = tracer.startSubSpan("bar");
+        Span subspan = tracer.startSubSpan("bar", SpanPurpose.LOCAL_ONLY);
 
         assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(subspan.getTraceId());
         assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(subspan.toJSON());
@@ -1362,7 +1391,7 @@ public class TracerTest {
     @Test
     public void verify_span_serialization_methods(Tracer.SpanLoggingRepresentation serializationOption) {
         // given
-        Span span = Span.generateRootSpanForNewTrace(UUID.randomUUID().toString()).build();
+        Span span = Span.generateRootSpanForNewTrace(UUID.randomUUID().toString(), SpanPurpose.LOCAL_ONLY).build();
         String expectedOutput;
         switch(serializationOption) {
             case JSON:

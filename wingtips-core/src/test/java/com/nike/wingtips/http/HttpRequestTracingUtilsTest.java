@@ -1,11 +1,14 @@
 package com.nike.wingtips.http;
 
 import com.nike.wingtips.Span;
+import com.nike.wingtips.Span.SpanPurpose;
 import com.nike.wingtips.TraceAndSpanIdGenerator;
 import com.nike.wingtips.TraceHeaders;
+
 import com.tngtech.java.junit.dataprovider.DataProvider;
 import com.tngtech.java.junit.dataprovider.DataProviderRunner;
 import com.tngtech.java.junit.dataprovider.UseDataProvider;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -67,22 +70,23 @@ public class HttpRequestTracingUtilsTest {
 
     @Test
     public void fromRequestWithHeaders_generates_span_from_headers_in_request() {
-        // given: a set of standard Trace header values
+        // given: a set of standard span header values
         given(request.getHeader(TraceHeaders.TRACE_ID)).willReturn(sampleTraceID);
         given(request.getHeader(TraceHeaders.TRACE_SAMPLED)).willReturn(Boolean.TRUE.toString());
         given(request.getHeader(TraceHeaders.SPAN_ID)).willReturn(sampleSpanID);
         given(request.getHeader(TraceHeaders.PARENT_SPAN_ID)).willReturn(sampleParentSpanID);
         given(request.getHeader(USER_ID_HEADER_KEY)).willReturn(userId);
 
-        // when: creating Trace object from HTTP request
+        // when: creating span object from HTTP request
         Span goodSpan = HttpRequestTracingUtils.fromRequestWithHeaders(request, USER_ID_HEADER_KEYS);
 
-        // then: ensure Trace object gets identical values from corresponding headers
+        // then: ensure span object gets identical values from corresponding headers, and the span purpose is set to SERVER
         assertThat(goodSpan.getTraceId()).isEqualTo(sampleTraceID);
         assertThat(goodSpan.isSampleable()).isTrue();
         assertThat(goodSpan.getSpanId()).isEqualTo(sampleSpanID);
         assertThat(goodSpan.getParentSpanId()).isEqualTo(sampleParentSpanID);
         assertThat(goodSpan.getUserId()).isEqualTo(userId);
+        assertThat(goodSpan.getSpanPurpose()).isEqualTo(SpanPurpose.SERVER);
     }
 
     @Test
@@ -90,7 +94,7 @@ public class HttpRequestTracingUtilsTest {
         // Verify more than 1 distinct user ID header key.
         assertThat(new HashSet<>(USER_ID_HEADER_KEYS).size()).isGreaterThan(1);
         for (String userIdHeaderKey : USER_ID_HEADER_KEYS) {
-            // given: a set of standard Trace header values for the header key
+            // given: a set of standard span header values for the header key
             String userIdValue = UUID.randomUUID().toString();
             RequestWithHeaders request = mock(RequestWithHeaders.class);
             given(request.getHeader(TraceHeaders.TRACE_ID)).willReturn(sampleTraceID);
@@ -99,15 +103,16 @@ public class HttpRequestTracingUtilsTest {
             given(request.getHeader(TraceHeaders.PARENT_SPAN_ID)).willReturn(sampleParentSpanID);
             given(request.getHeader(userIdHeaderKey)).willReturn(userIdValue);
 
-            // when: creating Trace object from HTTP request
+            // when: creating span object from HTTP request
             Span goodSpan = HttpRequestTracingUtils.fromRequestWithHeaders(request, USER_ID_HEADER_KEYS);
 
-            // then: ensure Trace object gets identical values from corresponding headers
+            // then: ensure span object gets identical values from corresponding headers, and sets the span purpose to SERVER
             assertThat(goodSpan.getTraceId()).isEqualTo(sampleTraceID);
             assertThat(goodSpan.isSampleable()).isTrue();
             assertThat(goodSpan.getSpanId()).isEqualTo(sampleSpanID);
             assertThat(goodSpan.getParentSpanId()).isEqualTo(sampleParentSpanID);
             assertThat(goodSpan.getUserId()).isEqualTo(userIdValue);
+            assertThat(goodSpan.getSpanPurpose()).isEqualTo(SpanPurpose.SERVER);
         }
     }
 
@@ -314,7 +319,7 @@ public class HttpRequestTracingUtilsTest {
         // when: creating span from request
         Span newSpan = HttpRequestTracingUtils.fromRequestWithHeaders(request, USER_ID_HEADER_KEYS);
 
-        // then: all values will be from the headers, not the attributes
+        // then: all values will be from the attributes
         assertThat(newSpan.getTraceId()).isEqualTo(attributeTraceId);
         assertThat(newSpan.getSpanId()).isEqualTo(attributeSpanId);
         assertThat(newSpan.getParentSpanId()).isEqualTo(attributeParentSpanId);
@@ -348,7 +353,7 @@ public class HttpRequestTracingUtilsTest {
         // when: creating span from request
         Span newSpan = HttpRequestTracingUtils.fromRequestWithHeaders(request, USER_ID_HEADER_KEYS);
 
-        // then: all values will be from the headers, not the attributes
+        // then: all values will be from the attributes, not the headers
         assertThat(newSpan.getTraceId()).isEqualTo(attributeTraceId);
         assertThat(newSpan.getSpanId()).isEqualTo(attributeSpanId);
         assertThat(newSpan.getParentSpanId()).isEqualTo(attributeParentSpanId);
@@ -373,7 +378,6 @@ public class HttpRequestTracingUtilsTest {
         assertThat(firstSpan.getSpanId()).isNotEmpty();
         assertThat(secondSpan.getSpanId()).isNotEmpty();
         assertThat(firstSpan.getSpanId()).isNotEqualTo(secondSpan.getTraceId());
-
     }
 
 }

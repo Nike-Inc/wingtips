@@ -1,10 +1,15 @@
 package com.nike.wingtips;
 
+import com.nike.wingtips.Span.SpanPurpose;
+
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.tngtech.java.junit.dataprovider.DataProvider;
+import com.tngtech.java.junit.dataprovider.DataProviderRunner;
 
 import org.assertj.core.data.Offset;
 import org.junit.Test;
+import org.junit.runner.RunWith;
 import org.mockito.internal.util.reflection.Whitebox;
 
 import java.io.IOException;
@@ -21,6 +26,7 @@ import static org.assertj.core.api.Fail.fail;
 /**
  * Tests the functionality of {@link Span}
  */
+@RunWith(DataProviderRunner.class)
 public class SpanTest {
 
     private String traceId = TraceAndSpanIdGenerator.generateId();
@@ -28,6 +34,7 @@ public class SpanTest {
     private String parentSpanId = TraceAndSpanIdGenerator.generateId();
     private String spanName = "spanName-" + UUID.randomUUID().toString();
     private String userId = "userId-" + UUID.randomUUID().toString();
+    private SpanPurpose spanPurpose = SpanPurpose.SERVER;
     private boolean sampleableForFullyCompleteSpan = false;
     private long startTimeEpochMicrosForFullyCompleteSpan = 42;
     private long startTimeNanosForFullyCompleteSpan = calculateNanoStartTimeFromSpecifiedEpochMicrosStartTime(
@@ -35,6 +42,7 @@ public class SpanTest {
         TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis()),
         System.nanoTime());
     private long durationNanosForFullyCompletedSpan = 424242;
+    private SpanPurpose spanPurposeForFullyCompletedSpan = SpanPurpose.SERVER;
 
     private ObjectMapper objectMapper = new ObjectMapper();
 
@@ -53,7 +61,7 @@ public class SpanTest {
     private Span createFilledOutSpan(boolean completed) {
         Long durationNanos = (completed) ? durationNanosForFullyCompletedSpan : null;
         return new Span(traceId, parentSpanId, spanId, spanName, sampleableForFullyCompleteSpan, userId,
-                        startTimeEpochMicrosForFullyCompleteSpan, startTimeNanosForFullyCompleteSpan, durationNanos);
+                        spanPurposeForFullyCompletedSpan, startTimeEpochMicrosForFullyCompleteSpan, startTimeNanosForFullyCompleteSpan, durationNanos);
     }
 
     private void verifySpanEqualsDeserializedValues(Span span, Map<String, String> deserializedValues) {
@@ -66,6 +74,7 @@ public class SpanTest {
         assertThat(nullSafeStringValueOf(span.isSampleable())).isEqualTo(deserializedValues.get(Span.SAMPLEABLE_FIELD));
         assertThat(nullSafeStringValueOf(span.getUserId())).isEqualTo(deserializedValues.get(Span.USER_ID_FIELD));
         assertThat(nullSafeStringValueOf(span.getDurationNanos())).isEqualTo(nullSafeStringValueOf(deserializedValues.get(Span.DURATION_NANOS_FIELD)));
+        assertThat(nullSafeStringValueOf(span.getSpanPurpose())).isEqualTo(nullSafeStringValueOf(deserializedValues.get(Span.SPAN_PURPOSE_FIELD)));
     }
 
     private void verifySpanDeepEquals(Span span1, Span span2, boolean allowStartTimeNanosFudgeFactor) {
@@ -82,12 +91,13 @@ public class SpanTest {
         assertThat(span1.isSampleable()).isEqualTo(span2.isSampleable());
         assertThat(span1.getUserId()).isEqualTo(span2.getUserId());
         assertThat(span1.getDurationNanos()).isEqualTo(span2.getDurationNanos());
+        assertThat(span1.getSpanPurpose()).isEqualTo(span2.getSpanPurpose());
     }
 
     @Test
     public void public_constructor_works_as_expected_for_completed_span() {
         // when
-        Span span = new Span(traceId, parentSpanId, spanId, spanName, sampleableForFullyCompleteSpan, userId,
+        Span span = new Span(traceId, parentSpanId, spanId, spanName, sampleableForFullyCompleteSpan, userId, spanPurposeForFullyCompletedSpan,
                              startTimeEpochMicrosForFullyCompleteSpan, startTimeNanosForFullyCompleteSpan, durationNanosForFullyCompletedSpan);
 
         // then
@@ -99,6 +109,7 @@ public class SpanTest {
         assertThat(span.getUserId()).isEqualTo(userId);
         assertThat(span.getSpanStartTimeEpochMicros()).isEqualTo(startTimeEpochMicrosForFullyCompleteSpan);
         assertThat(span.getSpanStartTimeNanos()).isEqualTo(startTimeNanosForFullyCompleteSpan);
+        assertThat(span.getSpanPurpose()).isEqualTo(spanPurposeForFullyCompletedSpan);
 
         assertThat(span.isCompleted()).isTrue();
         assertThat(span.getDurationNanos()).isEqualTo(durationNanosForFullyCompletedSpan);
@@ -107,7 +118,7 @@ public class SpanTest {
     @Test
     public void public_constructor_works_as_expected_for_incomplete_span() {
         // when
-        Span span = new Span(traceId, parentSpanId, spanId, spanName, sampleableForFullyCompleteSpan, userId,
+        Span span = new Span(traceId, parentSpanId, spanId, spanName, sampleableForFullyCompleteSpan, userId, spanPurposeForFullyCompletedSpan,
                              startTimeEpochMicrosForFullyCompleteSpan, startTimeNanosForFullyCompleteSpan, null);
 
         // then
@@ -119,6 +130,7 @@ public class SpanTest {
         assertThat(span.getUserId()).isEqualTo(userId);
         assertThat(span.getSpanStartTimeEpochMicros()).isEqualTo(startTimeEpochMicrosForFullyCompleteSpan);
         assertThat(span.getSpanStartTimeNanos()).isEqualTo(startTimeNanosForFullyCompleteSpan);
+        assertThat(span.getSpanPurpose()).isEqualTo(spanPurposeForFullyCompletedSpan);
 
         assertThat(span.isCompleted()).isFalse();
         assertThat(span.getDurationNanos()).isNull();
@@ -127,19 +139,28 @@ public class SpanTest {
     @Test(expected = IllegalArgumentException.class)
     public void public_constructor_throws_IllegalArgumentException_if_passed_null_trace_id() {
         // expect
-        new Span(null, parentSpanId, spanId, spanName, true, userId, 42, null, null);
+        new Span(null, parentSpanId, spanId, spanName, true, userId, spanPurpose, 42, null, null);
     }
 
     @Test(expected = IllegalArgumentException.class)
     public void public_constructor_throws_IllegalArgumentException_if_passed_null_span_id() {
         // expect
-        new Span(traceId, parentSpanId, null, spanName, true, userId, 42, null, null);
+        new Span(traceId, parentSpanId, null, spanName, true, userId, spanPurpose, 42, null, null);
     }
 
     @Test(expected = IllegalArgumentException.class)
     public void public_constructor_throws_IllegalArgumentException_if_passed_null_span_name() {
         // expect
-        new Span(traceId, parentSpanId, spanId, null, true, userId, 42, null, null);
+        new Span(traceId, parentSpanId, spanId, null, true, userId, spanPurpose, 42, null, null);
+    }
+
+    @Test
+    public void public_constructor_defaults_to_UNKNOWN_span_purpose_if_passed_null() {
+        // when
+        Span span = new Span(traceId, parentSpanId, spanId, spanName, true, userId, null, 42, null, null);
+
+        // then
+        assertThat(span.getSpanPurpose()).isEqualTo(SpanPurpose.UNKNOWN);
     }
 
     @Test
@@ -150,7 +171,7 @@ public class SpanTest {
         long epochMicrosBeforeCall = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
 
         // when
-        Span span = new Span(traceId, parentSpanId, spanId, spanName, true, userId, startTimeEpochMicrosUsed, null, 41L);
+        Span span = new Span(traceId, parentSpanId, spanId, spanName, true, userId, spanPurpose, startTimeEpochMicrosUsed, null, 41L);
         long epochMicrosAfterCall = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
         long nanosAfterCall = System.nanoTime();
 
@@ -176,19 +197,25 @@ public class SpanTest {
 
         // then
         verifySpanDeepEquals(result,
-                             new Span(placeholderValue, null, placeholderValue, placeholderValue, false, null, -1, -1L, -1L),
+                             new Span(placeholderValue, null, placeholderValue, placeholderValue, false, null, SpanPurpose.UNKNOWN, -1, -1L, -1L),
                              false);
     }
 
+    @DataProvider(value = {
+        "SERVER",
+        "CLIENT",
+        "LOCAL_ONLY",
+        "UNKNOWN"
+    }, splitBy = "\\|")
     @Test
-    public void generateRootSpanForNewTrace_generates_root_span_as_expected() {
+    public void generateRootSpanForNewTrace_generates_root_span_as_expected(SpanPurpose spanPurpose) {
         // given
         String spanName = UUID.randomUUID().toString();
 
         // when
         long beforeCallNanos = System.nanoTime();
         long beforeCallEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
-        Span result = Span.generateRootSpanForNewTrace(spanName).build();
+        Span result = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
         long afterCallNanos = System.nanoTime();
         long afterCallEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
 
@@ -199,14 +226,21 @@ public class SpanTest {
         assertThat(result.getSpanName()).isEqualTo(spanName);
         assertThat(result.isSampleable()).isTrue();
         assertThat(result.getUserId()).isNull();
+        assertThat(result.getSpanPurpose()).isEqualTo(spanPurpose);
         assertThat(result.getSpanStartTimeEpochMicros()).isBetween(beforeCallEpochMicros, afterCallEpochMicros);
         assertThat(result.getSpanStartTimeNanos()).isBetween(beforeCallNanos, afterCallNanos);
         assertThat(result.isCompleted()).isFalse();
         assertThat(result.getDurationNanos()).isNull();
     }
 
+    @DataProvider(value = {
+        "SERVER",
+        "CLIENT",
+        "LOCAL_ONLY",
+        "UNKNOWN"
+    }, splitBy = "\\|")
     @Test
-    public void generateChildSpan_works_as_expected_for_incomplete_parent_span() {
+    public void generateChildSpan_works_as_expected_for_incomplete_parent_span(SpanPurpose childSpanPurpose) {
         // given: span object with known values that is not completed
         Span parentSpan = createFilledOutSpan(false);
         String childSpanName = UUID.randomUUID().toString();
@@ -215,7 +249,7 @@ public class SpanTest {
         // when: generateChildSpan is used to create a child span with a new span name
         long beforeCallNanos = System.nanoTime();
         long beforeCallEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
-        Span childSpan = parentSpan.generateChildSpan(childSpanName);
+        Span childSpan = parentSpan.generateChildSpan(childSpanName, childSpanPurpose);
         long afterCallNanos = System.nanoTime();
         long afterCallEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
 
@@ -228,6 +262,7 @@ public class SpanTest {
 
         assertThat(childSpan.getTraceId()).isEqualTo(parentSpan.getTraceId());
         assertThat(childSpan.getUserId()).isEqualTo(parentSpan.getUserId());
+        assertThat(childSpan.getSpanPurpose()).isEqualTo(childSpanPurpose);
         assertThat(childSpan.isSampleable()).isEqualTo(parentSpan.isSampleable());
 
         assertThat(childSpan.getSpanStartTimeEpochMicros()).isBetween(beforeCallEpochMicros, afterCallEpochMicros);
@@ -236,8 +271,14 @@ public class SpanTest {
         assertThat(childSpan.getDurationNanos()).isNull();
     }
 
+    @DataProvider(value = {
+        "SERVER",
+        "CLIENT",
+        "LOCAL_ONLY",
+        "UNKNOWN"
+    }, splitBy = "\\|")
     @Test
-    public void generateChildSpan_works_as_expected_for_completed_parent_span() {
+    public void generateChildSpan_works_as_expected_for_completed_parent_span(SpanPurpose childSpanPurpose) {
         // given: span with known values that is completed
         Span parentSpan = createFilledOutSpan(true);
         String childSpanName = UUID.randomUUID().toString();
@@ -246,7 +287,7 @@ public class SpanTest {
         // when: generateChildSpan is used to create a child span with a new span name
         long beforeCallNanos = System.nanoTime();
         long beforeCallEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
-        Span childSpan = parentSpan.generateChildSpan(childSpanName);
+        Span childSpan = parentSpan.generateChildSpan(childSpanName, childSpanPurpose);
         long afterCallNanos = System.nanoTime();
         long afterCallEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
 
@@ -259,6 +300,7 @@ public class SpanTest {
 
         assertThat(childSpan.getTraceId()).isEqualTo(parentSpan.getTraceId());
         assertThat(childSpan.getUserId()).isEqualTo(parentSpan.getUserId());
+        assertThat(childSpan.getSpanPurpose()).isEqualTo(childSpanPurpose);
         assertThat(childSpan.isSampleable()).isEqualTo(parentSpan.isSampleable());
 
         assertThat(childSpan.getSpanStartTimeEpochMicros()).isBetween(beforeCallEpochMicros, afterCallEpochMicros);
@@ -271,7 +313,7 @@ public class SpanTest {
     public void complete_method_should_complete_the_span_with_correct_duration() throws InterruptedException {
         for (int i = 0; i < 10; i++) {
             // given
-            Span validSpan = Span.generateRootSpanForNewTrace(spanName).build();
+            Span validSpan = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
             assertThat(validSpan.isCompleted()).isFalse();
 
             // when
@@ -291,7 +333,7 @@ public class SpanTest {
     @Test(expected = IllegalStateException.class)
     public void complete_should_throw_IllegalStateException_if_span_is_already_completed() {
         // given
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName).build();
+        Span validSpan = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
         validSpan.complete();
         assertThat(validSpan.isCompleted()).isTrue();
 
@@ -323,6 +365,7 @@ public class SpanTest {
         assertThat(validSpan.getSpanId()).isNotEmpty();
         assertThat(validSpan.getDurationNanos()).isNotNull();
         assertThat(validSpan.isCompleted()).isTrue();
+        assertThat(validSpan.getSpanPurpose()).isNotNull();
         String json = validSpan.toJSON();
 
         // when: jackson is used to deserialize that JSON
@@ -335,7 +378,7 @@ public class SpanTest {
     @Test
     public void toJson_should_function_properly_when_there_are_null_values() throws IOException {
         // given: valid span with null values and JSON string from Span.toJson()
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName).build();
+        Span validSpan = Span.generateRootSpanForNewTrace(spanName, null).build();
         assertThat(validSpan.getParentSpanId()).isNull();
         assertThat(validSpan.getUserId()).isNull();
         String json = validSpan.toJSON();
@@ -350,7 +393,7 @@ public class SpanTest {
     @Test
     public void toJson_should_function_properly_for_non_completed_spans() throws IOException {
         // given: valid span and JSON string from Span.toJson()
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName).build();
+        Span validSpan = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
         String json = validSpan.toJSON();
         assertThat(validSpan.isCompleted()).isFalse();
         assertThat(validSpan.getDurationNanos()).isNull();
@@ -365,7 +408,7 @@ public class SpanTest {
     @Test
     public void toJson_should_function_properly_for_completed_spans() throws IOException {
         // given: valid span and completed, and JSON string from Span.toJson()
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName).build();
+        Span validSpan = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
         validSpan.complete();
         assertThat(validSpan.isCompleted()).isTrue();
         assertThat(validSpan.getDurationNanos()).isNotNull();
@@ -381,7 +424,7 @@ public class SpanTest {
     @Test
     public void toJson_should_use_cached_json() {
         // given
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName).build();
+        Span validSpan = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
         String uuidString = UUID.randomUUID().toString();
         Whitebox.setInternalState(validSpan, "cachedJsonRepresentation", uuidString);
 
@@ -395,7 +438,7 @@ public class SpanTest {
     @Test
     public void complete_should_reset_cached_json() throws IOException {
         // given
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName).build();
+        Span validSpan = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
         String uuidString = UUID.randomUUID().toString();
         Whitebox.setInternalState(validSpan, "cachedJsonRepresentation", uuidString);
 
@@ -423,6 +466,7 @@ public class SpanTest {
         assertThat(validSpan.getSpanId()).isNotNull();
         assertThat(validSpan.getDurationNanos()).isNotNull();
         assertThat(validSpan.isCompleted()).isTrue();
+        assertThat(validSpan.getSpanPurpose()).isNotNull();
         String json = validSpan.toJSON();
 
         // when: fromJson is called
@@ -435,7 +479,7 @@ public class SpanTest {
     @Test
     public void fromJson_should_function_properly_when_there_are_null_values() throws IOException {
         // given: valid span with null values and JSON string from Span.toJson()
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName).build();
+        Span validSpan = Span.generateRootSpanForNewTrace(spanName, null).build();
         assertThat(validSpan.getParentSpanId()).isNull();
         assertThat(validSpan.getUserId()).isNull();
         assertThat(validSpan.getDurationNanos()).isNull();
@@ -451,7 +495,7 @@ public class SpanTest {
     @Test
     public void fromJson_should_function_properly_for_non_completed_spans() throws IOException {
         // given: valid, non-completed span and JSON string from Span.toJson()
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName).build();
+        Span validSpan = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
         String json = validSpan.toJSON();
         assertThat(validSpan.isCompleted()).isFalse();
 
@@ -465,7 +509,7 @@ public class SpanTest {
         @Test
     public void fromJson_should_function_properly_for_completed_spans() throws IOException {
         // given: valid span that has been completed, and JSON string from Span.toJson()
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName).build();
+        Span validSpan = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
         validSpan.complete();
         assertThat(validSpan.isCompleted()).isTrue();
         String json = validSpan.toJSON();
@@ -520,6 +564,32 @@ public class SpanTest {
         assertThat(result).isNull();
     }
 
+    @DataProvider(value = {
+        "",
+        "foobar-not-a-real-enum-value"
+    }, splitBy = "\\|")
+    @Test
+    public void fromJson_returns_span_with_UNKNOWN_span_purpose_if_spanPurpose_field_is_missing_or_garbage(String badValue) throws IOException {
+        // given
+        Span validSpan = createFilledOutSpan(true);
+        String validJson = validSpan.toJSON();
+        if (badValue.trim().length() > 0) {
+            badValue = ",\"spanPurpose\":\"" + badValue + "\"";
+        }
+        String invalidJson = validJson.replace(
+            String.format(",\"%s\":\"%s\"", Span.SPAN_PURPOSE_FIELD, validSpan.getSpanPurpose().name()),
+            badValue
+        );
+        assertThat(validSpan.getSpanPurpose()).isNotEqualTo(SpanPurpose.UNKNOWN);
+
+        // when
+        Span result = Span.fromJSON(invalidJson);
+
+        // then
+        assertThat(result).isNotNull();
+        assertThat(result.getSpanPurpose()).isEqualTo(SpanPurpose.UNKNOWN);
+    }
+
     private Map<String, String> deserializeKeyValueSpanString(String keyValStr) {
         Map<String, String> map = new HashMap<>();
         String[] fields = keyValStr.split(",");
@@ -541,6 +611,7 @@ public class SpanTest {
         assertThat(validSpan.getSpanId()).isNotEmpty();
         assertThat(validSpan.getDurationNanos()).isNotNull();
         assertThat(validSpan.isCompleted()).isTrue();
+        assertThat(validSpan.getSpanPurpose()).isNotNull();
         String keyValueStr = validSpan.toKeyValueString();
 
         // when: the string is deserialized into a map
@@ -553,7 +624,7 @@ public class SpanTest {
     @Test
     public void toKeyValueString_should_function_properly_when_there_are_null_values() throws IOException {
         // given: valid span with null values and key/value string from Span.toKeyValueString()
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName).build();
+        Span validSpan = Span.generateRootSpanForNewTrace(spanName, null).build();
         assertThat(validSpan.getParentSpanId()).isNull();
         assertThat(validSpan.getUserId()).isNull();
         assertThat(validSpan.getDurationNanos()).isNull();
@@ -569,7 +640,7 @@ public class SpanTest {
     @Test
     public void toKeyValueString_should_function_properly_for_non_completed_spans() throws IOException {
         // given: valid span and key/value string from Span.toKeyValueString()
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName).build();
+        Span validSpan = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
         String keyValueStr = validSpan.toKeyValueString();
         assertThat(validSpan.isCompleted()).isFalse();
 
@@ -583,7 +654,7 @@ public class SpanTest {
     @Test
     public void toKeyValueString_should_function_properly_for_completed_spans() throws IOException {
         // given: valid span and completed, and key/value string from Span.toKeyValueString()
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName).build();
+        Span validSpan = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
         validSpan.complete();
         assertThat(validSpan.isCompleted()).isTrue();
         String keyValueStr = validSpan.toKeyValueString();
@@ -598,7 +669,7 @@ public class SpanTest {
     @Test
     public void toKeyValueString_should_use_cached_key_value_string() {
         // given
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName).build();
+        Span validSpan = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
         String uuidString = UUID.randomUUID().toString();
         Whitebox.setInternalState(validSpan, "cachedKeyValueRepresentation", uuidString);
 
@@ -612,7 +683,7 @@ public class SpanTest {
     @Test
     public void complete_should_reset_cached_key_value_string() throws IOException {
         // given
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName).build();
+        Span validSpan = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
         String uuidString = UUID.randomUUID().toString();
         Whitebox.setInternalState(validSpan, "cachedKeyValueRepresentation", uuidString);
 
@@ -640,6 +711,7 @@ public class SpanTest {
         assertThat(validSpan.getSpanId()).isNotNull();
         assertThat(validSpan.getDurationNanos()).isNotNull();
         assertThat(validSpan.isCompleted()).isTrue();
+        assertThat(validSpan.getSpanPurpose()).isNotNull();
         String keyValStr = validSpan.toKeyValueString();
 
         // when: toKeyValueString is called
@@ -652,7 +724,7 @@ public class SpanTest {
     @Test
     public void fromKeyValueString_should_function_properly_when_there_are_null_values() throws IOException {
         // given: valid span with null values and key/value string from Span.fromKeyValueString()
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName).build();
+        Span validSpan = Span.generateRootSpanForNewTrace(spanName, null).build();
         assertThat(validSpan.getParentSpanId()).isNull();
         assertThat(validSpan.getUserId()).isNull();
         assertThat(validSpan.getDurationNanos()).isNull();
@@ -668,7 +740,7 @@ public class SpanTest {
     @Test
     public void fromKeyValueString_should_function_properly_for_non_completed_spans() throws IOException {
         // given: valid, non-completed span and key/value string from Span.fromKeyValueString()
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName).build();
+        Span validSpan = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
         String keyValStr = validSpan.toKeyValueString();
         assertThat(validSpan.isCompleted()).isFalse();
 
@@ -682,7 +754,7 @@ public class SpanTest {
     @Test
     public void fromKeyValueString_should_function_properly_for_completed_spans() throws IOException {
         // given: valid span that has been completed, and key/value string from Span.fromKeyValueString()
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName).build();
+        Span validSpan = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
         validSpan.complete();
         assertThat(validSpan.isCompleted()).isTrue();
         String keyValStr = validSpan.toKeyValueString();
@@ -737,10 +809,36 @@ public class SpanTest {
         assertThat(result).isNull();
     }
 
+    @DataProvider(value = {
+        "",
+        "foobar-not-a-real-enum-value"
+    }, splitBy = "\\|")
+    @Test
+    public void fromKeyValueString_returns_span_with_UNKNOWN_span_purpose_if_spanPurpose_field_is_missing_or_garbage(String badValue) throws IOException {
+        // given
+        Span validSpan = createFilledOutSpan(true);
+        String validKeyValStr = validSpan.toKeyValueString();
+        if (badValue.trim().length() > 0) {
+            badValue = ",spanPurpose=" + badValue;
+        }
+        String invalidKeyValStr = validKeyValStr.replace(
+            String.format(",%s=%s", Span.SPAN_PURPOSE_FIELD, String.valueOf(validSpan.getSpanPurpose())),
+            badValue
+        );
+        assertThat(validSpan.getSpanPurpose()).isNotEqualTo(SpanPurpose.UNKNOWN);
+
+        // when
+        Span result = Span.fromKeyValueString(invalidKeyValStr);
+
+        // then
+        assertThat(result).isNotNull();
+        assertThat(result.getSpanPurpose()).isEqualTo(SpanPurpose.UNKNOWN);
+    }
+
     @Test
     public void getDuration_should_be_null_until_span_is_completed() {
         // given
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName).build();
+        Span validSpan = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
         assertThat(validSpan.getDurationNanos()).isNull();
 
         // when
@@ -878,6 +976,24 @@ public class SpanTest {
     }
 
     @Test
+    public void equals_returns_false_and_hashCode_different_if_spanPurpose_is_different() {
+        // given
+        Span fullSpan1 = createFilledOutSpan(true);
+        Span fullSpan2 = createFilledOutSpan(true);
+        List<SpanPurpose> badDataList = Arrays.asList(SpanPurpose.CLIENT, SpanPurpose.UNKNOWN, null);
+
+        for (SpanPurpose badData : badDataList) {
+            assertThat(fullSpan1.getSpanPurpose()).isNotEqualTo(badData);
+            Whitebox.setInternalState(fullSpan2, "spanPurpose", badData);
+
+            // expect
+            assertThat(fullSpan1.equals(fullSpan2)).isFalse();
+            assertThat(fullSpan2.equals(fullSpan1)).isFalse();
+            assertThat(fullSpan1.hashCode()).isNotEqualTo(fullSpan2.hashCode());
+        }
+    }
+
+    @Test
     public void equals_returns_false_and_hashCode_different_if_durationNanos_is_different() {
         // given
         Span fullSpan1 = createFilledOutSpan(true);
@@ -894,15 +1010,21 @@ public class SpanTest {
         }
     }
 
+    @DataProvider(value = {
+        "SERVER",
+        "CLIENT",
+        "LOCAL_ONLY",
+        "UNKNOWN"
+    }, splitBy = "\\|")
     @Test
-    public void newBuilder_with_spanName_arg_returns_root_span_builder_by_default() {
+    public void newBuilder_with_spanName_and_spanPurpose_args_returns_root_span_builder_by_default(SpanPurpose spanPurpose) {
         // given
         String spanName = UUID.randomUUID().toString();
 
         // when
         long beforeCallNanos = System.nanoTime();
         long beforeCallEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
-        Span result = Span.newBuilder(spanName).build();
+        Span result = Span.newBuilder(spanName, spanPurpose).build();
         long afterCallNanos = System.nanoTime();
         long afterCallEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
 
@@ -913,16 +1035,25 @@ public class SpanTest {
         assertThat(result.getSpanName()).isEqualTo(spanName);
         assertThat(result.isSampleable()).isTrue();
         assertThat(result.getUserId()).isNull();
+        assertThat(result.getSpanPurpose()).isEqualTo(spanPurpose);
         assertThat(result.getSpanStartTimeEpochMicros()).isBetween(beforeCallEpochMicros, afterCallEpochMicros);
         assertThat(result.getSpanStartTimeNanos()).isBetween(beforeCallNanos, afterCallNanos);
         assertThat(result.getDurationNanos()).isNull();
         assertThat(result.isCompleted()).isFalse();
     }
 
+    @DataProvider(value = {
+        "SERVER",
+        "CLIENT",
+        "LOCAL_ONLY",
+        "UNKNOWN"
+    }, splitBy = "\\|")
     @Test
-    public void newBuilder_with_copy_arg_returns_exact_copy() {
+    public void newBuilder_with_copy_arg_returns_exact_copy(SpanPurpose spanPurpose) {
         // given
         Span origSpan = createFilledOutSpan(true);
+        Whitebox.setInternalState(origSpan, "spanPurpose", spanPurpose);
+        assertThat(origSpan.getSpanPurpose()).isEqualTo(spanPurpose);
 
         // when
         Span copySpan = Span.newBuilder(origSpan).build();
@@ -935,16 +1066,19 @@ public class SpanTest {
     public void newBuilder_honors_values_for_all_fields_if_set() {
         // given
         Span.Builder builder = Span
-                .newBuilder("override_me")
+                .newBuilder("override_me", SpanPurpose.UNKNOWN)
                 .withTraceId(traceId)
                 .withSpanId(spanId)
                 .withParentSpanId(parentSpanId)
                 .withSpanName(spanName)
                 .withSampleable(sampleableForFullyCompleteSpan)
                 .withUserId(userId)
+                .withSpanPurpose(spanPurpose)
                 .withSpanStartTimeEpochMicros(startTimeEpochMicrosForFullyCompleteSpan)
                 .withSpanStartTimeNanos(startTimeNanosForFullyCompleteSpan)
                 .withDurationNanos(durationNanosForFullyCompletedSpan);
+
+        assertThat(spanPurpose).isNotEqualTo(SpanPurpose.UNKNOWN);
 
         // when
         Span span = builder.build();
@@ -956,6 +1090,7 @@ public class SpanTest {
         assertThat(span.getSpanName()).isEqualTo(spanName);
         assertThat(span.isSampleable()).isEqualTo(sampleableForFullyCompleteSpan);
         assertThat(span.getUserId()).isEqualTo(userId);
+        assertThat(span.getSpanPurpose()).isEqualTo(spanPurpose);
         assertThat(span.getSpanStartTimeEpochMicros()).isEqualTo(startTimeEpochMicrosForFullyCompleteSpan);
         assertThat(span.getSpanStartTimeNanos()).isEqualTo(startTimeNanosForFullyCompleteSpan);
         assertThat(span.getDurationNanos()).isEqualTo(durationNanosForFullyCompletedSpan);
@@ -965,7 +1100,7 @@ public class SpanTest {
     public void builder_build_ignores_passed_in_spanStartTimeNanos_if_spanStartTimeEpochMicros_is_null() {
         // given
         Span.Builder builder = Span
-            .newBuilder("stuff")
+            .newBuilder("stuff", SpanPurpose.LOCAL_ONLY)
             .withSpanStartTimeNanos(42L)
             .withSpanStartTimeEpochMicros(null);
 

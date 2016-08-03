@@ -3,8 +3,9 @@ package com.nike.wingtips.servlet;
 import com.nike.wingtips.Span;
 import com.nike.wingtips.http.HttpRequestTracingUtils;
 
-import javax.servlet.http.HttpServletRequest;
 import java.util.List;
+
+import javax.servlet.http.HttpServletRequest;
 
 /**
  * Creates {@link Span} objects extracted from a {@link HttpServletRequest}. NOTE: If a span exists in the request but is not explicitly defined with
@@ -44,13 +45,17 @@ public class HttpSpanFactory {
     /**
      * @return A {@link Span} object created from the headers if they exist (see {@link #fromHttpServletRequest(HttpServletRequest, List)} for details), or if the headers don't
      *         have enough information then this will return a new root span with a span name based on the results of {@link #getSpanName(HttpServletRequest)} and user ID based
-     *         on the result of {@link #getUserIdFromHttpServletRequest(HttpServletRequest, List)}.
+     *         on the result of {@link #getUserIdFromHttpServletRequest(HttpServletRequest, List)}. Since this method is for a server receiving a request
+     *         the returned span's {@link Span#getSpanPurpose()} will be {@link Span.SpanPurpose#SERVER}.
      */
     public static Span fromHttpServletRequestOrCreateRootSpan(HttpServletRequest servletRequest, List<String> userIdHeaderKeys) {
         Span span = fromHttpServletRequest(servletRequest, userIdHeaderKeys);
 
         if (span == null) {
-            span = Span.generateRootSpanForNewTrace(getSpanName(servletRequest)).withUserId(getUserIdFromHttpServletRequest(servletRequest, userIdHeaderKeys)).build();
+            span = Span
+                .generateRootSpanForNewTrace(getSpanName(servletRequest), Span.SpanPurpose.SERVER)
+                .withUserId(getUserIdFromHttpServletRequest(servletRequest, userIdHeaderKeys))
+                .build();
         }
 
         return span;

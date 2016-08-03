@@ -1,15 +1,24 @@
 package com.nike.wingtips.servlet;
 
 import com.nike.wingtips.Span;
+import com.nike.wingtips.Span.SpanPurpose;
 import com.nike.wingtips.TraceAndSpanIdGenerator;
 import com.nike.wingtips.TraceHeaders;
 import com.nike.wingtips.Tracer;
+
 import com.tngtech.java.junit.dataprovider.DataProvider;
 import com.tngtech.java.junit.dataprovider.DataProviderRunner;
 import com.tngtech.java.junit.dataprovider.UseDataProvider;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
 import javax.servlet.FilterChain;
 import javax.servlet.FilterConfig;
@@ -18,11 +27,6 @@ import javax.servlet.ServletRequest;
 import javax.servlet.ServletResponse;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Fail.fail;
@@ -429,7 +433,7 @@ public class RequestTracingFilterTest {
     public void doFilterInternal_should_use_parent_span_info_if_present_in_request_headers() throws ServletException, IOException {
         // given: filter and request that has parent span info
         RequestTracingFilter filter = getFilterWithSkipDispatchOverride(false);
-        Span parentSpan = Span.newBuilder("someParentSpan").withParentSpanId(TraceAndSpanIdGenerator.generateId()).withSampleable(false).withUserId("someUser").build();
+        Span parentSpan = Span.newBuilder("someParentSpan", null).withParentSpanId(TraceAndSpanIdGenerator.generateId()).withSampleable(false).withUserId("someUser").build();
         given(requestMock.getHeader(TraceHeaders.TRACE_ID)).willReturn(parentSpan.getTraceId());
         given(requestMock.getHeader(TraceHeaders.SPAN_ID)).willReturn(parentSpan.getSpanId());
         given(requestMock.getHeader(TraceHeaders.PARENT_SPAN_ID)).willReturn(parentSpan.getParentSpanId());
@@ -449,6 +453,7 @@ public class RequestTracingFilterTest {
         assertThat(newSpan.getParentSpanId()).isEqualTo(parentSpan.getSpanId());
         assertThat(newSpan.getSpanName()).isEqualTo(HttpSpanFactory.getSpanName(requestMock));
         assertThat(newSpan.isSampleable()).isEqualTo(parentSpan.isSampleable());
+        assertThat(newSpan.getSpanPurpose()).isEqualTo(SpanPurpose.SERVER);
     }
 
     @Test
@@ -457,7 +462,7 @@ public class RequestTracingFilterTest {
         RequestTracingFilter spyFilter = spy(getFilterWithSkipDispatchOverride(false));
         given(requestMock.getHeader(ALT_USER_ID_HEADER_KEY)).willReturn("testUserId");
 
-        Span parentSpan = Span.newBuilder("someParentSpan").withParentSpanId(TraceAndSpanIdGenerator.generateId()).withSampleable(false).withUserId("someUser").build();
+        Span parentSpan = Span.newBuilder("someParentSpan", null).withParentSpanId(TraceAndSpanIdGenerator.generateId()).withSampleable(false).withUserId("someUser").build();
         given(requestMock.getHeader(TraceHeaders.TRACE_ID)).willReturn(parentSpan.getTraceId());
         given(requestMock.getHeader(TraceHeaders.SPAN_ID)).willReturn(parentSpan.getSpanId());
         given(requestMock.getHeader(TraceHeaders.PARENT_SPAN_ID)).willReturn(parentSpan.getParentSpanId());
