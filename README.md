@@ -12,6 +12,7 @@ There are a few modules associated with this project:
 
 * [wingtips-core](wingtips-core/README.md) - The core library providing the majority of the distributed tracing functionality.
 * [wingtips-servlet-api](wingtips-servlet-api/README.md) - A plugin for Servlet-based applications for integrating distributed tracing with a simple Servlet Filter.
+* [wingtips-zipkin](wingtips-zipkin/README.md) - A plugin providing easy Zipkin integration by converting Wingtips spans to Zipkin spans and sending them to a Zipkin server.
 
 ## Table of Contents
 
@@ -226,6 +227,18 @@ Arbitrary application-specific annotations could be a useful addition however, s
 The logging behavior of Wingtips is somewhat useful without any additions - you can search or parse the distributed tracing output logs manually for any number of purposes directly on the server where the logs are output. There are limits to this approach however, especially as the number of servers in your ecosystem increases, and there are other distributed tracing tools out there for aggregating, searching, and visualizing distributed tracing information or logs in general that you might want to take advantage of. You should also be careful of doing too much on a production server - generally you want to do your searching and analysis offline on a different server both for convenience and to prevent disrupting production systems.
 
 The typical way this goal is accomplished is to have a separate process on the server monitor the distributed tracing logs and pipe the information to an outside aggregator or collector for asynchronous/offline processing. You can use a general-purpose log aggregator that parses the application and tracing logs from all your services and exposes them via search interface, or you can use a distributed-tracing-specific tool like [Zipkin](https://github.com/openzipkin/zipkin/tree/master/zipkin-server), purpose-built for working with distributed trace spans, or any other number of possibilities.
+
+Wingtips now contains some plug-and-play Zipkin support that makes sending spans to Zipkin servers easy. The [wingtips-zipkin](wingtips-zipkin/README.md) submodule's readme contains full details, but here's a quick example showing how you would configure Wingtips to send spans to a Zipkin server listening at `http://localhost:9411`:
+
+```java
+Tracer.getInstance().addSpanLifecycleListener(
+    new WingtipsToZipkinLifecycleListener("some-service-name", 
+                                          "some-local-component-name", 
+                                          "http://localhost:9411")
+);
+```
+
+Just execute that line as early in your application startup procedure as possible (ideally before any requests hit the service that would generate spans) and you'll see the Wingtips spans show up in the Zipkin UI.
 
 <a name="license"></a>
 ## License

@@ -1,0 +1,16 @@
+evaluationDependsOn(':')
+
+dependencies {
+    compile(
+            project(":wingtips-core"),
+            "io.zipkin.java:zipkin:$zipkinVersion"
+    )
+    testCompile(
+            "junit:junit-dep:$junitVersion",
+            "org.mockito:mockito-core:$mockitoVersion",
+            "ch.qos.logback:logback-classic:$logbackVersion",
+            "org.assertj:assertj-core:$assertJVersion",
+            "com.tngtech.java:junit-dataprovider:$junitDataproviderVersion",
+            "io.zipkin.java:zipkin-junit:$zipkinVersion"
+    )
+}

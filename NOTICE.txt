@@ -27,3 +27,12 @@ The logo used by this project was created by Greg Reinmuth:
 
   * LICENSE:
     * license/LICENSE.wingtips_logo.txt (Creative Commons Attribution-ShareAlike 4.0 International)
+
+
+This product contains a modified portion of 'brave', a Java Distributed Tracing
+implementation compatible with Zipkin, which can be obtained at:
+
+  * LICENSE:
+    * license/LICENSE.brave.txt (Apache License 2.0)
+  * HOMEPAGE:
+    * https://github.com/openzipkin/brave/

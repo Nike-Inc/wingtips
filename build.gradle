@@ -45,6 +45,10 @@ allprojects {
             downloadSources = true
         }
     }
+
+    // http://www.gradle.org/docs/current/userguide/java_plugin.html
+    sourceCompatibility = org.gradle.api.JavaVersion.VERSION_1_7
+    targetCompatibility = org.gradle.api.JavaVersion.VERSION_1_7
 }
 
 // Disable jar, sourcesJar, and javadoc tasks for the root project - we only want them to run for submodules
@@ -56,6 +60,7 @@ javadocJar.enabled = false
 ext {
     slf4jVersion = '1.7.7'
     servletApiVersion = '3.1.0'
+    zipkinVersion = '1.5.1'
 
     junitVersion = '4.11'
     mockitoVersion = '1.9.5'
@@ -64,20 +69,27 @@ ext {
     assertJVersion = '2.2.0'
     junitDataproviderVersion = '1.10.1'
 
-    // http://www.gradle.org/docs/current/userguide/java_plugin.html
-    sourceCompatibility = org.gradle.api.JavaVersion.VERSION_1_7
-    targetCompatibility = org.gradle.api.JavaVersion.VERSION_1_7
-
     // JACOCO PROPERTIES
     jacocoToolVersion = '0.7.6.201602180812'
     // Anything in this jacocoExclusions list will be excluded from coverage reports.
     jacocoExclusions = []
     jacocoCoverageThresholdSetup = {
-        configure(subprojects) {
+        // We have to split out the wingtips-zipkin coverage numbers because (1) it doesn't contain much code, and (2) uses some features
+        //      like try-with-resources that generate many many branches in the bytecode that are realistically impossible to get coverage for.
+        //      The combination of those issues mean we get artificially low coverage numbers even though it's clean correct code, so we just
+        //      have to visually verify it.
+        configure(subprojects.findAll { !it.name.contains("wingtips-zipkin") }) {
             jacocoCoverage {
                 // Enforce minimum code coverage. See https://github.com/palantir/gradle-jacoco-coverage for the full list of options.
                 reportThreshold 0.95, INSTRUCTION
                 reportThreshold 0.95, BRANCH
+            }
+        }
+        configure(subprojects.findAll { it.name.contains("wingtips-zipkin") }) {
+            jacocoCoverage {
+                // Enforce minimum code coverage. See https://github.com/palantir/gradle-jacoco-coverage for the full list of options.
+                reportThreshold 0.8, INSTRUCTION
+                reportThreshold 0.5, BRANCH
             }
         }
     }
