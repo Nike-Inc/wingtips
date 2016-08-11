@@ -1,3 +1,4 @@
 rootProject.name = 'wingtips'
 include "wingtips-core",
-        "wingtips-servlet-api"
+        "wingtips-servlet-api",
+        "wingtips-zipkin"
