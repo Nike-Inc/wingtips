@@ -13,6 +13,8 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 
 ## [0.10.0](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.10.0)
 
+Released on 2016-08-11.
+
 ### Added
 
 - Zipkin integration
