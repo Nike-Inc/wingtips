@@ -5,7 +5,7 @@ import com.nike.wingtips.lifecyclelistener.SpanLifecycleListener;
 import com.nike.wingtips.zipkin.util.WingtipsToZipkinSpanConverter;
 import com.nike.wingtips.zipkin.util.WingtipsToZipkinSpanConverterDefaultImpl;
 import com.nike.wingtips.zipkin.util.ZipkinSpanSender;
-import com.nike.wingtips.zipkin.util.ZipkinSpanSenderDefaultHttpImpl;
+import com.nike.wingtips.zipkin.util.ZipkinSpanSenderHttpImpl;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -73,7 +73,7 @@ public class WingtipsToZipkinLifecycleListener implements SpanLifecycleListener 
     }
 
     /**
-     * Convenience constructor that uses {@link WingtipsToZipkinSpanConverterDefaultImpl} and {@link ZipkinSpanSenderDefaultHttpImpl} as the
+     * Convenience constructor that uses {@link WingtipsToZipkinSpanConverterDefaultImpl} and {@link ZipkinSpanSenderHttpImpl} as the
      * implementations for {@link #zipkinSpanConverter} and {@link #zipkinSpanSender}.
      *
      * @param serviceName The name of this service. This is used to build the Zipkin {@link Endpoint} that will be used for client/server/local
@@ -90,7 +90,7 @@ public class WingtipsToZipkinLifecycleListener implements SpanLifecycleListener 
         this(serviceName,
              localComponentNamespace,
              new WingtipsToZipkinSpanConverterDefaultImpl(),
-             new ZipkinSpanSenderDefaultHttpImpl(postZipkinSpansBaseUrl, true)
+             new ZipkinSpanSenderHttpImpl(postZipkinSpansBaseUrl, true)
         );
     }
 
