@@ -260,6 +260,51 @@ public class HttpRequestTracingUtilsTest {
         assertThat(newSpan.isSampleable()).isFalse();
     }
 
+    @DataProvider(value = {
+        "0      |   false",
+        "1      |   true",
+        "2      |   true",
+        "42     |   true",
+        "false  |   false",
+        "FALSE  |   false",
+        "FaLsE  |   false",
+        "true   |   true",
+        "TRUE   |   true",
+        "TrUe   |   true",
+        "true   |   true",
+        "bad    |   true",
+    }, splitBy = "\\|")
+    @Test
+    public void fromRequestWithHeaders_extracts_sampleable_as_expected(String receivedValue, boolean expectedSampleableResult) {
+        // Verify via headers
+        {
+            // given
+            given(request.getHeader(TraceHeaders.TRACE_ID)).willReturn(sampleTraceID);
+            given(request.getHeader(TraceHeaders.TRACE_SAMPLED)).willReturn(receivedValue);
+            given(request.getAttribute(TraceHeaders.TRACE_SAMPLED)).willReturn(null);
+
+            // when
+            Span newSpan = HttpRequestTracingUtils.fromRequestWithHeaders(request, USER_ID_HEADER_KEYS);
+
+            // then
+            assertThat(newSpan.isSampleable()).isEqualTo(expectedSampleableResult);
+        }
+
+        // Verify via attribute
+        {
+            // given
+            given(request.getHeader(TraceHeaders.TRACE_ID)).willReturn(sampleTraceID);
+            given(request.getHeader(TraceHeaders.TRACE_SAMPLED)).willReturn(null);
+            given(request.getAttribute(TraceHeaders.TRACE_SAMPLED)).willReturn(receivedValue);
+
+            // when
+            Span newSpan = HttpRequestTracingUtils.fromRequestWithHeaders(request, USER_ID_HEADER_KEYS);
+
+            // then
+            assertThat(newSpan.isSampleable()).isEqualTo(expectedSampleableResult);
+        }
+    }
+
     @Test
     public void fromRequestWithHeaders_uses_headers_first_even_if_attributes_exist() {
         // given: request that has both headers and attributes set

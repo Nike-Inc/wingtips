@@ -1,6 +1,7 @@
 package com.nike.wingtips.zipkin.util;
 
 import com.nike.wingtips.Span;
+import com.nike.wingtips.TraceAndSpanIdGenerator;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -65,11 +66,11 @@ public class WingtipsToZipkinSpanConverterDefaultImpl implements WingtipsToZipki
         return zsb;
     }
 
-    protected Long nullSafeLong(String str) {
-        if (str == null)
+    protected Long nullSafeLong(String lowerHexStr) {
+        if (lowerHexStr == null)
             return null;
 
-        return Long.parseLong(str);
+        return TraceAndSpanIdGenerator.unsignedLowerHexStringToLong(lowerHexStr);
     }
 
 }

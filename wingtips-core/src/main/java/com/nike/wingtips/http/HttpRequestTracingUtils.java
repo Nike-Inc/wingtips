@@ -99,15 +99,16 @@ public class HttpRequestTracingUtils {
 
     /**
      * Extracts the {@link TraceHeaders#TRACE_SAMPLED} boolean value from the given request's headers or attributes if available, and defaults to true if the request doesn't contain
-     * that header/attribute.
+     * that header/attribute or if it's an invalid value. In other words, request values of "0" or "false" (ignoring case) will return false from this method,
+     * everything else will return true.
      */
     protected static boolean getSpanSampleableFlag(RequestWithHeaders request) {
         String spanSampleableHeaderStr = getHeaderWithAttributeAsBackup(request, TraceHeaders.TRACE_SAMPLED);
         // Default to true (enabling trace sampling for requests that don't explicitly exclude it)
         boolean result = true;
 
-        if (spanSampleableHeaderStr != null && spanSampleableHeaderStr.length() > 0)
-            result = Boolean.parseBoolean(spanSampleableHeaderStr);
+        if ("0".equals(spanSampleableHeaderStr) || "false".equalsIgnoreCase(spanSampleableHeaderStr))
+            result = false;
 
         return result;
     }
