@@ -166,7 +166,7 @@ You can use the sub-span ability to create parent-child span relationships withi
 
 The pattern for passing traces across network or application boundaries is that the calling service includes its "current span" information when calling the downstream service. The downstream service uses that information to generate its overall request span with the caller's span info as its parent span. This causes the downstream service's request span to contain the same Trace ID and sets up the correct parent-child relationship between the spans. 
 
-For HTTP requests it is assumed that you will pass the caller's span information to the downstream system using the request headers defined in `TraceHeaders`. All headers defined in that class should be included in the downstream request, as well as any application specific user ID header if you want to take advantage of the optional user ID functionality of spans.
+For HTTP requests it is assumed that you will pass the caller's span information to the downstream system using the request headers defined in `TraceHeaders`. All headers defined in that class should be included in the downstream request, as well as any application specific user ID header if you want to take advantage of the optional user ID functionality of spans. Note that to be [properly B3 compatible](http://zipkin.io/pages/instrumenting.html) you should send the `X-B3-Sampled` header value as `"0"` for `false` and `"1"` for `true`. All the other header values should be correct if you send the appropriate `Span` property as-is, e.g. send `Span.getTraceId()` for the `X-B3-TraceId` header as it should already be in the correct B3 format.
 
 <a name="adjusting_behavior"></a>
 ### Adjusting Behavior and Execution Options

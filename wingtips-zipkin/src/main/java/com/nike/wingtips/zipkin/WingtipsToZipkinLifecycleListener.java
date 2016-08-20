@@ -7,6 +7,12 @@ import com.nike.wingtips.zipkin.util.WingtipsToZipkinSpanConverterDefaultImpl;
 import com.nike.wingtips.zipkin.util.ZipkinSpanSender;
 import com.nike.wingtips.zipkin.util.ZipkinSpanSenderDefaultHttpImpl;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
+
 import zipkin.Endpoint;
 
 /**
@@ -32,11 +38,17 @@ import zipkin.Endpoint;
 @SuppressWarnings("WeakerAccess")
 public class WingtipsToZipkinLifecycleListener implements SpanLifecycleListener {
 
+    private final Logger zipkinConversionOrReportingErrorLogger = LoggerFactory.getLogger("ZIPKIN_SPAN_CONVERSION_OR_HANDLING_ERROR");
+
     protected final String serviceName;
     protected final String localComponentNamespace;
     protected final Endpoint zipkinEndpoint;
     protected final WingtipsToZipkinSpanConverter zipkinSpanConverter;
     protected final ZipkinSpanSender zipkinSpanSender;
+
+    protected final AtomicLong spanHandlingErrorCounter = new AtomicLong(0);
+    protected long lastSpanHandlingErrorLogTimeEpochMillis = 0;
+    protected static final long MIN_SPAN_HANDLING_ERROR_LOG_INTERVAL_MILLIS = TimeUnit.SECONDS.toMillis(60);
 
     /**
      * Kitchen-sink constructor that lets you set all the options.
@@ -94,7 +106,27 @@ public class WingtipsToZipkinLifecycleListener implements SpanLifecycleListener 
 
     @Override
     public void spanCompleted(Span span) {
-        zipkin.Span zipkinSpan = zipkinSpanConverter.convertWingtipsSpanToZipkinSpan(span, zipkinEndpoint, localComponentNamespace);
-        zipkinSpanSender.handleSpan(zipkinSpan);
+        try {
+            zipkin.Span zipkinSpan = zipkinSpanConverter.convertWingtipsSpanToZipkinSpan(span, zipkinEndpoint, localComponentNamespace);
+            zipkinSpanSender.handleSpan(zipkinSpan);
+        }
+        catch(Throwable ex) {
+            long currentBadSpanCount = spanHandlingErrorCounter.incrementAndGet();
+
+            // Only log once every MIN_SPAN_HANDLING_ERROR_LOG_INTERVAL_MILLIS time interval to prevent log spam from a malicious (or broken) caller.
+            long currentTimeMillis = System.currentTimeMillis();
+            long timeSinceLastLogMsgMillis = currentTimeMillis - lastSpanHandlingErrorLogTimeEpochMillis;
+            if (timeSinceLastLogMsgMillis >= MIN_SPAN_HANDLING_ERROR_LOG_INTERVAL_MILLIS) {
+                // We're not synchronizing the read and write to lastSpanHandlingErrorLogTimeEpochMillis, and that's ok. If we get a few extra
+                //      log messages due to a race condition it's not the end of the world - we're still satisfying the goal of not allowing a
+                //      malicious caller to endlessly spam the logs.
+                lastSpanHandlingErrorLogTimeEpochMillis = currentTimeMillis;
+
+                zipkinConversionOrReportingErrorLogger.warn(
+                    "There have been {} spans that were not zipkin compatible, or that experienced an error during span handling. Latest example: "
+                    + "wingtips_span_with_error=\"{}\", conversion_or_handling_error=\"{}\"",
+                    currentBadSpanCount, span.toKeyValueString(), ex.toString());
+            }
+        }
     }
 }

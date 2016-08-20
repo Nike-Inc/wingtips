@@ -211,7 +211,8 @@ public class Span {
     /**
      * @return The ID associated with the overall distributed trace - a.k.a. the trace tree ID. All spans in a distributed trace will share the same trace ID.
      *          Don't confuse this with {@link #getSpanId()}, which is the ID for an individual span of work as part of the larger distributed trace. This will never
-     *          be null.
+     *          be null. NOTE: By convention this will likely be a 16 character lowercase hex-encoded 64-bit long-integer value
+     *          (see {@link TraceAndSpanIdGenerator#generateId()} for details).
      */
     public String getTraceId() {
         return traceId;
@@ -220,7 +221,8 @@ public class Span {
     /**
      * @return The ID for this span of work in the distributed trace. Don't confuse this with the {@link #getTraceId()}, which is the ID associated with the overall
      *          distributed trace and is the same for all spans in a trace. Also don't confuse this with {@link #getParentSpanId()}, which is the ID of the span that spawned
-     *          this span instance (the logical "parent" of this span). This will never be null.
+     *          this span instance (the logical "parent" of this span). This will never be null. NOTE: By convention this will likely be a 16 character
+     *          lowercase hex-encoded 64-bit long-integer value (see {@link TraceAndSpanIdGenerator#generateId()} for details).
      */
     public String getSpanId() {
         return spanId;
@@ -229,6 +231,8 @@ public class Span {
     /**
      * @return The ID of the span that spawned this span instance (the logical "parent" of this span), or null if no such parent exists. If this returns null then this
      *          span is the "root span" for the distributed trace - the ultimate ancestor of all other spans in the trace tree.
+     *          NOTE: By convention this will likely be a 16 character lowercase hex-encoded 64-bit long-integer value
+     *          (see {@link TraceAndSpanIdGenerator#generateId()} for details).
      */
     public String getParentSpanId() {
         return parentSpanId;
