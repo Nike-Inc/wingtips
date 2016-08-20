@@ -4,10 +4,11 @@ import java.io.Flushable;
 
 /**
  * <p>
- *     A interface for sending Zipkin spans to a Zipkin server. This is similar to a Zipkin {@code SpanCollector} and you can easily create
+ *     A interface for sending Zipkin spans to a Zipkin server. There is an implementation for wrapping any native Zipkin {@link zipkin.reporter.Reporter}
+ *     (see {@link ZipkinSpanSenderZipkinReporterImpl}). This interface is also similar to a Zipkin {@code SpanCollector} and you can easily create
  *     an adapter that wraps a native Zipkin <a href="https://github.com/openzipkin/brave">Brave</a> {@code SpanCollector} with this interface
  *     if you prefer the features, flexibility, and numerous transport options provided by the native Zipkin {@code SpanCollector}s over the
- *     no-dependencies HTTP-only default implementation provided by {@link ZipkinSpanSenderDefaultHttpImpl}.
+ *     minimal-dependencies HTTP-only default implementation provided by {@link ZipkinSpanSenderHttpImpl}.
  * </p>
  *
  * @author Nic Munroe

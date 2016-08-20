@@ -4,7 +4,7 @@ import com.nike.wingtips.Span;
 import com.nike.wingtips.zipkin.util.WingtipsToZipkinSpanConverter;
 import com.nike.wingtips.zipkin.util.WingtipsToZipkinSpanConverterDefaultImpl;
 import com.nike.wingtips.zipkin.util.ZipkinSpanSender;
-import com.nike.wingtips.zipkin.util.ZipkinSpanSenderDefaultHttpImpl;
+import com.nike.wingtips.zipkin.util.ZipkinSpanSenderHttpImpl;
 
 import org.assertj.core.api.ThrowableAssert;
 import org.junit.Before;
@@ -17,6 +17,7 @@ import java.net.URL;
 import java.util.UUID;
 
 import zipkin.Endpoint;
+import zipkin.reporter.urlconnection.URLConnectionReporter;
 
 import static com.nike.wingtips.zipkin.WingtipsToZipkinLifecycleListener.MIN_SPAN_HANDLING_ERROR_LOG_INTERVAL_MILLIS;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -82,9 +83,13 @@ public class WingtipsToZipkinLifecycleListenerTest {
         assertThat(listener.zipkinEndpoint.serviceName).isEqualTo(serviceName);
         assertThat(listener.localComponentNamespace).isEqualTo(localComponentNamespace);
         assertThat(listener.zipkinSpanConverter).isInstanceOf(WingtipsToZipkinSpanConverterDefaultImpl.class);
-        assertThat(listener.zipkinSpanSender).isInstanceOf(ZipkinSpanSenderDefaultHttpImpl.class);
-        ZipkinSpanSenderDefaultHttpImpl spanSender = (ZipkinSpanSenderDefaultHttpImpl)listener.zipkinSpanSender;
-        assertThat(Whitebox.getInternalState(spanSender, "postZipkinSpansUrl")).isEqualTo(new URL(baseUrl + "/api/v1/spans"));
+        assertThat(listener.zipkinSpanSender).isInstanceOf(ZipkinSpanSenderHttpImpl.class);
+        ZipkinSpanSenderHttpImpl spanSender = (ZipkinSpanSenderHttpImpl) listener.zipkinSpanSender;
+        URLConnectionReporter httpReporter = (URLConnectionReporter) Whitebox.getInternalState(spanSender, "zipkinReporter");
+        assertThat(Whitebox.getInternalState(httpReporter, "endpoint")).isEqualTo(new URL(baseUrl + "/api/v1/spans"));
+        assertThat(Whitebox.getInternalState(httpReporter, "compressionEnabled")).isEqualTo(true);
+        assertThat(Whitebox.getInternalState(httpReporter, "connectTimeout")).isEqualTo(ZipkinSpanSenderHttpImpl.DEFAULT_CONNECT_TIMEOUT_MILLIS);
+        assertThat(Whitebox.getInternalState(httpReporter, "readTimeout")).isEqualTo(ZipkinSpanSenderHttpImpl.DEFAULT_READ_TIMEOUT_MILLIS);
     }
 
     @Test

@@ -3,7 +3,8 @@ evaluationDependsOn(':')
 dependencies {
     compile(
             project(":wingtips-core"),
-            "io.zipkin.java:zipkin:$zipkinVersion"
+            "io.zipkin.java:zipkin:$zipkinCoreVersion",
+            "io.zipkin.reporter:zipkin-reporter-urlconnection:$zipkinReporterVersion"
     )
     testCompile(
             "junit:junit-dep:$junitVersion",
@@ -11,6 +12,6 @@ dependencies {
             "ch.qos.logback:logback-classic:$logbackVersion",
             "org.assertj:assertj-core:$assertJVersion",
             "com.tngtech.java:junit-dataprovider:$junitDataproviderVersion",
-            "io.zipkin.java:zipkin-junit:$zipkinVersion"
+            "io.zipkin.java:zipkin-junit:$zipkinCoreVersion"
     )
 }

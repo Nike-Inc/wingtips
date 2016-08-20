@@ -64,7 +64,8 @@ javadocJar.enabled = false
 ext {
     slf4jVersion = '1.7.7'
     servletApiVersion = '3.1.0'
-    zipkinVersion = '1.7.0'
+    zipkinCoreVersion = '1.7.0'
+    zipkinReporterVersion = '0.2.0'
 
     junitVersion = '4.11'
     mockitoVersion = '1.9.5'
@@ -78,10 +79,8 @@ ext {
     // Anything in this jacocoExclusions list will be excluded from coverage reports.
     jacocoExclusions = []
     jacocoCoverageThresholdSetup = {
-        // We have to split out the wingtips-zipkin coverage numbers because (1) it doesn't contain much code, and (2) uses some features
-        //      like try-with-resources that generate many many branches in the bytecode that are realistically impossible to get coverage for.
-        //      The combination of those issues mean we get artificially low coverage numbers even though it's clean correct code, so we just
-        //      have to visually verify it.
+        // We have to split out the wingtips-zipkin coverage numbers because (1) it doesn't contain much code, and (2) jacoco doesn't
+        //      recognize when a switch statement is properly covered and it's impossible to generate a test that will cover the remaining branches.
         configure(subprojects.findAll { !it.name.contains("wingtips-zipkin") }) {
             jacocoCoverage {
                 // Enforce minimum code coverage. See https://github.com/palantir/gradle-jacoco-coverage for the full list of options.
@@ -92,8 +91,8 @@ ext {
         configure(subprojects.findAll { it.name.contains("wingtips-zipkin") }) {
             jacocoCoverage {
                 // Enforce minimum code coverage. See https://github.com/palantir/gradle-jacoco-coverage for the full list of options.
-                reportThreshold 0.8, INSTRUCTION
-                reportThreshold 0.5, BRANCH
+                reportThreshold 0.95, INSTRUCTION
+                reportThreshold 0.9, BRANCH
             }
         }
     }

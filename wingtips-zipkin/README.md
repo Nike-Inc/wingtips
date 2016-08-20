@@ -26,9 +26,22 @@ Parameters for this basic `WingtipsToZipkinLifecycleListener` constructor:
 * **`localComponentNamespace`** - The `zipkin.Constants.LOCAL_COMPONENT` namespace that will be used when creating certain Zipkin annotations when the Wingtips span's `Span.getSpanPurpose()` is `LOCAL_ONLY`. See the `zipkin.Constants.LOCAL_COMPONENT` javadocs for more information on what this is and how it's used by the Zipkin server, so you know what value you should send.
 * **`postZipkinSpansBaseUrl`** - The base URL of the Zipkin server. This should include the scheme, host, and port (if non-standard for the scheme). e.g. `http://localhost:9411`, or `https://zipkinserver.doesnotexist.com/`.
 
-## Using Native Zipkin Brave `SpanCollector`s
+## Using Native Zipkin `Reporter`s
 
-The default `ZipkinSpanSender` implementation provided by this submodule (used under the hood when you follow the Quickstart instructions above) for sending spans to the Zipkin server should work decently for many use cases, however it is limited to HTTP transport and does not have some of the features provided by Zipkin `SpanCollector`s, which serve a similar purpose.
+The default `ZipkinSpanSender` implementation provided by this submodule (used under the hood when you follow the Quickstart instructions above) for sending spans to the Zipkin server uses `URLConnectionReporter` from the official Zipkin `zipkin-reporter-urlconnection` library. This should work decently for many use cases, however it is limited to HTTP transport. You can trivially use any of the other reporters provided by the [zipkin-reporter-java](https://github.com/openzipkin/zipkin-reporter-java) repository by pulling in the dependencies necessary to have access to the `Reporter` implementation you want to use, and then initialize with the following:
+
+```java
+Tracer.getInstance().addSpanLifecycleListener(
+    new WingtipsToZipkinLifecycleListener("some-service-name", 
+                                          "some-local-component-name", 
+                                          new WingtipsToZipkinSpanConverterImpl(), 
+                                          new ZipkinSpanSenderZipkinReporterImpl(someZipkinReporter, batchSendingIntervalMillis))
+);
+```
+
+The only difference between this and the Quickstart instructions is that here you are using the `WingtipsToZipkinLifecycleListener` constructor that allows you to specify the `WingtipsToZipkinSpanConverter` you want to use (in this case the default implementation) and the `ZipkinSpanSender` you want to use (in this case the one that delegates to your desired Zipkin `Reporter`).
+
+## Using Native Zipkin Brave `SpanCollector`s
 
 Zipkin's [Brave](https://github.com/openzipkin/brave) libraries provide numerous Zipkin `SpanCollector` implementations that you could use as a Wingtips `ZipkinSpanSender` by creating a simple adapter that implements the `ZipkinSpanSender` interface but uses the concrete Zipkin Brave `SpanCollector` under the hood to do the work.
 
@@ -85,4 +98,4 @@ Tracer.getInstance().addSpanLifecycleListener(
 );
 ```
 
-The only difference between this and the Quickstart instructions is that here you are using the `WingtipsToZipkinLifecycleListener` constructor that allows you to specify the `WingtipsToZipkinSpanConverter` you want to use (in this case the default implementation) and the `ZipkinSpanSender` you want to use (in this case the adapter backed by a real Zipkin Brave `SpanCollector`).
+Again, the only difference between this and the Quickstart instructions is that here you are using the `WingtipsToZipkinLifecycleListener` constructor that allows you to specify the `WingtipsToZipkinSpanConverter` you want to use (in this case the default implementation) and the `ZipkinSpanSender` you want to use (in this case the adapter backed by a real Zipkin Brave `SpanCollector`).
