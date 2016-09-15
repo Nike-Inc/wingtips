@@ -135,4 +135,25 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
         verifySpanPurposeRelatedStuff(zipkinSpan, wingtipsSpan, zipkinEndpoint, localComponentNamespace);
     }
 
+    @Test
+    public void convertWingtipsSpanToZipkinSpan_works_as_expected_for_128_bit_trace_id() {
+        // given
+        String hex128Bits = "463ac35c9f6413ad48485a3953bb6124";
+        String lower64Bits = "48485a3953bb6124";
+
+        String spanName = UUID.randomUUID().toString();
+        String traceId = hex128Bits;
+        String spanId = lower64Bits;
+        long startTimeEpochMicros = Math.abs(random.nextLong());
+        long durationNanos = Math.abs(random.nextLong());
+        Endpoint zipkinEndpoint = Endpoint.create(UUID.randomUUID().toString(), 42);
+        String localComponentNamespace = UUID.randomUUID().toString();
+        Span wingtipsSpan = new Span(traceId, null, spanId, spanName, true, null, Span.SpanPurpose.CLIENT, startTimeEpochMicros, null, durationNanos);
+
+        // when
+        zipkin.Span zipkinSpan = impl.convertWingtipsSpanToZipkinSpan(wingtipsSpan, zipkinEndpoint, localComponentNamespace);
+
+        // then
+        assertThat(zipkinSpan.traceId).isEqualTo(unsignedLowerHexStringToLong(lower64Bits));
+    }
 }
