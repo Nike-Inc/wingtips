@@ -230,13 +230,13 @@ public class TraceAndSpanIdGeneratorTest {
     }
 
     @DataProvider(value = {
-        "                   ", // less than 16 chars
-        "12345678901234567  ", // longer than 16 chars
-        "/                  ", // before '0' char
-        ":                  ", // after '9' char
-        "`                  ", // before 'a' char
-        "g                  ", // after 'f' char
-        "ABCDEF             "  // uppercase hex chars
+        "                                      ", // less than 16 chars
+        "123e4567-e89b-12d3-a456-426655440000  ", // longer than 32 chars
+        "/                                     ", // before '0' char
+        ":                                     ", // after '9' char
+        "`                                     ", // before 'a' char
+        "g                                     ", // after 'f' char
+        "ABCDEF                                "  // uppercase hex chars
     }, splitBy = "\\|")
     @Test
     public void unsignedLowerHexStringToLong_throws_NumberFormatException_for_illegal_args(final String badHexString) {

@@ -116,8 +116,8 @@ public class TraceAndSpanIdGenerator {
 
     /**
      * <p>
-     *     The code in this class came from the Zipkin repository v1.7.0
-     *     (https://github.com/openzipkin/zipkin/blob/master/zipkin/src/main/java/zipkin/internal/Util.java)
+     *     The code in this class came from the Zipkin repository v1.11.1
+     *     (https://github.com/openzipkin/zipkin/blob/1.11.1/zipkin/src/main/java/zipkin/internal/Util.java)
      *     and licensed under the Apache License, Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0).
      * </p>
      */
@@ -127,14 +127,20 @@ public class TraceAndSpanIdGenerator {
             // Do nothing
         }
 
-        /** Parses a 1 to 16 character lower-hex string with no prefix int an unsigned long. */
-        static long lowerHexToUnsignedLong(String lowerHex) {
-            char[] array = lowerHex.toCharArray();
-            if (array.length < 1 || array.length > 16) {
-                throw isntLowerHexLong(lowerHex);
-            }
+        /**
+         * Parses a 1 to 32 character lower-hex string with no prefix into an unsigned long, tossing any
+         * bits higher than 64.
+         */
+        public static long lowerHexToUnsignedLong(String lowerHex) {
+            int length = lowerHex.length();
+            if (length < 1 || length > 32) throw isntLowerHexLong(lowerHex);
+
+            // trim off any high bits
+            int i = length > 16 ? length - 16 : 0;
+
             long result = 0;
-            for (char c : array) {
+            for (; i < length; i++) {
+                char c = lowerHex.charAt(i);
                 result <<= 4;
                 if (c >= '0' && c <= '9') {
                     result |= c - '0';
@@ -149,7 +155,7 @@ public class TraceAndSpanIdGenerator {
 
         static NumberFormatException isntLowerHexLong(String lowerHex) {
             return new NumberFormatException(
-                lowerHex + " should be a 1 to 16 character lower-hex string with no prefix");
+                lowerHex + " should be a 1 to 32 character lower-hex string with no prefix");
         }
 
         /** Inspired by {@code okio.Buffer.writeLong} */
