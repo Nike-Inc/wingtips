@@ -8,9 +8,20 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 
 #### 0.x Releases
 
-- `0.11.x` Releases - [0.11.1](#0111), [0.11.0](#0110)
+- `0.11.x` Releases - [0.11.2](#0112), [0.11.1](#0111), [0.11.0](#0110)
 - `0.10.x` Releases - [0.10.0](#0100)
 - `0.9.x` Releases - [0.9.0.1](#0901), [0.9.0](#090)
+
+## [0.11.2](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.11.2)
+
+Released on 2016-09-17.
+
+### Updated
+
+- 32 character (128 bit) trace IDs are now gracefully handled by throwing away the high bits (any characters left of 16 characters). This allows the tracing system to more flexibly introduce 128bit trace ID support in the future.
+    - Updated by [Adrian Cole][contrib_adriancole] in pull request [#28](https://github.com/Nike-Inc/wingtips/pull/28).
+- Zipkin modules updated to use Zipkin version 1.11.1
+    - Updated by [Adrian Cole][contrib_adriancole] in pull request [#28](https://github.com/Nike-Inc/wingtips/pull/28).
 
 ## [0.11.1](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.11.1)
 
