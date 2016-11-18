@@ -25,6 +25,7 @@ public class WingtipsToZipkinSpanConverterDefaultImpl implements WingtipsToZipki
 
     @Override
     public zipkin.Span convertWingtipsSpanToZipkinSpan(Span wingtipsSpan, Endpoint zipkinEndpoint, String localComponentNamespace) {
+        String traceId = wingtipsSpan.getTraceId();
         long startEpochMicros = wingtipsSpan.getSpanStartTimeEpochMicros();
         long durationMicros = TimeUnit.NANOSECONDS.toMicros(wingtipsSpan.getDurationNanos());
 
@@ -33,7 +34,8 @@ public class WingtipsToZipkinSpanConverterDefaultImpl implements WingtipsToZipki
             .name(wingtipsSpan.getSpanName())
             .parentId(nullSafeLong(wingtipsSpan.getParentSpanId()))
             .timestamp(startEpochMicros)
-            .traceId(nullSafeLong(wingtipsSpan.getTraceId()))
+            .traceIdHigh(traceId.length() == 32 ? nullSafeLong(traceId, 0) : 0)
+            .traceId(nullSafeLong(traceId))
             .duration(durationMicros)
             .build();
     }
@@ -73,4 +75,10 @@ public class WingtipsToZipkinSpanConverterDefaultImpl implements WingtipsToZipki
         return TraceAndSpanIdGenerator.unsignedLowerHexStringToLong(lowerHexStr);
     }
 
+    protected Long nullSafeLong(String lowerHexStr, int index) {
+        if (lowerHexStr == null)
+            return null;
+
+        return TraceAndSpanIdGenerator.unsignedLowerHexStringToLong(lowerHexStr, index);
+    }
 }

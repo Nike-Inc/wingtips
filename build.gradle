@@ -64,7 +64,7 @@ javadocJar.enabled = false
 ext {
     slf4jVersion = '1.7.7'
     servletApiVersion = '3.1.0'
-    zipkinVersion = '1.11.1'
+    zipkinVersion = '1.16.2'
 
     junitVersion = '4.11'
     mockitoVersion = '1.9.5'
