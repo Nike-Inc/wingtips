@@ -1,0 +1,12 @@
+# Controls the behavior of the codecov.io integration.
+# See https://github.com/codecov/support/wiki/Codecov-Yaml for details on the options.
+coverage:
+  status:
+    project:
+      default:
+        enabled: yes
+        target: 95%
+    patch:
+      default:
+        enabled: yes
+        target: 90%
