@@ -2,9 +2,11 @@ package com.nike.wingtips.zipkin.util;
 
 import com.nike.wingtips.Span;
 
+import com.nike.wingtips.TraceAndSpanIdGenerator;
 import com.tngtech.java.junit.dataprovider.DataProvider;
 import com.tngtech.java.junit.dataprovider.DataProviderRunner;
 
+import org.assertj.core.api.ThrowableAssert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -20,6 +22,7 @@ import zipkin.Endpoint;
 import static com.nike.wingtips.TraceAndSpanIdGenerator.generateId;
 import static com.nike.wingtips.TraceAndSpanIdGenerator.unsignedLowerHexStringToLong;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.ThrowableAssert.catchThrowable;
 
 /**
  * Tests the functionality of {@link WingtipsToZipkinSpanConverterDefaultImpl}.
@@ -138,12 +141,13 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
     @Test
     public void convertWingtipsSpanToZipkinSpan_works_as_expected_for_128_bit_trace_id() {
         // given
-        String hex128Bits = "463ac35c9f6413ad48485a3953bb6124";
-        String lower64Bits = "48485a3953bb6124";
+        String high64Bits = "463ac35c9f6413ad";
+        String low64Bits = "48485a3953bb6124";
+        String hex128Bits = high64Bits + low64Bits;
 
         String spanName = UUID.randomUUID().toString();
         String traceId = hex128Bits;
-        String spanId = lower64Bits;
+        String spanId = low64Bits;
         long startTimeEpochMicros = Math.abs(random.nextLong());
         long durationNanos = Math.abs(random.nextLong());
         Endpoint zipkinEndpoint = Endpoint.create(UUID.randomUUID().toString(), 42);
@@ -154,6 +158,35 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
         zipkin.Span zipkinSpan = impl.convertWingtipsSpanToZipkinSpan(wingtipsSpan, zipkinEndpoint, localComponentNamespace);
 
         // then
-        assertThat(zipkinSpan.traceId).isEqualTo(unsignedLowerHexStringToLong(lower64Bits));
+        assertThat(zipkinSpan.traceIdHigh).isEqualTo(unsignedLowerHexStringToLong(high64Bits));
+        assertThat(zipkinSpan.traceId).isEqualTo(unsignedLowerHexStringToLong(low64Bits));
+    }
+
+    @DataProvider(value = {
+        "                                      ", // empty trace ID
+        "123e4567-e89b-12d3-a456-426655440000  "  // UUID format (hyphens and also >32 chars)
+    }, splitBy = "\\|")
+    @Test
+    public void convertWingtipsSpanToZipkinSpan_throws_NumberFormatException_for_illegal_args(final String badHexString) {
+        // given
+        String spanName = UUID.randomUUID().toString();
+        String traceId = badHexString;
+        String spanId = "48485a3953bb6124";
+        long startTimeEpochMicros = Math.abs(random.nextLong());
+        long durationNanos = Math.abs(random.nextLong());
+        final Endpoint zipkinEndpoint = Endpoint.create(UUID.randomUUID().toString(), 42);
+        final String localComponentNamespace = UUID.randomUUID().toString();
+        final Span wingtipsSpan = new Span(traceId, null, spanId, spanName, true, null, Span.SpanPurpose.CLIENT, startTimeEpochMicros, null, durationNanos);
+
+        // when
+        Throwable ex = catchThrowable(new ThrowableAssert.ThrowingCallable() {
+            @Override
+            public void call() throws Throwable {
+                impl.convertWingtipsSpanToZipkinSpan(wingtipsSpan, zipkinEndpoint, localComponentNamespace);
+            }
+        });
+
+        // then
+        assertThat(ex).isInstanceOf(NumberFormatException.class);
     }
 }

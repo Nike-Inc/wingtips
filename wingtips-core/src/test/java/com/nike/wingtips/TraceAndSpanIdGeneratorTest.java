@@ -231,7 +231,7 @@ public class TraceAndSpanIdGeneratorTest {
 
     @DataProvider(value = {
         "                                      ", // less than 16 chars
-        "123e4567-e89b-12d3-a456-426655440000  ", // longer than 32 chars
+        "123e4567-e89b-12d3-a456-426655440000  ", // UUID format (hyphens and also >32 chars)
         "/                                     ", // before '0' char
         ":                                     ", // after '9' char
         "`                                     ", // before 'a' char
@@ -240,11 +240,22 @@ public class TraceAndSpanIdGeneratorTest {
     }, splitBy = "\\|")
     @Test
     public void unsignedLowerHexStringToLong_throws_NumberFormatException_for_illegal_args(final String badHexString) {
-        // when
+        // when selecting right-most 16 characters
         Throwable ex = catchThrowable(new ThrowableAssert.ThrowingCallable() {
             @Override
             public void call() throws Throwable {
                 TraceAndSpanIdGenerator.unsignedLowerHexStringToLong(badHexString);
+            }
+        });
+
+        // then
+        assertThat(ex).isInstanceOf(NumberFormatException.class);
+
+        // when selecting 16 characters at offset 0
+        ex = catchThrowable(new ThrowableAssert.ThrowingCallable() {
+            @Override
+            public void call() throws Throwable {
+                TraceAndSpanIdGenerator.unsignedLowerHexStringToLong(badHexString, 0);
             }
         });
 

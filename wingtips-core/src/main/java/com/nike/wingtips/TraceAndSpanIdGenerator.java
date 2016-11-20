@@ -74,11 +74,21 @@ public class TraceAndSpanIdGenerator {
 
     /**
      * @param hexString The lowercase hexadecimal string representing an unsigned 64-bit long that you want to convert to a Java long primitive.
-     * @return The Java long primitive represented by the given lowercase hex string. If the string isn't lowercase hexadecimal encoded or if
-     *          the resulting long wouldn't fit inside 64 bits then a {@link NumberFormatException} will be thrown.
+     * @return The Java long primitive represented by the given lowercase hex string. If the string isn't lowercase hexadecimal encoded then a
+     * {@link NumberFormatException} will be thrown. If the string is larger than 64-bits, any higher bits will be ignored.
      */
     public static long unsignedLowerHexStringToLong(String hexString) {
         return ZipkinHexHelpers.lowerHexToUnsignedLong(hexString);
+    }
+
+    /**
+     * @param hexString The lowercase hexadecimal string representing an unsigned 64-bit long that you want to convert to a Java long primitive.
+     * @param index index to read 16 hexadecimal characters from
+     * @return The Java long primitive represented by the given lowercase hex string. If the string isn't lowercase hexadecimal encoded then a
+     * {@link NumberFormatException} will be thrown.
+     */
+    public static long unsignedLowerHexStringToLong(String hexString, int index) {
+        return ZipkinHexHelpers.lowerHexToUnsignedLong(hexString, index);
     }
 
     /**
@@ -116,8 +126,8 @@ public class TraceAndSpanIdGenerator {
 
     /**
      * <p>
-     *     The code in this class came from the Zipkin repository v1.11.1
-     *     (https://github.com/openzipkin/zipkin/blob/1.11.1/zipkin/src/main/java/zipkin/internal/Util.java)
+     *     The code in this class came from the Zipkin repository v1.16.2
+     *     (https://github.com/openzipkin/zipkin/blob/1.16.2/zipkin/src/main/java/zipkin/internal/Util.java)
      *     and licensed under the Apache License, Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0).
      * </p>
      */
@@ -136,11 +146,22 @@ public class TraceAndSpanIdGenerator {
             if (length < 1 || length > 32) throw isntLowerHexLong(lowerHex);
 
             // trim off any high bits
-            int i = length > 16 ? length - 16 : 0;
+            int beginIndex = length > 16 ? length - 16 : 0;
+
+            return lowerHexToUnsignedLong(lowerHex, beginIndex);
+        }
+
+        /**
+         * Parses a 16 character lower-hex string with no prefix into an unsigned long, starting at the
+         * spe index.
+         */
+        static long lowerHexToUnsignedLong(String lowerHex, int index) {
+            int length = lowerHex.length() - index;
+            if (length < 1) throw new NumberFormatException("Nothing to parse at index " + index);
 
             long result = 0;
-            for (; i < length; i++) {
-                char c = lowerHex.charAt(i);
+            for (int endIndex = Math.min(index + 16, lowerHex.length()); index < endIndex; index++) {
+                char c = lowerHex.charAt(index);
                 result <<= 4;
                 if (c >= '0' && c <= '9') {
                     result |= c - '0';
