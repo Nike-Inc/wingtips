@@ -5,6 +5,8 @@ include "wingtips-core",
         "wingtips-servlet-api",
         "wingtips-zipkin",
         "wingtips-java8",
+        "wingtips-spring",
+        "wingtips-spring-boot",
         // Test-only modules (not published)
         "testonly:testonly-old-servlet",
         // Sample modules (not published)
