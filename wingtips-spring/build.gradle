@@ -5,14 +5,12 @@ dependencies {
             project(":wingtips-core"),
             project(":wingtips-servlet-api"),
             project(":wingtips-zipkin"),
-            project(":wingtips-spring"),
-            "org.springframework.boot:spring-boot-starter-web:$springbootVersion"
+            "org.springframework:spring-web:$springVersion"
     )
     testCompile(
             "junit:junit-dep:$junitVersion",
             "org.mockito:mockito-core:$mockitoVersion",
             "ch.qos.logback:logback-classic:$logbackVersion",
-            "org.assertj:assertj-core:$assertJVersion",
-            "org.springframework.boot:spring-boot-starter-test:$springbootVersion"
+            "org.assertj:assertj-core:$assertJVersion"
     )
 }

@@ -1,6 +1,7 @@
 package com.nike.wingtips.springboot;
 
 import com.nike.wingtips.Tracer;
+import com.nike.wingtips.spring.Tracing;
 import com.nike.wingtips.springboot.support.Greeting;
 import com.nike.wingtips.springboot.support.GreetingApplication;
 import org.junit.After;
@@ -40,5 +41,6 @@ public class RestTemplateTest {
 		Greeting message = template.getForObject("http://localhost:" + port + "/greeting", Greeting.class);
 		Assert.assertEquals("Hello, World!", message.getContent());
 		Assert.assertEquals(1, message.getId());
+		// TODO
 	}
 }

@@ -65,6 +65,7 @@ ext {
     slf4jVersion = '1.7.7'
     servletApiVersion = '3.1.0'
     zipkinVersion = '1.16.2'
+    springVersion = '4.3.7.RELEASE'
     springbootVersion = '1.5.2.RELEASE'
 
     junitVersion = '4.11'
