@@ -1,0 +1,16 @@
+evaluationDependsOn(':')
+
+dependencies {
+    compile(
+            project(":wingtips-core"),
+            project(":wingtips-servlet-api"),
+            project(":wingtips-zipkin"),
+            "org.springframework:spring-web:$springVersion"
+    )
+    testCompile(
+            "junit:junit-dep:$junitVersion",
+            "org.mockito:mockito-core:$mockitoVersion",
+            "ch.qos.logback:logback-classic:$logbackVersion",
+            "org.assertj:assertj-core:$assertJVersion"
+    )
+}
