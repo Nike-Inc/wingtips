@@ -1,15 +1,15 @@
 evaluationDependsOn(':')
 
+sourceCompatibility = JavaVersion.VERSION_1_8
+targetCompatibility = JavaVersion.VERSION_1_8
+
 dependencies {
     compile(
-            "org.slf4j:slf4j-api:$slf4jVersion",
-            "com.nike.internal:nike-internal-util:$nikeInternalUtilVersion"
+            project(":wingtips-core")
     )
     testCompile(
             "junit:junit-dep:$junitVersion",
             "org.mockito:mockito-core:$mockitoVersion",
-            "com.fasterxml.jackson.core:jackson-core:$jacksonVersion",
-            "com.fasterxml.jackson.core:jackson-databind:$jacksonVersion",
             "ch.qos.logback:logback-classic:$logbackVersion",
             "org.assertj:assertj-core:$assertJVersion",
             "com.tngtech.java:junit-dataprovider:$junitDataproviderVersion"

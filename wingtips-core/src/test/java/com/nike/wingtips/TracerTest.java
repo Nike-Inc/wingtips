@@ -4,6 +4,7 @@ import com.nike.wingtips.Span.SpanPurpose;
 import com.nike.wingtips.lifecyclelistener.SpanLifecycleListener;
 import com.nike.wingtips.sampling.RootSpanSamplingStrategy;
 import com.nike.wingtips.sampling.SampleAllTheThingsStrategy;
+import com.nike.wingtips.util.TracingState;
 
 import com.tngtech.java.junit.dataprovider.DataProvider;
 import com.tngtech.java.junit.dataprovider.DataProviderRunner;
@@ -23,6 +24,7 @@ import java.util.Collections;
 import java.util.Deque;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -1448,6 +1450,25 @@ public class TracerTest {
             // then
             assertThat(tracer.getCurrentSpanStackSize()).isEqualTo(0);
         }
+    }
+
+    @Test
+    public void getCurrentTracingStateCopy_works_as_expected() {
+        // given
+        Tracer tracer = Tracer.getInstance();
+        tracer.startRequestWithRootSpan("request-" + UUID.randomUUID().toString());
+        Deque<Span> currentSpanStack = tracer.getCurrentSpanStackCopy();
+        Map<String, String> currentMdcInfo = MDC.getCopyOfContextMap();
+
+        assertThat(currentSpanStack.size()).isGreaterThanOrEqualTo(1);
+        assertThat(currentMdcInfo).isNotEmpty();
+
+        // when
+        TracingState currentTracingState = tracer.getCurrentTracingStateCopy();
+
+        // then
+        assertThat(currentTracingState.spanStack).isEqualTo(currentSpanStack);
+        assertThat(currentTracingState.mdcInfo).isEqualTo(currentMdcInfo);
     }
 
     @DataProvider(value = {
