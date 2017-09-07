@@ -1384,6 +1384,72 @@ public class TracerTest {
         assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(parentSpan.toJSON());
     }
 
+    @Test
+    public void getCurrentSpanStackSize_works_as_expected() {
+        // given
+        Tracer tracer = Tracer.getInstance();
+
+        {
+            // when - null stack
+            tracer.unregisterFromThread();
+
+            // then
+            assertThat(tracer.getCurrentSpanStackSize()).isEqualTo(0);
+        }
+
+        {
+            // and when - empty stack
+            tracer.registerWithThread(new LinkedList<Span>());
+
+            // then
+            assertThat(tracer.getCurrentSpanStackSize()).isEqualTo(0);
+        }
+
+        {
+            // and when - force-register non-empty stack
+            Deque<Span> nonEmptyStack = new LinkedList<>(Arrays.asList(
+                mock(Span.class), mock(Span.class), mock(Span.class)
+            ));
+            tracer.registerWithThread(nonEmptyStack);
+
+            // then
+            assertThat(tracer.getCurrentSpanStackSize()).isEqualTo(nonEmptyStack.size());
+        }
+
+        {
+            // and when - start with single root span
+            tracer.unregisterFromThread();
+            tracer.startRequestWithRootSpan("foo");
+
+            // then
+            assertThat(tracer.getCurrentSpanStackSize()).isEqualTo(1);
+        }
+
+        {
+            // and when - add a subspan
+            tracer.startSubSpan("bar", SpanPurpose.LOCAL_ONLY);
+
+            // then
+            assertThat(tracer.getCurrentSpanStackSize()).isEqualTo(2);
+        }
+
+        {
+            // and when - complete the subspan
+            tracer.completeSubSpan();
+
+            // then
+            assertThat(tracer.getCurrentSpanStackSize()).isEqualTo(1);
+        }
+
+        {
+            // and when - complete the overall request span
+            tracer.completeRequestSpan();
+
+            // then
+            assertThat(tracer.getCurrentSpanStackSize()).isEqualTo(0);
+        }
+    }
+
     @DataProvider(value = {
         "JSON",
         "KEY_VALUE"

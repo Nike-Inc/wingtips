@@ -7,39 +7,41 @@ subprojects {
         createPomOutputLocation = "${project.buildDir}/libs/pom.xml"
     }
 
-    task createPom << {
-        pom {
-            project {
-                groupId groupId
-                artifactId artifactId
-                version version
-                name artifactId
-                description "Wingtips module $artifactId"
-                url 'https://github.com/Nike-Inc/wingtips'
-                inceptionYear '2016'
-                licenses {
-                    license {
-                        name 'The Apache Software License, Version 2.0'
-                        url 'http://www.apache.org/licenses/LICENSE-2.0.txt'
-                        distribution 'repo'
-                    }
-                }
-                scm {
+    task createPom {
+        doLast {
+            pom {
+                project {
+                    groupId groupId
+                    artifactId artifactId
+                    version version
+                    name artifactId
+                    description "Wingtips module $artifactId"
                     url 'https://github.com/Nike-Inc/wingtips'
-                    connection 'git@github.com:Nike-Inc/wingtips.git'
-                }
-                developers {
-                    developer {
-                        id 'nicmunroe'
-                        name 'Nic Munroe'
+                    inceptionYear '2016'
+                    licenses {
+                        license {
+                            name 'The Apache Software License, Version 2.0'
+                            url 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+                            distribution 'repo'
+                        }
+                    }
+                    scm {
+                        url 'https://github.com/Nike-Inc/wingtips'
+                        connection 'git@github.com:Nike-Inc/wingtips.git'
+                    }
+                    developers {
+                        developer {
+                            id 'nicmunroe'
+                            name 'Nic Munroe'
+                        }
+                    }
+                    organization {
+                        name 'Nike'
+                        url 'http://nike-inc.github.io'
                     }
                 }
-                organization {
-                    name 'Nike'
-                    url 'http://nike-inc.github.io'
-                }
-            }
-        }.writeTo(createPomOutputLocation)
+            }.writeTo(createPomOutputLocation)
+        }
     }
 
     publishing {

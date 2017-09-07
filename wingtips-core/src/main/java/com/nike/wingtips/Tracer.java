@@ -685,6 +685,18 @@ public class Tracer {
     }
 
     /**
+     * @return The size of the current span stack - useful when you want to know the size, but don't want to incur the
+     * cost of {@link #getCurrentSpanStackCopy()}.
+     */
+    public int getCurrentSpanStackSize() {
+        Deque<Span> currentStack = currentSpanStackThreadLocal.get();
+        if (currentStack == null)
+            return 0;
+
+        return currentStack.size();
+    }
+
+    /**
      * "Unregisters" the current span stack from this thread, removes span-related info from the logging MDC, and returns the span stack that was unregistered so it
      * can be stored and re-registered later (if desired). This is used in asynchronous projects/frameworks where multiple in-progress requests might be handled by the same thread
      * before any of the requests can finish (e.g. Netty, where the worker I/O threads might process a portion of request A, flip over to request B to do some work, then go back

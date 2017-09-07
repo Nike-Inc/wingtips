@@ -10,14 +10,14 @@ subprojects {
     test {
         reports.html.enabled = true
         reports.junitXml.enabled = true
-        reports.junitXml.destination = rootProject.test.reports.junitXml.destination;
+        reports.junitXml.destination = rootProject.test.reports.junitXml.destination
     }
     // Tell testReport to run after the tests run
     test.finalizedBy(testReport)
 }
 
 ext {
-    testSummaryOutputWithStyle = new ArrayList<List>()
+    testSummaryOutput = new ArrayList<>()
 }
 
 // Tell tests to do full exception outputting (we get *much* better info at the command line with this), output started/skipped/failed notifications,
@@ -33,19 +33,11 @@ subprojects {
         afterSuite { desc, result ->
             // Calculate a summary block of this test suite for output to the console, and store it for when the gradle.buildFinished notification is called.
             if (!desc.parent) { // Ignore individual tests - just do submodule summaries
-                def style
-                if (result.failedTestCount > 0)
-                    style = org.gradle.logging.StyledTextOutput.Style.Failure // Shows up as red
-                else if (result.skippedTestCount > 0)
-                    style = org.gradle.logging.StyledTextOutput.Style.ProgressStatus // Shows up as yellow
-                else
-                    style = org.gradle.logging.StyledTextOutput.Style.Identifier // Shows up as green
-
                 def output = "Test Results for ${desc.getId()}: ${result.resultType} (${result.testCount} tests, ${result.successfulTestCount} successes, ${result.failedTestCount} failures, ${result.skippedTestCount} skipped)"
                 def startItem = '|  ', endItem = '  |'
                 def repeatLength = startItem.length() + output.length() + endItem.length()
                 def fullOutput = ('-' * repeatLength) + '\n' + startItem + output + endItem + '\n' + ('-' * repeatLength)
-                testSummaryOutputWithStyle.add([fullOutput, style])
+                testSummaryOutput.add(fullOutput)
             }
         }
     }
@@ -53,19 +45,14 @@ subprojects {
 
 // Output summaries for all the submodules' unit tests when the build finishes
 gradle.buildFinished {
-    def out = services.get(org.gradle.logging.StyledTextOutputFactory).create("colored-output")
-
     println("\nTesting summary:")
 
-    if (testSummaryOutputWithStyle.isEmpty()) {
-        def style = org.gradle.logging.StyledTextOutput.Style.ProgressStatus
-        out.withStyle(style).println("No test results found - were tests skipped?")
+    if (testSummaryOutput.isEmpty()) {
+        println("No test results found - were tests skipped?")
     }
     else {
-        for (List submoduleSummaryOutput : testSummaryOutputWithStyle) {
-            def output = submoduleSummaryOutput[0]
-            def style = submoduleSummaryOutput[1]
-            out.withStyle(style).println(output)
+        for (String submoduleSummaryOutput : testSummaryOutput) {
+            println(submoduleSummaryOutput)
         }
     }
 }

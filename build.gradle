@@ -5,11 +5,11 @@ buildscript {
     }
     dependencies {
         // STUFF FOR JACOCO
-        classpath 'com.palantir:jacoco-coverage:0.3.0'
+        classpath 'com.palantir:jacoco-coverage:0.4.0'
         // jacoco-coverage blows up unless you specify guava dependency
         classpath 'com.google.guava:guava:18.0'
         // Plugin for spitting out coverage numbers to the console
-        classpath 'com.github.ksoichiro:gradle-console-reporter:0.4.0'
+        classpath 'com.github.ksoichiro:gradle-console-reporter:0.5.0'
 
         // STUFF FOR BINTRAY
         classpath 'com.jfrog.bintray.gradle:gradle-bintray-plugin:1.6'
@@ -51,8 +51,8 @@ allprojects {
     }
 
     // http://www.gradle.org/docs/current/userguide/java_plugin.html
-    sourceCompatibility = org.gradle.api.JavaVersion.VERSION_1_7
-    targetCompatibility = org.gradle.api.JavaVersion.VERSION_1_7
+    sourceCompatibility = JavaVersion.VERSION_1_7
+    targetCompatibility = JavaVersion.VERSION_1_7
 }
 
 // Disable jar, sourcesJar, and javadoc tasks for the root project - we only want them to run for submodules
@@ -62,13 +62,13 @@ javadocJar.enabled = false
 
 // ========== PROPERTIES FOR GRADLE BUILD - DEPENDENCY VERSIONS / ETC
 ext {
-    slf4jVersion = '1.7.7'
+    slf4jVersion = '1.7.25'
     servletApiVersion = '3.1.0'
     zipkinVersion = '1.16.2'
 
     junitVersion = '4.11'
     mockitoVersion = '1.9.5'
-    logbackVersion = '1.1.2'
+    logbackVersion = '1.2.3'
     jacksonVersion = '2.4.2'
     assertJVersion = '2.5.0'
     junitDataproviderVersion = '1.10.1'
