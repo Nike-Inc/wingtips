@@ -54,11 +54,32 @@ import java.util.List;
  *     application, and you'll want to call {@link #completeRequestSpan()} as late as possible in the request/response cycle (ideally after the last of the response has been
  *     sent to the user, although some frameworks don't let you hook in that late). In between these two calls the span that was started (the "overall-request-span")
  *     is considered the "current span" for this thread and can be retrieved if necessary by calling {@link #getCurrentSpan()}.
- *     <br/>
- *     NOTE: Given the thread-local nature of this class you'll want to make sure the completion
+ *
+ *     <p>NOTE: Given the thread-local nature of this class you'll want to make sure the completion
  *     call is in a finally block or otherwise guaranteed to be called no matter what (even if the request fails with an error) to prevent problems when subsequent requests
  *     are processed on the same thread. This class does its best to recover from incorrect thread usage scenarios and log information about what happened
  *     but the best solution is to prevent the problems from occurring in the first place.
+ *
+ *     <p>ALSO NOTE: {@link Span}s support Java try-with-resources statements to help guarantee proper usage in
+ *     blocking/non-async scenarios (for asynchronous scenarios please refer to
+ *     <a href="https://github.com/Nike-Inc/wingtips#async_usage">the asynchronous usage section of the Wingtips
+ *     readme</a>). Here are some examples.
+ *
+ *     <p>Overall request span using try-with-resources:
+ *     <pre>
+ *          try(Span requestSpan = Tracer.getInstance().startRequestWith*(...)) {
+ *              // Traced blocking code for overall request (not asynchronous) goes here ...
+ *          }
+ *          // No finally block needed to properly complete the overall request span
+ *     </pre>
+ *
+ *     Subspan using try-with-resources:
+ *     <pre>
+ *          try (Span subspan = Tracer.getInstance().startSubSpan(...)) {
+ *              // Traced blocking code for subspan (not asynchronous) goes here ...
+ *          }
+ *          // No finally block needed to properly complete the subspan
+ *     </pre>
  * </p>
  * <p>
  *     The "request span" described above is intended to track the work done for the overall request. If you have work inside the request that you want tracked as a
@@ -98,6 +119,11 @@ import java.util.List;
  *     span stack whenever a thread starts to do some chunk of work for that request, and call {@link #unregisterFromThread()} when that chunk of work is done and the
  *     thread is about to be freed up to work on a different request. The span stack would need to follow the request no matter what thread was processing it,
  *     but assuming you can solve that problem in a reactive framework then the general pattern should work fine.
+ *
+ *     <p>The <a href="https://github.com/Nike-Inc/wingtips#async_usage">asynchronous usage section of the Wingtips
+ *     readme</a> contains further details on asynchronous Wingtips usage, including helper classes and methods to
+ *     automate or ease the handling of these scenarios. Please refer to that section of the readme if you have any
+ *     asynchronous use cases.
  * </p>
  *
  * @author Nic Munroe
@@ -514,6 +540,98 @@ public class Tracer {
 
         // Now configure the MDC with the new current span.
         configureMDC(currentSpanStack.peek());
+    }
+
+    /**
+     * Handles the implementation of {@link Span#close()} (for {@link AutoCloseable}) for spans to allow them to be
+     * used in try-with-resources statements. We do the work here instead of in {@link Span#close()} itself since we
+     * have more visibility into whether a span is valid to be closed or not given the current state of the span stack.
+     * <ul>
+     *     <li>
+     *         If the given span is already completed ({@link Span#isCompleted()} returns true) then an error will be
+     *         logged and nothing will be done.
+     *     </li>
+     *     <li>
+     *         If the span is the current span ({@link #getCurrentSpan()} equals the given span), then {@link
+     *         #completeRequestSpan()} or {@link #completeSubSpan()} will be called, whichever is appropriate.
+     *     </li>
+     *     <li>
+     *         If the span is *not* the current span ({@link #getCurrentSpan()} does not equal the given span), then
+     *         this may or may not be an error depending on whether the given span is managed by {@link Tracer} or not.
+     *         <ul>
+     *             <li>
+     *                 If the span is managed by us (i.e. it is contained in the span stack somewhere even though it's
+     *                 not the current span) then this is a wingtips usage error - the span should not be completed
+     *                 yet - and an error will be logged and the given span will be completed and logged to the
+     *                 "invalid span logger".
+     *             </li>
+     *             <li>
+     *                 Otherwise the span is not managed by us, and since there may be valid use cases for manually
+     *                 managing spans we must assume the call was intentional. No error will be logged, and the span
+     *                 will be completed and logged to the "valid span logger".
+     *             </li>
+     *             <li>
+     *                 In either case, the current span stack and MDC info will be left untouched if the given span
+     *                 is not the current span.
+     *             </li>
+     *         </ul>
+     *     </li>
+     * </ul>
+     *
+     * <p>NOTE: This is intentionally package-scoped. Only {@link Span#close()} should ever call this method.
+     */
+    void handleSpanCloseMethod(Span span) {
+        // See if this span has already been completed - if so then this method should not have been called.
+        if (span.isCompleted()) {
+            classLogger.error(
+                "WINGTIPS USAGE ERROR - An attempt was made to close() a span that was already completed. "
+                + "This call to Span.close() will be ignored. "
+                + "wingtips_usage_error=true, already_completed_span=true, trace_id={}, span_id={}",
+                span.getTraceId(), span.getSpanId(), new Exception("Stack trace for debugging purposes")
+            );
+            return;
+        }
+
+        // See if this span is the current span.
+        if (span.equals(getCurrentSpan())) {
+            // This is the current span. Go ahead and complete it.
+            if (getCurrentSpanStackSize() > 1) {
+                // It's a subspan.
+                completeSubSpan();
+            }
+            else {
+                // It's an overall request span.
+                completeRequestSpan();
+            }
+        }
+        else {
+            // This is not the current span - something *might* be wrong with wingtips usage, or it could be a
+            //      span managed manually outside Tracer's view.
+            Deque<Span> currentSpanStack = currentSpanStackThreadLocal.get();
+            if (currentSpanStack != null && currentSpanStack.contains(span)) {
+                // This span is one being managed by Tracer but it's not the current one, therefore this is an invalid
+                //      wingtips usage situation.
+                classLogger.error(
+                    "WINGTIPS USAGE ERROR - An attempt was made to close() a Tracer-managed span that was not the "
+                    + "current span. This span will be completed as an invalid span but Tracer's current span stack "
+                    + "and the current MDC info will be left alone. "
+                    + "wingtips_usage_error=true, closed_non_current_span=true, trace_id={}, span_id={}",
+                    span.getTraceId(), span.getSpanId(), new Exception("Stack trace for debugging purposes")
+                );
+                completeAndLogSpan(span, true);
+            }
+            else {
+                // This span is not in Tracer's current span stack at all. Assume that this span is managed outside
+                //      Tracer and that this call is intentional (not an error).
+                classLogger.debug(
+                    "A Span.close() call was made on a span not managed by Tracer. This is assumed to be intentional, "
+                    + "but might indicate an error depending on how your application works. "
+                    + "trace_id={}, span_id={}",
+                    span.getTraceId(), span.getSpanId()
+                );
+                completeAndLogSpan(span, false);
+            }
+        }
     }
 
     /**
