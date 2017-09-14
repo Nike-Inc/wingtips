@@ -12,6 +12,7 @@ Wingtips is a distributed tracing solution for Java 7 and greater based on the [
 There are a few modules associated with this project:
 
 * [wingtips-core](wingtips-core/README.md) - The core library providing the majority of the distributed tracing functionality.
+* [wingtips-java8](wingtips-java8/README.md) - Provides several Java 8 helpers, particularly around helping tracing and MDC information to hop threads in asynchronous/non-blocking use cases.
 * [wingtips-servlet-api](wingtips-servlet-api/README.md) - A plugin for Servlet-based applications for integrating distributed tracing with a simple Servlet Filter.
 * [wingtips-zipkin](wingtips-zipkin/README.md) - A plugin providing easy Zipkin integration by converting Wingtips spans to Zipkin spans and sending them to a Zipkin server.
 
@@ -68,30 +69,30 @@ See the [Output and Logging section](#output_and_logging) for an example of what
 *NOTE: The following pseudo-code only applies to thread-per-request frameworks and scenarios. For asynchronous non-blocking scenarios see [this section](#async_usage).*
 
 
-```java
+``` java
 import com.nike.wingtips.Span;
 import com.nike.wingtips.Tracer;
 
 // ======As early in the request cycle as possible======
 try {
-	// Determine if a parent span exists by inspecting the request (e.g. request headers)
-	Span parentSpan = extractParentSpanFromRequest(request);
-	
-	// Start the overall request span (which becomes the "current span" for this thread unless/until a sub-span is created)
-	if (parentSpan == null)
-		Tracer.getInstance().startRequestWithRootSpan("newRequestSpanName");
-	else
-		Tracer.getInstance().startRequestWithChildSpan(parentSpan, "newRequestSpanName");
-		
-	// It's recommended that you include the trace ID of the overall request span in the response headers
-	addTraceIdToResponseHeaders(response, Tracer.getInstance().getCurrentSpan());
-		
-	// Execute the normal request logic	
-	doRequestLogic();	
+    // Determine if a parent span exists by inspecting the request (e.g. request headers)
+    Span parentSpan = extractParentSpanFromRequest(request);
+    
+    // Start the overall request span (which becomes the "current span" for this thread unless/until a sub-span is created)
+    if (parentSpan == null)
+        Tracer.getInstance().startRequestWithRootSpan("newRequestSpanName");
+    else
+        Tracer.getInstance().startRequestWithChildSpan(parentSpan, "newRequestSpanName");
+        
+    // It's recommended that you include the trace ID of the overall request span in the response headers
+    addTraceIdToResponseHeaders(response, Tracer.getInstance().getCurrentSpan());
+        
+    // Execute the normal request logic
+    doRequestLogic();
 }
 finally {
-	// ======As late in the request/response cycle as possible======
-	Tracer.getInstance().completeRequestSpan(); // Completes the overall request span and logs it to SLF4J
+    // ======As late in the request/response cycle as possible======
+    Tracer.getInstance().completeRequestSpan(); // Completes the overall request span and logs it to SLF4J
 }
 ```
 
@@ -201,8 +202,78 @@ Due to the thread-local nature of this library it is more effort to integrate wi
 * `Tracer.registerWithThread(Deque)`
 * `Tracer.unregisterFromThread()`
 * `Tracer.getCurrentSpanStackCopy()`
+* `Tracer.getCurrentTracingStateCopy()` (not strictly necessary, but helpful for convenience)
 
 See the javadocs on those methods for more detailed usage information, but the general pattern would be to call `registerWithThread(Deque)` with the request's span stack whenever a thread starts to do some chunk of work for that request, and call `unregisterFromThread()` when that chunk of work is done and the thread is about to be freed up to work on a different request. The span stack would need to follow the request no matter what thread was processing it, but assuming you can solve that problem in a reactive framework then the general pattern works well.
+
+**NOTE:** The [wingtips-java8](wingtips-java8/README.md) module contains numerous helpers to make dealing with async scenarios easy. See that module's readme and the javadocs for `AsyncWingtipsHelper` for full details, however here's some code examples for a few common use cases:
+
+* An example of making the current thread's tracing and MDC info hop to a thread executed by an `Executor`:
+
+``` java
+import static com.nike.wingtips.util.asynchelperwrapper.RunnableWithTracing.withTracing;
+
+// ...
+
+// Just an example - please use an appropriate Executor for your use case.
+Executor executor = Executors.newSingleThreadExecutor(); 
+
+executor.execute(withTracing(() -> {
+    // Code that needs tracing/MDC wrapping goes here
+}));
+```
+
+* A similar example using `CompletableFuture`:
+
+``` java
+import static com.nike.wingtips.util.asynchelperwrapper.SupplierWithTracing.withTracing;
+
+// ...
+
+CompletableFuture.supplyAsync(withTracing(() -> {
+    // Supplier code that needs tracing/MDC wrapping goes here.
+    return foo;
+}));
+```
+
+* This example shows how you might accomplish tasks in an environment where the tracing information is attached
+to some request context, and you need to temporarily attach the tracing info in order to do something (e.g. log some
+messages with tracing info automatically added using MDC):
+
+``` java
+import static com.nike.wingtips.util.AsyncWingtipsHelperStatic.runnableWithTracing;
+
+// ...
+
+TracingState tracingInfo = requestContext.getTracingInfo();
+runnableWithTracing(
+    () -> {
+        // Code that needs tracing/MDC wrapping goes here
+    },
+    tracingInfo
+).run();
+```
+
+* If you want to use the link and unlink methods manually to wrap some chunk of code, the general procedure looks
+like this:
+
+``` java
+import static com.nike.wingtips.util.AsyncWingtipsHelperStatic.linkTracingToCurrentThread;
+import static com.nike.wingtips.util.AsyncWingtipsHelperStatic.unlinkTracingFromCurrentThread;
+
+// ...
+
+TracingState originalThreadInfo = null;
+try {
+    originalThreadInfo = linkTracingToCurrentThread(...);
+    // Code that needs tracing/MDC wrapping goes here
+}
+finally {
+    unlinkTracingFromCurrentThread(originalThreadInfo);
+}
+```
+
+**ALSO NOTE:** `wingtips-core` does contain a small subset of the async helper functionality described above for the bits that are Java 7 compatible, such as `Runnable` and `Callable`. See `AsyncWingtipsHelperJava7` if you're in a Java 7 environment and cannot upgrade to Java 8. If you're in Java 8, please use `AsyncWingtipsHelper` or `AsyncWingtipsHelperStatic` rather than `AsyncWingtipsHelperJava7`.
 
 <a name="using_dtracing_for_errors"></a>
 ## Using Distributed Tracing to Help with Debugging Issues/Errors/Problems
@@ -231,7 +302,7 @@ The typical way this goal is accomplished is to have a separate process on the s
 
 Wingtips now contains some plug-and-play Zipkin support that makes sending spans to Zipkin servers easy. The [wingtips-zipkin](wingtips-zipkin/README.md) submodule's readme contains full details, but here's a quick example showing how you would configure Wingtips to send spans to a Zipkin server listening at `http://localhost:9411`:
 
-```java
+``` java
 Tracer.getInstance().addSpanLifecycleListener(
     new WingtipsToZipkinLifecycleListener("some-service-name", 
                                           "some-local-component-name", 

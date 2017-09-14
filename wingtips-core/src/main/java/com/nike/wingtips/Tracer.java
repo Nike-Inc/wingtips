@@ -4,6 +4,7 @@ import com.nike.wingtips.Span.SpanPurpose;
 import com.nike.wingtips.lifecyclelistener.SpanLifecycleListener;
 import com.nike.wingtips.sampling.RootSpanSamplingStrategy;
 import com.nike.wingtips.sampling.SampleAllTheThingsStrategy;
+import com.nike.wingtips.util.TracingState;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -663,6 +664,16 @@ public class Tracer {
         for (SpanLifecycleListener tll : spanLifecycleListeners) {
             tll.spanCompleted(span);
         }
+    }
+
+    /**
+     * @return A *copy* of the current thread's tracing information. Since this creates copies of the span stack and MDC
+     * info it can have a noticeable performance impact if used too many times (i.e. tens or hundreds of times per
+     * request for high throughput services). NOTE: This is usually not needed unless you're doing asynchronous
+     * processing and need to pass tracing state across thread boundaries.
+     */
+    public TracingState getCurrentTracingStateCopy() {
+        return new TracingState(getCurrentSpanStackCopy(), MDC.getCopyOfContextMap());
     }
 
     /**
