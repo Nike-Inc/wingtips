@@ -1,5 +1,7 @@
 package com.nike.wingtips;
 
+import com.nike.wingtips.util.TracerManagedSpanStatus;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -337,6 +339,19 @@ public class Span implements AutoCloseable {
      */
     public Long getDurationNanos() {
         return durationNanos;
+    }
+
+    /**
+     * @return this span's *current* status relative to {@link Tracer} on the current thread at the time this method is
+     * called. This status is recalculated every time this method is called and is only relevant/correct until {@link
+     * Tracer}'s state is modified (i.e. by starting a subspan, completing a span, using any of the asynchronous helper
+     * methods to modify the span stack in any way, etc), so it should only be considered relevant for the moment the
+     * call is made.
+     *
+     * <p>NOTE: Most app-level developers should not need to worry about this at all.
+     */
+    public TracerManagedSpanStatus getCurrentTracerManagedSpanStatus() {
+        return Tracer.getInstance().getCurrentManagedStatusForSpan(this);
     }
 
     /**

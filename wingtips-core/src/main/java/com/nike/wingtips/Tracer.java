@@ -4,6 +4,7 @@ import com.nike.wingtips.Span.SpanPurpose;
 import com.nike.wingtips.lifecyclelistener.SpanLifecycleListener;
 import com.nike.wingtips.sampling.RootSpanSamplingStrategy;
 import com.nike.wingtips.sampling.SampleAllTheThingsStrategy;
+import com.nike.wingtips.util.TracerManagedSpanStatus;
 import com.nike.wingtips.util.TracingState;
 
 import org.slf4j.Logger;
@@ -543,6 +544,52 @@ public class Tracer {
     }
 
     /**
+     * @return the given span's *current* status relative to this {@link Tracer} on the current thread at the time this
+     * method is called. This status is recalculated every time this method is called and is only relevant/correct until
+     * this {@link Tracer}'s state is modified (i.e. by starting a subspan, completing a span, using any of the
+     * asynchronous helper methods to modify the span stack in any way, etc), so it should only be considered relevant
+     * for the moment the call is made.
+     *
+     * <p>NOTE: Most app-level developers should not need to worry about this at all.
+     *
+     * @see TracerManagedSpanStatus
+     */
+    public TracerManagedSpanStatus getCurrentManagedStatusForSpan(Span span) {
+        // See if this span is the current span.
+        if (span.equals(getCurrentSpan())) {
+            // This is the current span. It is therefore managed. Now we just need to see if it's the root span or
+            //      a subspan. If the span stack size is 1 then it's the root span, otherwise it's a subspan.
+            if (getCurrentSpanStackSize() == 1) {
+                // It's the root span.
+                return TracerManagedSpanStatus.MANAGED_CURRENT_ROOT_SPAN;
+            }
+            else {
+                // It's a subspan.
+                return TracerManagedSpanStatus.MANAGED_CURRENT_SUB_SPAN;
+            }
+        }
+        else {
+            // This is not the current span - find out if it's managed or unmanaged.
+            Deque<Span> currentSpanStack = currentSpanStackThreadLocal.get();
+            if (currentSpanStack != null && currentSpanStack.contains(span)) {
+                // It's on the stack, therefore it's managed. Now we just need to find out if it's the root span or not.
+                if (span.equals(currentSpanStack.peekLast())) {
+                    // It is the root span.
+                    return TracerManagedSpanStatus.MANAGED_NON_CURRENT_ROOT_SPAN;
+                }
+                else {
+                    // It is a subspan.
+                    return TracerManagedSpanStatus.MANAGED_NON_CURRENT_SUB_SPAN;
+                }
+            }
+            else {
+                // This span is not in Tracer's current span stack at all, therefore it is unmanaged.
+                return TracerManagedSpanStatus.UNMANAGED_SPAN;
+            }
+        }
+    }
+
+    /**
      * Handles the implementation of {@link Span#close()} (for {@link AutoCloseable}) for spans to allow them to be
      * used in try-with-resources statements. We do the work here instead of in {@link Span#close()} itself since we
      * have more visibility into whether a span is valid to be closed or not given the current state of the span stack.
@@ -592,23 +639,19 @@ public class Tracer {
             return;
         }
 
-        // See if this span is the current span.
-        if (span.equals(getCurrentSpan())) {
-            // This is the current span. Go ahead and complete it.
-            if (getCurrentSpanStackSize() > 1) {
-                // It's a subspan.
-                completeSubSpan();
-            }
-            else {
-                // It's an overall request span.
+        // What we do next depends on the span's TracerManagedSpanStatus state.
+        TracerManagedSpanStatus currentManagedState = getCurrentManagedStatusForSpan(span);
+        switch(currentManagedState) {
+            case MANAGED_CURRENT_ROOT_SPAN:
+                // This is the current span, and it's the root span. Complete it as the overall request span.
                 completeRequestSpan();
-            }
-        }
-        else {
-            // This is not the current span - something *might* be wrong with wingtips usage, or it could be a
-            //      span managed manually outside Tracer's view.
-            Deque<Span> currentSpanStack = currentSpanStackThreadLocal.get();
-            if (currentSpanStack != null && currentSpanStack.contains(span)) {
+                break;
+            case MANAGED_CURRENT_SUB_SPAN:
+                // This is the current span, and it's a subspan. Complete it as a subspan.
+                completeSubSpan();
+                break;
+            case MANAGED_NON_CURRENT_ROOT_SPAN: //intentional fall-through
+            case MANAGED_NON_CURRENT_SUB_SPAN:
                 // This span is one being managed by Tracer but it's not the current one, therefore this is an invalid
                 //      wingtips usage situation.
                 classLogger.error(
@@ -619,8 +662,8 @@ public class Tracer {
                     span.getTraceId(), span.getSpanId(), new Exception("Stack trace for debugging purposes")
                 );
                 completeAndLogSpan(span, true);
-            }
-            else {
+                break;
+            case UNMANAGED_SPAN:
                 // This span is not in Tracer's current span stack at all. Assume that this span is managed outside
                 //      Tracer and that this call is intentional (not an error).
                 classLogger.debug(
@@ -630,7 +673,9 @@ public class Tracer {
                     span.getTraceId(), span.getSpanId()
                 );
                 completeAndLogSpan(span, false);
-            }
+                break;
+            default:
+                throw new IllegalStateException("Unhandled TracerManagedSpanStatus type: " + currentManagedState.name());
         }
     }
 
