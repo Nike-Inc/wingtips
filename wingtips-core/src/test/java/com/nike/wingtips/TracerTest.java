@@ -19,6 +19,7 @@ import org.mockito.internal.util.reflection.Whitebox;
 import org.slf4j.MDC;
 
 import java.lang.reflect.Field;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -390,6 +391,116 @@ public class TracerTest {
         assertThat(subspan.getSpanPurpose()).isEqualTo(spanPurpose);
         assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(subspan.getTraceId());
         assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(subspan.toJSON());
+    }
+
+    @DataProvider(value = {
+        "true",
+        "false"
+    })
+    @Test
+    public void startSpanInCurrentContext_single_arg_works_as_expected(boolean startWithSpanOnStack) {
+        // given
+        Span parentSpan = (startWithSpanOnStack)
+                          ? Tracer.getInstance().startRequestWithRootSpan("alreadyExistingRoot")
+                          : null;
+        String desiredNewSpanName = "newSpan-" + UUID.randomUUID().toString();
+
+        // when
+        Span newSpan = Tracer.getInstance().startSpanInCurrentContext(desiredNewSpanName);
+
+        // then
+        assertThat(Tracer.getInstance().getCurrentSpan()).isSameAs(newSpan);
+        assertThat(newSpan.getSpanName()).isEqualTo(desiredNewSpanName);
+        
+        if (startWithSpanOnStack) {
+            Deque<Span> expectedStack = new ArrayDeque<>();
+            expectedStack.push(parentSpan);
+            expectedStack.push(newSpan);
+            assertThat(Tracer.getInstance().getCurrentSpanStackCopy()).containsExactlyElementsOf(expectedStack);
+            assertThat(newSpan.getTraceId()).isEqualTo(parentSpan.getTraceId());
+            assertThat(newSpan.getParentSpanId()).isEqualTo(parentSpan.getSpanId());
+            assertThat(newSpan.getSpanPurpose()).isEqualTo(SpanPurpose.LOCAL_ONLY);
+        }
+        else {
+            assertThat(Tracer.getInstance().getCurrentSpanStackCopy()).containsExactly(newSpan);
+            assertThat(newSpan.getParentSpanId()).isNull();
+            assertThat(newSpan.getSpanPurpose()).isEqualTo(SpanPurpose.SERVER);
+        }
+    }
+
+    @DataProvider(value = {
+        "SERVER     |   true",
+        "SERVER     |   false",
+        "CLIENT     |   true",
+        "CLIENT     |   false",
+        "LOCAL_ONLY |   true",
+        "LOCAL_ONLY |   false",
+        "UNKNOWN    |   true",
+        "UNKNOWN    |   false"
+    }, splitBy = "\\|")
+    @Test
+    public void startSpanInCurrentContext_double_arg_works_as_expected(
+        SpanPurpose spanPurpose, boolean startWithSpanOnStack
+    ) {
+        // given
+        Span parentSpan = (startWithSpanOnStack)
+                          ? Tracer.getInstance().startRequestWithRootSpan("alreadyExistingRoot")
+                          : null;
+        String desiredNewSpanName = "newSpan-" + UUID.randomUUID().toString();
+
+        // when
+        Span newSpan = Tracer.getInstance().startSpanInCurrentContext(desiredNewSpanName, spanPurpose);
+
+        // then
+        assertThat(Tracer.getInstance().getCurrentSpan()).isSameAs(newSpan);
+        assertThat(newSpan.getSpanName()).isEqualTo(desiredNewSpanName);
+        assertThat(newSpan.getSpanPurpose()).isEqualTo(spanPurpose);
+
+        if (startWithSpanOnStack) {
+            Deque<Span> expectedStack = new ArrayDeque<>();
+            expectedStack.push(parentSpan);
+            expectedStack.push(newSpan);
+            assertThat(Tracer.getInstance().getCurrentSpanStackCopy()).containsExactlyElementsOf(expectedStack);
+            assertThat(newSpan.getTraceId()).isEqualTo(parentSpan.getTraceId());
+            assertThat(newSpan.getParentSpanId()).isEqualTo(parentSpan.getSpanId());
+        }
+        else {
+            assertThat(Tracer.getInstance().getCurrentSpanStackCopy()).containsExactly(newSpan);
+            assertThat(newSpan.getParentSpanId()).isNull();
+        }
+    }
+
+    @Test
+    public void startSpanInCurrentContext_works_as_expected_with_try_with_resources() {
+        // given
+        Span outerSpan;
+        Span innerSpan;
+
+        // when
+        try (Span autocloseableOuterSpan = Tracer.getInstance().startSpanInCurrentContext("outerSpan")) {
+            outerSpan = autocloseableOuterSpan;
+
+            // then
+            assertThat(Tracer.getInstance().getCurrentSpan()).isSameAs(outerSpan);
+            assertThat(outerSpan.isCompleted()).isFalse();
+
+            // and when
+            try (Span autocloseableInnerSpan = Tracer.getInstance().startSpanInCurrentContext("innerSpan")) {
+                innerSpan = autocloseableInnerSpan;
+
+                // then
+                assertThat(Tracer.getInstance().getCurrentSpan()).isSameAs(innerSpan);
+                assertThat(innerSpan.isCompleted()).isFalse();
+                assertThat(outerSpan.isCompleted()).isFalse();
+
+                assertThat(innerSpan.getTraceId()).isEqualTo(outerSpan.getTraceId());
+                assertThat(innerSpan.getParentSpanId()).isEqualTo(outerSpan.getSpanId());
+            }
+        }
+
+        // then
+        assertThat(innerSpan.isCompleted()).isTrue();
+        assertThat(outerSpan.isCompleted()).isTrue();
     }
 
     @Test(expected = IllegalArgumentException.class)

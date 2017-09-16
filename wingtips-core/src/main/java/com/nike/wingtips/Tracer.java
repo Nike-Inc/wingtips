@@ -345,6 +345,109 @@ public class Tracer {
     }
 
     /**
+     * This method is here for the (hopefully rare) cases where you want to start a new span but don't control the
+     * context where your code is executed (e.g. a third party library) - this method will start a new overall request
+     * span or a new subspan depending on the current thread's span stack state at the time this method is called.
+     * In other words this method is a shortcut for the following code:
+     *
+     * <pre>
+     *      Tracer tracer = Tracer.getInstance();
+     *      if (tracer.getCurrentSpanStackSize() == 0) {
+     *          return tracer.startRequestWithRootSpan(spanName);
+     *      }
+     *      else {
+     *          return tracer.startSubSpan(spanName, SpanPurpose.LOCAL_ONLY);
+     *      }
+     * </pre>
+     *
+     * <p>This method assumes {@link SpanPurpose#SERVER} if the returned span is an overall request span, and
+     * {@link SpanPurpose#LOCAL_ONLY} if it's a subspan. If you know the span purpose already and this behavior is
+     * not what you want (i.e. when surrounding a HTTP client or database call and you want to use {@link
+     * SpanPurpose#CLIENT}) then use the {@link #startSpanInCurrentContext(String, SpanPurpose)} method instead.
+     *
+     * <p><b>WARNING:</b> As stated above, this method is here to support libraries where they need to create a span
+     * for some work, but do not necessarily know how or where they are going to be used in a project, and therefore
+     * don't know whether tracing has been setup yet with an overall request span. Most of the time you will know where
+     * you are in relation to overall request span or subspan, and should use the appropriate
+     * {@code Tracer.startRequestWith*(...)} or {@code Tracer.startSubSpan(...)} methods directly as those methods spit
+     * out error logging when the span stack is not in the expected state (indicating a Wingtips usage error). Using
+     * this method everywhere can swallow critical error logging that would otherwise let you know Wingtips isn't being
+     * used correctly and that your distributed tracing info is potentially unreliable.
+     *
+     * <p><b>This method is the equivalent of swallowing exceptions when Wingtips isn't being used correctly - all
+     * diagnostic debugging information will be lost. This method should not be used simply because it is
+     * convenient!</b>
+     *
+     * @param spanName The {@link Span#getSpanName()} to use for the new span.
+     * @return A new span that might be the root span of a new span stack (i.e. if the current span stack is empty),
+     * or a new subspan (i.e. if the current span stack is *not* empty). NOTE: Please read the warning in this method's
+     * javadoc - abusing this method can lead to broken tracing without any errors showing up in the logs.
+     */
+    public Span startSpanInCurrentContext(String spanName) {
+        // If the current span stack is empty, then we start a new overall request span.
+        //      Otherwise we start a subspan.
+        if (getCurrentSpanStackSize() == 0) {
+            return startRequestWithRootSpan(spanName);
+        }
+        else {
+            return startSubSpan(spanName, SpanPurpose.LOCAL_ONLY);
+        }
+    }
+
+    /**
+     * This method is here for the (hopefully rare) cases where you want to start a new span but don't control the
+     * context where your code is executed (e.g. a third party library) - this method will start a new overall request
+     * span or a new subspan depending on the current thread's span stack state at the time this method is called.
+     * In other words this method is a shortcut for the following code:
+     *
+     * <pre>
+     *      Tracer tracer = Tracer.getInstance();
+     *      if (tracer.getCurrentSpanStackSize() == 0) {
+     *          boolean sampleable = tracer.isNextRootSpanSampleable();
+     *          return tracer.startRequestWithSpanInfo(null, null, spanName, sampleable, null, spanPurpose);
+     *      }
+     *      else {
+     *          return tracer.startSubSpan(spanName, spanPurpose);
+     *      }
+     * </pre>
+     *
+     * <p>This method lets you pass in the {@link SpanPurpose} for the new span. If you only need the default behavior
+     * of {@link SpanPurpose#SERVER} for overall request span and {@link SpanPurpose#LOCAL_ONLY} for subspan, then
+     * you can call {@link #startSpanInCurrentContext(String)} instead.
+     *
+     * <p><b>WARNING:</b> As stated above, this method is here to support libraries where they need to create a span
+     * for some work, but do not necessarily know how or where they are going to be used in a project, and therefore
+     * don't know whether tracing has been setup yet with an overall request span. Most of the time you will know where
+     * you are in relation to overall request span or subspan, and should use the appropriate
+     * {@code Tracer.startRequestWith*(...)} or {@code Tracer.startSubSpan(...)} methods directly as those methods spit
+     * out error logging when the span stack is not in the expected state (indicating a Wingtips usage error). Using
+     * this method everywhere can swallow critical error logging that would otherwise let you know Wingtips isn't being
+     * used correctly and that your distributed tracing info is potentially unreliable.
+     *
+     * <p><b>This method is the equivalent of swallowing exceptions when Wingtips isn't being used correctly - all
+     * diagnostic debugging information will be lost. This method should not be used simply because it is
+     * convenient!</b>
+     *
+     * @param spanName The {@link Span#getSpanName()} to use for the new span.
+     * @param spanPurpose The {@link SpanPurpose} for the new span. This will be honored regardless of whether the
+     * returned span is an overall request span or a subspan.
+     * @return A new span that might be the root span of a new span stack (i.e. if the current span stack is empty),
+     * or a new subspan (i.e. if the current span stack is *not* empty). NOTE: Please read the warning in this method's
+     * javadoc - abusing this method can lead to broken tracing without any errors showing up in the logs.
+     */
+    public Span startSpanInCurrentContext(String spanName, SpanPurpose spanPurpose) {
+        // If the current span stack is empty, then we start a new overall request span. Otherwise we start a subspan.
+        //      In either case, honor the passed-in spanPurpose.
+        if (getCurrentSpanStackSize() == 0) {
+            boolean sampleable = isNextRootSpanSampleable();
+            return startRequestWithSpanInfo(null, null, spanName, sampleable, null, spanPurpose);
+        }
+        else {
+            return startSubSpan(spanName, spanPurpose);
+        }
+    }
+
+    /**
      * Helper method that starts a new span for a fresh request.
      * <p/>
      * <b>WARNING:</b> This wipes out any existing spans on the span stack for this thread and starts fresh, therefore this should only be called at the request's
