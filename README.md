@@ -19,20 +19,21 @@ There are a few modules associated with this project:
 ## Table of Contents
 
 * [Overview](#overview)
-	* [What is a Distributed Trace Made Of?](#trace_and_span_anatomy) 
+    * [What is a Distributed Trace Made Of?](#trace_and_span_anatomy) 
 * [Quickstart and Usage](#quickstart)
-	* [Generic Application Pseudo-Code](#generic_pseudo_code)
-	* [Generic Application Pseudo-Code Explanation](#generic_pseudo_code_info)
-		* [Is your application running in a Servlet-based framework?](#servlet_filter_info)
-	* [Output and Logging](#output_and_logging)
-		* [Automatically attaching trace information to all log messages](#mdc_info)
-	* [Nested Sub-Spans and the Span Stack](#sub_spans)
-		* [Using sub-spans to surround downstream calls](#sub_spans_for_downstream_calls)
-	* [Propagating Distributed Traces Across Network or Application Boundaries](#propagating_traces)
-	* [Adjusting Behavior and Execution Options](#adjusting_behavior)
-		* [Sampling](#sampling)
-		* [Notification of span lifecycle events](#span_lifecycle_events)
-		* [Changing serialized representation of Spans for the logs](#logging_span_representation)
+    * [Generic Application Pseudo-Code](#generic_pseudo_code)
+    * [Generic Application Pseudo-Code Explanation](#generic_pseudo_code_info)
+        * [Is your application running in a Servlet-based framework?](#servlet_filter_info)
+    * [Simplified Span Management using Java `try-with-resources` Statements](#try_with_resources_info)  
+    * [Output and Logging](#output_and_logging)
+        * [Automatically attaching trace information to all log messages](#mdc_info)
+    * [Nested Sub-Spans and the Span Stack](#sub_spans)
+        * [Using sub-spans to surround downstream calls](#sub_spans_for_downstream_calls)
+    * [Propagating Distributed Traces Across Network or Application Boundaries](#propagating_traces)
+    * [Adjusting Behavior and Execution Options](#adjusting_behavior)
+        * [Sampling](#sampling)
+        * [Notification of span lifecycle events](#span_lifecycle_events)
+        * [Changing serialized representation of Spans for the logs](#logging_span_representation)
 * [Usage in Reactive Asynchronous Nonblocking Scenarios](#async_usage)
 * [Using Distributed Tracing to Help with Debugging Issues/Errors/Problems](#using_dtracing_for_errors)
 * [Custom Annotations](#custom_annotations)
@@ -58,7 +59,7 @@ Distributed tracing can also be used in some cases for error debugging and probl
 * Spans include a SpanName, which is a more human readable indication of what the span was, e.g. `GET_/some/endpoint` for the overall span for a REST request, or `downstream-POST_https://otherservice.com/other/endpoint` for the span performing a downstream call to another service.
 * Spans contain timing info - a start timestamp and a duration value.
 
-See the [Output and Logging section](#output_and_logging) for an example of what a span looks like when it is logged.	
+See the [Output and Logging section](#output_and_logging) for an example of what a span looks like when it is logged.
 
 <a name="quickstart"></a> 
 ## Quickstart and Usage
@@ -102,12 +103,39 @@ In a typical usage scenario you'll want to call one of the `Tracer.getInstance()
 
 The `extractParentSpanFromRequest()` method is potentially different for different applications, however for HTTP-based frameworks the pattern is usually the same - look for and extract distributed-tracing-related information from the HTTP headers and use that information to create a parent span. There is a utility method that performs this work for you: `HttpRequestTracingUtils.fromRequestWithHeaders(RequestWithHeaders, List<String>)`. You simply need to provide the HTTP request wrapped by an implementation of `RequestWithHeaders` and the list of user ID header keys for your application (if any) and it will do the rest using the standard distributed tracing header key constants found in `TraceHeaders`. See the javadocs for those classes and methods for more information and usage instructions.
 
-**NOTE:** Given the thread-local nature of this library you'll want to make sure the span completion call is in a finally block or otherwise guaranteed to be called no matter what (even if the request fails with an error) to prevent problems when subsequent requests are processed on the same thread. The `Tracer` class does its best to recover from incorrect thread usage scenarios and log information about what happened but the best solution is to prevent the problems from occurring in the first place.
- 
+**NOTE:** Given the thread-local nature of this library you'll want to make sure the span completion call is in a finally block or otherwise guaranteed to be called no matter what (even if the request fails with an error) to prevent problems when subsequent requests are processed on the same thread. The `Tracer` class does its best to recover from incorrect thread usage scenarios and log information about what happened but the best solution is to prevent the problems from occurring in the first place. See the section below on `try-with-resources` for some tips on foolproof ways to safely complete your spans.
+
 <a name="servlet_filter_info"></a>  
 #### Is your application running in a Servlet-based framework?
 
 If your application is running in a Servlet environment (e.g. Spring MVC, Jersey, raw Servlets, etc) then this entire lifecycle can be handled by a Servlet `Filter`. We've created one for you that's ready to drop in and go - see the [wingtips-servlet-api](wingtips-servlet-api/README.md) Wingtips plugin module library for details. That plugin module is also a good resource to see how the code for a production-ready implementation of this library might look.
+
+<a name="try_with_resources_info"></a>
+### Simplified Span Management using Java `try-with-resources` Statements
+
+`Span`s support Java `try-with-resources` statements to help guarantee proper usage in blocking/non-asynchronous scenarios 
+(for asynchronous scenarios please refer to the [asynchronous usage section](#async_usage) of this readme). As 
+previously mentioned, `Span`s that are not properly completed can lead to incorrect distributed tracing information 
+showing up, and the `try-with-resources` statements guarantee that spans are completed appropriately. Here are 
+some examples:
+
+#### Overall request span using `try-with-resources`
+
+``` java
+try(Span requestSpan = Tracer.getInstance().startRequestWith*(...)) {
+    // Traced blocking code for overall request (not asynchronous) goes here ...
+}
+// No finally block needed to properly complete the overall request span
+```
+   
+#### Subspan using `try-with-resources`
+
+``` java
+try (Span subspan = Tracer.getInstance().startSubSpan(...)) {
+    // Traced blocking code for subspan (not asynchronous) goes here ...
+}
+// No finally block needed to properly complete the subspan
+```
  
 <a name="output_and_logging"></a>  
 ### Output and Logging

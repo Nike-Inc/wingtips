@@ -4,6 +4,7 @@ import com.nike.wingtips.Span.SpanPurpose;
 import com.nike.wingtips.lifecyclelistener.SpanLifecycleListener;
 import com.nike.wingtips.sampling.RootSpanSamplingStrategy;
 import com.nike.wingtips.sampling.SampleAllTheThingsStrategy;
+import com.nike.wingtips.util.TracerManagedSpanStatus;
 import com.nike.wingtips.util.TracingState;
 
 import com.tngtech.java.junit.dataprovider.DataProvider;
@@ -18,6 +19,7 @@ import org.mockito.internal.util.reflection.Whitebox;
 import org.slf4j.MDC;
 
 import java.lang.reflect.Field;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -28,6 +30,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
+import static java.util.Collections.singletonList;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Fail.fail;
 import static org.mockito.Mockito.mock;
@@ -388,6 +391,116 @@ public class TracerTest {
         assertThat(subspan.getSpanPurpose()).isEqualTo(spanPurpose);
         assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(subspan.getTraceId());
         assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(subspan.toJSON());
+    }
+
+    @DataProvider(value = {
+        "true",
+        "false"
+    })
+    @Test
+    public void startSpanInCurrentContext_single_arg_works_as_expected(boolean startWithSpanOnStack) {
+        // given
+        Span parentSpan = (startWithSpanOnStack)
+                          ? Tracer.getInstance().startRequestWithRootSpan("alreadyExistingRoot")
+                          : null;
+        String desiredNewSpanName = "newSpan-" + UUID.randomUUID().toString();
+
+        // when
+        Span newSpan = Tracer.getInstance().startSpanInCurrentContext(desiredNewSpanName);
+
+        // then
+        assertThat(Tracer.getInstance().getCurrentSpan()).isSameAs(newSpan);
+        assertThat(newSpan.getSpanName()).isEqualTo(desiredNewSpanName);
+        
+        if (startWithSpanOnStack) {
+            Deque<Span> expectedStack = new ArrayDeque<>();
+            expectedStack.push(parentSpan);
+            expectedStack.push(newSpan);
+            assertThat(Tracer.getInstance().getCurrentSpanStackCopy()).containsExactlyElementsOf(expectedStack);
+            assertThat(newSpan.getTraceId()).isEqualTo(parentSpan.getTraceId());
+            assertThat(newSpan.getParentSpanId()).isEqualTo(parentSpan.getSpanId());
+            assertThat(newSpan.getSpanPurpose()).isEqualTo(SpanPurpose.LOCAL_ONLY);
+        }
+        else {
+            assertThat(Tracer.getInstance().getCurrentSpanStackCopy()).containsExactly(newSpan);
+            assertThat(newSpan.getParentSpanId()).isNull();
+            assertThat(newSpan.getSpanPurpose()).isEqualTo(SpanPurpose.SERVER);
+        }
+    }
+
+    @DataProvider(value = {
+        "SERVER     |   true",
+        "SERVER     |   false",
+        "CLIENT     |   true",
+        "CLIENT     |   false",
+        "LOCAL_ONLY |   true",
+        "LOCAL_ONLY |   false",
+        "UNKNOWN    |   true",
+        "UNKNOWN    |   false"
+    }, splitBy = "\\|")
+    @Test
+    public void startSpanInCurrentContext_double_arg_works_as_expected(
+        SpanPurpose spanPurpose, boolean startWithSpanOnStack
+    ) {
+        // given
+        Span parentSpan = (startWithSpanOnStack)
+                          ? Tracer.getInstance().startRequestWithRootSpan("alreadyExistingRoot")
+                          : null;
+        String desiredNewSpanName = "newSpan-" + UUID.randomUUID().toString();
+
+        // when
+        Span newSpan = Tracer.getInstance().startSpanInCurrentContext(desiredNewSpanName, spanPurpose);
+
+        // then
+        assertThat(Tracer.getInstance().getCurrentSpan()).isSameAs(newSpan);
+        assertThat(newSpan.getSpanName()).isEqualTo(desiredNewSpanName);
+        assertThat(newSpan.getSpanPurpose()).isEqualTo(spanPurpose);
+
+        if (startWithSpanOnStack) {
+            Deque<Span> expectedStack = new ArrayDeque<>();
+            expectedStack.push(parentSpan);
+            expectedStack.push(newSpan);
+            assertThat(Tracer.getInstance().getCurrentSpanStackCopy()).containsExactlyElementsOf(expectedStack);
+            assertThat(newSpan.getTraceId()).isEqualTo(parentSpan.getTraceId());
+            assertThat(newSpan.getParentSpanId()).isEqualTo(parentSpan.getSpanId());
+        }
+        else {
+            assertThat(Tracer.getInstance().getCurrentSpanStackCopy()).containsExactly(newSpan);
+            assertThat(newSpan.getParentSpanId()).isNull();
+        }
+    }
+
+    @Test
+    public void startSpanInCurrentContext_works_as_expected_with_try_with_resources() {
+        // given
+        Span outerSpan;
+        Span innerSpan;
+
+        // when
+        try (Span autocloseableOuterSpan = Tracer.getInstance().startSpanInCurrentContext("outerSpan")) {
+            outerSpan = autocloseableOuterSpan;
+
+            // then
+            assertThat(Tracer.getInstance().getCurrentSpan()).isSameAs(outerSpan);
+            assertThat(outerSpan.isCompleted()).isFalse();
+
+            // and when
+            try (Span autocloseableInnerSpan = Tracer.getInstance().startSpanInCurrentContext("innerSpan")) {
+                innerSpan = autocloseableInnerSpan;
+
+                // then
+                assertThat(Tracer.getInstance().getCurrentSpan()).isSameAs(innerSpan);
+                assertThat(innerSpan.isCompleted()).isFalse();
+                assertThat(outerSpan.isCompleted()).isFalse();
+
+                assertThat(innerSpan.getTraceId()).isEqualTo(outerSpan.getTraceId());
+                assertThat(innerSpan.getParentSpanId()).isEqualTo(outerSpan.getSpanId());
+            }
+        }
+
+        // then
+        assertThat(innerSpan.isCompleted()).isTrue();
+        assertThat(outerSpan.isCompleted()).isTrue();
     }
 
     @Test(expected = IllegalArgumentException.class)
@@ -1506,6 +1619,203 @@ public class TracerTest {
     public void setSpanLoggingRepresentation_blows_up_if_spanLoggingRepresentation_is_null() {
         // expect
         Tracer.getInstance().setSpanLoggingRepresentation(null);
+    }
+
+    @Test
+    public void handleSpanCloseMethod_completes_the_span_as_expected_overall_request_span() {
+        // given
+        Span overallSpan = Tracer.getInstance().startRequestWithRootSpan("root");
+
+        assertThat(Tracer.getInstance().getCurrentSpan()).isSameAs(overallSpan);
+        assertThat(overallSpan.isCompleted()).isFalse();
+
+        // when
+        Tracer.getInstance().handleSpanCloseMethod(overallSpan);
+
+        // then
+        assertThat(overallSpan.isCompleted()).isTrue();
+        assertThat(Tracer.getInstance().getCurrentSpan()).isNull();
+    }
+
+    @Test
+    public void handleSpanCloseMethod_completes_the_span_as_expected_subspan() {
+        // given
+        Span parentSpan = Tracer.getInstance().startRequestWithRootSpan("root");
+        Span subspan = Tracer.getInstance().startSubSpan("subspan", SpanPurpose.LOCAL_ONLY);
+
+        assertThat(Tracer.getInstance().getCurrentSpan()).isSameAs(subspan);
+        assertThat(subspan.isCompleted()).isFalse();
+
+        // when
+        Tracer.getInstance().handleSpanCloseMethod(subspan);
+
+        // then
+        assertThat(subspan.isCompleted()).isTrue();
+        assertThat(Tracer.getInstance().getCurrentSpan()).isSameAs(parentSpan);
+    }
+
+    @Test
+    public void handleSpanCloseMethod_does_nothing_if_span_is_already_completed() {
+        // given
+        Span rootSpan = Tracer.getInstance().startRequestWithRootSpan("root");
+        Span subspan = Tracer.getInstance().startSubSpan("subspan", SpanPurpose.LOCAL_ONLY);
+        Tracer.getInstance().completeSubSpan();
+
+        assertThat(subspan.isCompleted()).isTrue();
+        assertThat(rootSpan.isCompleted()).isFalse();
+        assertThat(Tracer.getInstance().getCurrentSpan()).isSameAs(rootSpan);
+        assertThat(Tracer.getInstance().getCurrentSpanStackCopy()).isEqualTo(singletonList(rootSpan));
+
+        // when
+        Tracer.getInstance().handleSpanCloseMethod(subspan);
+
+        // then
+        assertThat(rootSpan.isCompleted()).isFalse();
+        assertThat(Tracer.getInstance().getCurrentSpan()).isSameAs(rootSpan);
+        assertThat(Tracer.getInstance().getCurrentSpanStackCopy()).isEqualTo(singletonList(rootSpan));
+    }
+
+    @DataProvider(value = {
+        "0",
+        "1",
+        "2"
+    })
+    @Test
+    public void handleSpanCloseMethod_handles_non_Tracer_managed_spans_gracefully_without_affecting_existing_stack(
+        int numValidSpansOnStack
+    ) {
+        // given
+        for (int i = 0; i < numValidSpansOnStack; i++) {
+            if (i == 0) {
+                Tracer.getInstance().startRequestWithRootSpan("root");
+            }
+            else {
+                Tracer.getInstance().startSubSpan("subspan" + i, SpanPurpose.LOCAL_ONLY);
+            }
+        }
+        assertThat(Tracer.getInstance().getCurrentSpanStackSize()).isEqualTo(numValidSpansOnStack);
+        Deque<Span> originalValidSpanStack = Tracer.getInstance().getCurrentSpanStackCopy();
+
+        Span invalidSpan = Span.generateRootSpanForNewTrace("invalidSpan", SpanPurpose.LOCAL_ONLY).build();
+        assertThat(invalidSpan.isCompleted()).isFalse();
+
+        // when
+        Tracer.getInstance().handleSpanCloseMethod(invalidSpan);
+
+        // then
+        assertThat(invalidSpan.isCompleted()).isTrue();
+        assertThat(Tracer.getInstance().getCurrentSpanStackSize()).isEqualTo(numValidSpansOnStack);
+        if (numValidSpansOnStack == 0) {
+            assertThat(Tracer.getInstance().getCurrentSpan()).isNull();
+        }
+        else {
+            assertThat(Tracer.getInstance().getCurrentSpan().isCompleted()).isFalse();
+        }
+        assertThat(Tracer.getInstance().getCurrentSpanStackCopy()).isEqualTo(originalValidSpanStack);
+    }
+
+    @Test
+    public void handleSpanCloseMethod_handles_non_current_but_Tracer_managed_spans_gracefully() {
+        // given
+        Span parentSpan = Tracer.getInstance().startRequestWithRootSpan("root");
+        Span subspan1 = Tracer.getInstance().startSubSpan("subspan1", SpanPurpose.LOCAL_ONLY);
+        Span subspan2 = Tracer.getInstance().startSubSpan("subspan2", SpanPurpose.LOCAL_ONLY);
+
+        assertThat(Tracer.getInstance().getCurrentSpan()).isSameAs(subspan2);
+        assertThat(subspan2.isCompleted()).isFalse();
+        assertThat(subspan1.isCompleted()).isFalse();
+        assertThat(parentSpan.isCompleted()).isFalse();
+
+        Deque<Span> originalSpanStack = Tracer.getInstance().getCurrentSpanStackCopy();
+
+        // when
+        Tracer.getInstance().handleSpanCloseMethod(parentSpan);
+
+        // then
+        // Current span (subspan2) should be unmodified.
+        assertThat(Tracer.getInstance().getCurrentSpan()).isSameAs(subspan2);
+        assertThat(subspan2.isCompleted()).isFalse();
+        // The stack as a whole should still be unchanged.
+        assertThat(Tracer.getInstance().getCurrentSpanStackCopy()).isEqualTo(originalSpanStack);
+        // But the out-of-order closed span should now be completed.
+        assertThat(parentSpan.isCompleted()).isTrue();
+
+        // and when - we do the same thing for the middle subspan1
+        Tracer.getInstance().handleSpanCloseMethod(subspan1);
+
+        // then - subspan2 should still be unmodified and the stack as a whole unchanged, but subspan1 completed
+        assertThat(Tracer.getInstance().getCurrentSpan()).isSameAs(subspan2);
+        assertThat(subspan2.isCompleted()).isFalse();
+        assertThat(Tracer.getInstance().getCurrentSpanStackCopy()).isEqualTo(originalSpanStack);
+        assertThat(subspan1.isCompleted()).isTrue();
+
+        // and when - we complete everything using tracer
+        Tracer.getInstance().completeSubSpan();
+        Tracer.getInstance().completeSubSpan();
+        Tracer.getInstance().completeRequestSpan();
+
+        // then - we should not have received any errors and everything should be completed
+        assertThat(subspan2.isCompleted()).isTrue();
+        assertThat(subspan1.isCompleted()).isTrue();
+        assertThat(parentSpan.isCompleted()).isTrue();
+        assertThat(Tracer.getInstance().getCurrentSpan()).isNull();
+        assertThat(Tracer.getInstance().getCurrentSpanStackSize()).isEqualTo(0);
+    }
+
+    @Test
+    public void getCurrentManagedStatusForSpan_works_as_expected_for_managed_current() {
+        {
+            // given
+            Span currentRootSpan = Tracer.getInstance().startRequestWithRootSpan("root");
+
+            // when
+            TracerManagedSpanStatus tmss = Tracer.getInstance().getCurrentManagedStatusForSpan(currentRootSpan);
+
+            // then
+            assertThat(tmss).isEqualTo(TracerManagedSpanStatus.MANAGED_CURRENT_ROOT_SPAN);
+        }
+
+        {
+            // and given
+            Span currentSubspan = Tracer.getInstance().startSubSpan("subspan", SpanPurpose.LOCAL_ONLY);
+
+            // when
+            TracerManagedSpanStatus tmss = Tracer.getInstance().getCurrentManagedStatusForSpan(currentSubspan);
+
+            // then
+            assertThat(tmss).isEqualTo(TracerManagedSpanStatus.MANAGED_CURRENT_SUB_SPAN);
+
+        }
+    }
+
+    @Test
+    public void getCurrentManagedStatusForSpan_works_as_expected_for_managed_noncurrent() {
+        // given
+        Span nonCurrentRootSpan = Tracer.getInstance().startRequestWithRootSpan("root");
+        Span nonCurrentSubspan = Tracer.getInstance().startSubSpan("subspan1", SpanPurpose.LOCAL_ONLY);
+        Span currentSubspan = Tracer.getInstance().startSubSpan("subspan2", SpanPurpose.LOCAL_ONLY);
+
+        // expect
+        assertThat(Tracer.getInstance().getCurrentManagedStatusForSpan(nonCurrentRootSpan))
+            .isEqualTo(TracerManagedSpanStatus.MANAGED_NON_CURRENT_ROOT_SPAN);
+        assertThat(Tracer.getInstance().getCurrentManagedStatusForSpan(nonCurrentSubspan))
+            .isEqualTo(TracerManagedSpanStatus.MANAGED_NON_CURRENT_SUB_SPAN);
+    }
+
+    @Test
+    public void getCurrentManagedStatusForSpan_works_as_expected_for_unmanaged() {
+        // given
+        Span manuallyCreatedSpan = Span.newBuilder("manuallyCreatedSpan", SpanPurpose.LOCAL_ONLY).build();
+        Span completedSpan = Tracer.getInstance().startRequestWithRootSpan("completedSpan");
+        Tracer.getInstance().completeRequestSpan();
+
+        // when
+        TracerManagedSpanStatus tmssManual = Tracer.getInstance().getCurrentManagedStatusForSpan(manuallyCreatedSpan);
+        TracerManagedSpanStatus tmssCompleted = Tracer.getInstance().getCurrentManagedStatusForSpan(completedSpan);
+
+        // then
+        assertThat(tmssManual).isEqualTo(TracerManagedSpanStatus.UNMANAGED_SPAN);
+        assertThat(tmssCompleted).isEqualTo(TracerManagedSpanStatus.UNMANAGED_SPAN);
     }
 
     @Test
