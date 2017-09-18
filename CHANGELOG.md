@@ -8,9 +8,45 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 
 #### 0.x Releases
 
+- `0.12.x` Releases - [0.12.0](#0120)
 - `0.11.x` Releases - [0.11.2](#0112), [0.11.1](#0111), [0.11.0](#0110)
 - `0.10.x` Releases - [0.10.0](#0100)
 - `0.9.x` Releases - [0.9.0.1](#0901), [0.9.0](#090)
+
+## [0.12.0](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.12.0)
+
+Released on 2017-09-18.
+
+### Added
+
+- Added support for reporting 128-bit trace IDs to Zipkin.
+    - Done by [Adrian Cole][contrib_adriancole] in pull request [#34](https://github.com/Nike-Inc/wingtips/pull/34).
+- Added `Tracer.getCurrentSpanStackSize()`method.
+    - Added by [Nic Munroe][contrib_nicmunroe] in pull request [#38](https://github.com/Nike-Inc/wingtips/pull/38).
+- Added Java 7 and Java 8 async usage helpers. Please see the 
+[async section of the main readme](https://github.com/Nike-Inc/wingtips#async_usage) and the 
+[readme for the new Java 8 module](https://github.com/Nike-Inc/wingtips/tree/master/wingtips-java8) for details. 
+    - Added by [Nic Munroe][contrib_nicmunroe] in pull request [#39](https://github.com/Nike-Inc/wingtips/pull/39).
+- Added `AutoCloseable` implementation to `Span` to support usage in Java `try-with-resources` statements. See the
+[try-with-resources section of the readme](https://github.com/Nike-Inc/wingtips#try_with_resources_info) for details.
+    - Added by [Nic Munroe][contrib_nicmunroe] in pull request [#40](https://github.com/Nike-Inc/wingtips/pull/40). 
+
+### Updated
+
+- Zipkin modules updated to use Zipkin version `1.16.2`.
+    - Updated by [Adrian Cole][contrib_adriancole] in pull request [#34](https://github.com/Nike-Inc/wingtips/pull/34).
+- Updated SLF4J API dependency to version `1.7.25`.
+    - Updated by [Nic Munroe][contrib_nicmunroe] in pull request [#38](https://github.com/Nike-Inc/wingtips/pull/38). 
+
+### Project Build
+
+- Upgraded to Gradle `4.1`.
+    - Done by [Nic Munroe][contrib_nicmunroe] in pull request [#38](https://github.com/Nike-Inc/wingtips/pull/38).
+- Updated Logback dependency to `1.2.3` (only affects tests).
+    - Updated by [Nic Munroe][contrib_nicmunroe] in pull request [#38](https://github.com/Nike-Inc/wingtips/pull/38).
+- Changed Travis CI to use oraclejdk8 when building Wingtips.
+    - Done by [Nic Munroe][contrib_nicmunroe] in pull request [#38](https://github.com/Nike-Inc/wingtips/pull/38).    
+    
 
 ## [0.11.2](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.11.2)
 
