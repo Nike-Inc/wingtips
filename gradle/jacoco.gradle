@@ -32,8 +32,10 @@ subprojects {
 def subprojectsToIncludeForJacocoComboReport(Set<Project> origSubprojects) {
     Set<Project> projectsToInclude = new HashSet<>()
     for (Project subproj : origSubprojects) {
-        // For this project we'll include everything
-        projectsToInclude.add(subproj)
+        // For this project we'll include everything that's not a sample
+        if (!subproj.getName().startsWith("sample")) {
+            projectsToInclude.add(subproj)
+        }
     }
     return projectsToInclude
 }
