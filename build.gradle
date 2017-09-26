@@ -74,6 +74,9 @@ ext {
     jacksonVersion = '2.4.2'
     assertJVersion = '2.5.0'
     junitDataproviderVersion = '1.10.1'
+    restAssuredVersion = '3.0.1'
+
+    jettyVersion = '9.2.19.v20160908'
 
     // JACOCO PROPERTIES
     jacocoToolVersion = '0.7.6.201602180812'
