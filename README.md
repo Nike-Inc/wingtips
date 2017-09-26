@@ -377,6 +377,7 @@ messages they output, and exploring the associated endpoints in the sample apps 
 See the sample app readmes for further information on building and running the sample apps as well as things to try:
    
 * [samples/sample-jersey1](samples/sample-jersey1/)
+* [samples/sample-jersey2](samples/sample-jersey2/)
 
 <a name="license"></a>
 ## License
