@@ -116,8 +116,9 @@ If your application is running in a Servlet environment (e.g. Spring MVC, Jersey
 `Span`s support Java `try-with-resources` statements to help guarantee proper usage in blocking/non-asynchronous scenarios 
 (for asynchronous scenarios please refer to the [asynchronous usage section](#async_usage) of this readme). As 
 previously mentioned, `Span`s that are not properly completed can lead to incorrect distributed tracing information 
-showing up, and the `try-with-resources` statements guarantee that spans are completed appropriately. Here are 
-some examples:
+showing up, and the `try-with-resources` statements guarantee that spans are completed appropriately. Here are some 
+examples *(note: there are some [important tradeoffs](#try_with_resources_warning) you should consider before using this 
+feature)*:
 
 #### Overall request span using `try-with-resources`
 
@@ -136,6 +137,27 @@ try (Span subspan = Tracer.getInstance().startSubSpan(...)) {
 }
 // No finally block needed to properly complete the subspan
 ```
+
+<a name="try_with_resources_warning"></a> 
+#### Warning about error handling when using `try-with-resources` to autoclose spans
+
+The `try-with-resources` feature to auto-close spans as described above can sound very tempting due to its convenience,
+but it comes with an important and easy-to-miss tradeoff: the span will be closed *before* any `catch` or `finally` 
+blocks get a chance to execute. So if you need to catch any exceptions and log information about them (for example),
+then you do *not* want to use the `try-with-resources` shortcut because that logging will not be tagged with the span 
+info of the span it logically falls under, and if you try to retrieve `Tracer.getInstance().getCurrentSpan()` then 
+you'll either get the parent span if one exists or null if there was no parent span. This can be confusing and seem
+counter-intuitive, but it's the way `try-with-resources` works and is the price we pay for (ab)using it for convenience
+in a use case it wasn't originally intended for (`Span`s are not "resources" in the traditional sense).
+
+Because of these drawbacks, and because it's easy to forget about this caveat and add a `catch` block at some future 
+date and not get the behavior you expect, it's not recommended that you use this feature as common practice - or if you 
+do make sure you call it out with some in-line comments for the inevitable future when someone tries to add a `catch` 
+block. Instead it's recommended that you complete the span in a `finally` block manually as described in the 
+<a href="#generic_pseudo_code">Generic Application Pseudo-Code</a> section. It's a few extra lines of code, but it's
+simple and prevents confusing unexpected behavior.
+
+Thanks to [Adrian Cole](https://github.com/adriancole) for pointing out this danger.   
  
 <a name="output_and_logging"></a>  
 ### Output and Logging
