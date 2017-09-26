@@ -11,6 +11,7 @@ import com.tngtech.java.junit.dataprovider.DataProvider;
 import com.tngtech.java.junit.dataprovider.DataProviderRunner;
 import com.tngtech.java.junit.dataprovider.UseDataProvider;
 
+import org.assertj.core.api.ThrowableAssert;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -27,6 +28,7 @@ import java.util.List;
 
 import javax.servlet.AsyncContext;
 import javax.servlet.AsyncListener;
+import javax.servlet.DispatcherType;
 import javax.servlet.FilterChain;
 import javax.servlet.FilterConfig;
 import javax.servlet.ServletException;
@@ -36,11 +38,13 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.assertj.core.api.Fail.fail;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
@@ -156,12 +160,7 @@ public class RequestTracingFilterTest {
     public void init_method_gets_user_id_header_key_list_from_init_params_and_getUserIdHeaderKeys_exposes_them(
             String userIdHeaderKeysInitParamValue, List<String> expectedUserIdHeaderKeysList) throws ServletException {
         // given
-        RequestTracingFilter filter = new RequestTracingFilter() {
-            @Override
-            protected boolean isAsyncDispatch(HttpServletRequest request) {
-                return false;
-            }
-        };
+        RequestTracingFilter filter = new RequestTracingFilter();
         FilterConfig filterConfig = mock(FilterConfig.class);
         doReturn(userIdHeaderKeysInitParamValue).when(filterConfig).getInitParameter(RequestTracingFilter.USER_ID_HEADER_KEYS_LIST_INIT_PARAM_NAME);
         filter.init(filterConfig);
@@ -513,25 +512,40 @@ public class RequestTracingFilterTest {
     }
 
     @DataProvider(value = {
-        "true",
-        "false"
-    })
+        "true   |   true",
+        "true   |   false",
+        "false  |   true",
+        "false  |   false",
+    }, splitBy = "\\|")
     @Test
     public void doFilterInternal_should_reset_tracing_info_to_whatever_was_on_the_thread_originally(
-        boolean isAsync
+        boolean isAsync, boolean throwExceptionInInnerFinallyBlock
     ) throws ServletException, IOException {
         // given
-        RequestTracingFilter filter = getBasicFilter();
+        final RequestTracingFilter filter = getBasicFilter();
         if (isAsync) {
             setupAsyncContextWorkflow();
+        }
+        RuntimeException exToThrowInInnerFinallyBlock = null;
+        if (throwExceptionInInnerFinallyBlock) {
+            exToThrowInInnerFinallyBlock = new RuntimeException("kaboom");
+            doThrow(exToThrowInInnerFinallyBlock).when(requestMock).isAsyncStarted();
         }
         Tracer.getInstance().startRequestWithRootSpan("someOutsideSpan");
         TracingState originalTracingState = TracingState.getCurrentThreadTracingState();
 
         // when
-        filter.doFilterInternal(requestMock, responseMock, spanCapturingFilterChain);
+        Throwable ex = catchThrowable(new ThrowableAssert.ThrowingCallable() {
+            @Override
+            public void call() throws Throwable {
+                filter.doFilterInternal(requestMock, responseMock, spanCapturingFilterChain);
+            }
+        });
 
         // then
+        if (throwExceptionInInnerFinallyBlock) {
+            assertThat(ex).isSameAs(exToThrowInInnerFinallyBlock);
+        }
         assertThat(TracingState.getCurrentThreadTracingState()).isEqualTo(originalTracingState);
         assertThat(spanCapturingFilterChain.capturedSpan).isNotNull();
         // The original tracing state was replaced on the thread before returning, but the span used by the filter chain
@@ -580,6 +594,30 @@ public class RequestTracingFilterTest {
         public void doFilter(ServletRequest request, ServletResponse response) throws IOException, ServletException {
             capturedSpan = Tracer.getInstance().getCurrentSpan();
         }
+    }
+
+    // VERIFY isAsyncDispatch ===========================
+    
+    @DataProvider(value = {
+        "FORWARD    |   false",
+        "INCLUDE    |   false",
+        "REQUEST    |   false",
+        "ASYNC      |   true",
+        "ERROR      |   false"
+    }, splitBy = "\\|")
+    @Test
+    public void isAsyncDispatch_returns_result_based_on_request_dispatcher_type(
+        DispatcherType dispatcherType, boolean expectedResult
+    ) {
+        // given
+        doReturn(dispatcherType).when(requestMock).getDispatcherType();
+        RequestTracingFilter filter = getBasicFilter();
+
+        // when
+        boolean result = filter.isAsyncDispatch(requestMock);
+
+        // then
+        assertThat(result).isEqualTo(expectedResult);
     }
 
 }
