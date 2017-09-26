@@ -2,4 +2,5 @@ rootProject.name = 'wingtips'
 include "wingtips-core",
         "wingtips-servlet-api",
         "wingtips-zipkin",
-        "wingtips-java8"
+        "wingtips-java8",
+        "samples:sample-jersey1"
