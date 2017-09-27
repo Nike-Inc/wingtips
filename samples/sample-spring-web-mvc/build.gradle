@@ -1,0 +1,34 @@
+evaluationDependsOn(':')
+
+sourceCompatibility = JavaVersion.VERSION_1_8
+targetCompatibility = JavaVersion.VERSION_1_8
+
+ext {
+    springVersion = '4.3.2.RELEASE'
+}
+
+dependencies {
+    compile(
+            project(":wingtips-servlet-api"),
+            project(":wingtips-java8"),
+            "ch.qos.logback:logback-classic:$logbackVersion",
+            "org.springframework:spring-web:$springVersion",
+            "org.springframework:spring-webmvc:$springVersion",
+            "org.eclipse.jetty:jetty-webapp:$jettyVersion"
+    )
+    testCompile(
+            "junit:junit:$junitVersion",
+            "org.mockito:mockito-core:$mockitoVersion",
+            "ch.qos.logback:logback-classic:$logbackVersion",
+            "org.assertj:assertj-core:$assertJVersion",
+            "com.tngtech.java:junit-dataprovider:$junitDataproviderVersion",
+            "io.rest-assured:rest-assured:$restAssuredVersion"
+    )
+}
+
+apply plugin: "application"
+mainClassName = "com.nike.wingtips.springsample.Main"
+
+run {
+    systemProperties = System.getProperties()
+}

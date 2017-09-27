@@ -378,6 +378,7 @@ See the sample app readmes for further information on building and running the s
    
 * [samples/sample-jersey1](samples/sample-jersey1/)
 * [samples/sample-jersey2](samples/sample-jersey2/)
+* [samples/sample-spring-web-mvc](samples/sample-spring-web-mvc/)
 
 <a name="license"></a>
 ## License
