@@ -243,6 +243,16 @@ public class RequestTracingFilterComponentTest {
     private void verifySingleSpanCompletedAndReturnedInResponse(ExtractableResponse response,
                                                                 long expectedMinSpanDurationMillis,
                                                                 Span expectedUpstreamSpan) {
+        // We can have a race condition where the response is sent and we try to verify here before the servlet filter
+        //      has had a chance to complete the span. Wait a few milliseconds to give the servlet filter time to
+        //      finish.
+        try {
+            Thread.sleep(10);
+        }
+        catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+        
         assertThat(spanRecorder.completedSpans).hasSize(1);
         Span completedSpan = spanRecorder.completedSpans.get(0);
         String traceIdFromResponse = response.header(TraceHeaders.TRACE_ID);

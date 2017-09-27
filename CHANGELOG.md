@@ -8,10 +8,51 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 
 #### 0.x Releases
 
-- `0.12.x` Releases - [0.12.0](#0120)
+- `0.12.x` Releases - [0.12.1](#0121), [0.12.0](#0120)
 - `0.11.x` Releases - [0.11.2](#0112), [0.11.1](#0111), [0.11.0](#0110)
 - `0.10.x` Releases - [0.10.0](#0100)
 - `0.9.x` Releases - [0.9.0.1](#0901), [0.9.0](#090)
+
+## [0.12.1](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.12.1)
+
+Released on 2017-09-27.
+
+### Fixed
+
+- Fixed `RequestTracingFilter` to work properly with async servlet requests. Previously the overall request span was
+completing instantly when the endpoint method returned rather than waiting for the async request to finish. Tests have
+been added that execute against a real running Jetty server equipped with `RequestTracingFilter` and several different
+types of servlet endpoints - these tests prevent regression and verify proper Wingtips behavior for the following use 
+cases: synchronous/blocking servlet, async servlet, blocking-forwarded servlet (using the request dispatcher to forward 
+the request to a different blocking servlet), async-forwarded servlet (using the `AsyncContext.dispatch(...)` method to 
+forward the request to a different async servlet), and an async servlet that errors-out due to hitting its request 
+timeout.   
+    - Fixed by [Nic Munroe][contrib_nicmunroe] in pull request [#42](https://github.com/Nike-Inc/wingtips/pull/42). 
+    
+### Deprecated
+
+- With the fixes to `RequestTracingFilter`, several methods and classes are no longer needed and have been marked 
+`@Deprecated`. They will be removed in a future update. Full deprecation/migration instructions are in the `@deprecated` 
+javadocs, but here is a short list:
+    - `RequestTracingFilterNoAsync` class - this class is no longer needed since `RequestTracingFilter` is no longer
+    abstract. Move to using `RequestTracingFilter` directly.
+    - `RequestTracingFilter.isAsyncDispatch(HttpServletRequest)` method - this method is no longer needed or used by 
+    `RequestTracingFilter`. It remains to prevent breaking subclasses that overrode it, but it will not be used. 
+    - `RequestTracingFilter.ERROR_REQUEST_URI_ATTRIBUTE` field - this field is no longer used. If you still need it for
+    some reason you can refer to `javax.servlet.RequestDispatcher.ERROR_REQUEST_URI` instead.   
+    - Deprecated by [Nic Munroe][contrib_nicmunroe] in pull request [#42](https://github.com/Nike-Inc/wingtips/pull/42).
+
+### Added
+
+- [Added a warning to the readme](https://github.com/Nike-Inc/wingtips#try_with_resources_warning) about error handling 
+and potentially confusing/non-obvious behavior when autoclosing `Span`s with `try-with-resources` statements.
+    - Added by [Nic Munroe][contrib_nicmunroe] in pull request [#43](https://github.com/Nike-Inc/wingtips/pull/43).
+- Added several sample applications that show how Wingtips works in various frameworks and use cases. See their 
+respective readmes for more information:
+    - [samples/sample-jersey1](samples/sample-jersey1/)
+    - [samples/sample-jersey2](samples/sample-jersey2/)
+    - [samples/sample-spring-web-mvc](samples/sample-spring-web-mvc/)
+    - Added by [Nic Munroe][contrib_nicmunroe] in pull request [#44](https://github.com/Nike-Inc/wingtips/pull/44). 
 
 ## [0.12.0](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.12.0)
 
