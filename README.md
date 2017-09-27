@@ -16,6 +16,9 @@ There are a few modules associated with this project:
 * [wingtips-servlet-api](wingtips-servlet-api/README.md) - A plugin for Servlet-based applications for integrating distributed tracing with a simple Servlet Filter.
 * [wingtips-zipkin](wingtips-zipkin/README.md) - A plugin providing easy Zipkin integration by converting Wingtips spans to Zipkin spans and sending them to a Zipkin server.
 
+If you prefer hands-on exploration rather than readmes, the [sample applications](#samples) provide concrete examples 
+of using Wingtips that are simple, compact, and straightforward.
+
 ## Table of Contents
 
 * [Overview](#overview)
@@ -38,6 +41,7 @@ There are a few modules associated with this project:
 * [Using Distributed Tracing to Help with Debugging Issues/Errors/Problems](#using_dtracing_for_errors)
 * [Custom Annotations](#custom_annotations)
 * [Integrating With Other Distributed Tracing Tools](#integrating_with_other_dtrace_tools)
+* [Sample Applications](#samples)
 * [License](#license)
 
 <a name="overview"></a> 
@@ -361,6 +365,20 @@ Tracer.getInstance().addSpanLifecycleListener(
 ```
 
 Just execute that line as early in your application startup procedure as possible (ideally before any requests hit the service that would generate spans) and you'll see the Wingtips spans show up in the Zipkin UI.
+
+<a name="samples"></a>
+### Sample Applications
+   
+The following sample applications show how Wingtips can be used in various frameworks and use cases. The 
+`VerifySampleEndpointsComponentTest` component tests in the sample apps exercise important parts of Wingtips 
+functionality - you can learn a lot by running those component tests, seeing what the sample apps return and the log 
+messages they output, and exploring the associated endpoints in the sample apps to see how it all fits together. 
+
+See the sample app readmes for further information on building and running the sample apps as well as things to try:
+   
+* [samples/sample-jersey1](samples/sample-jersey1/)
+* [samples/sample-jersey2](samples/sample-jersey2/)
+* [samples/sample-spring-web-mvc](samples/sample-spring-web-mvc/)
 
 <a name="license"></a>
 ## License

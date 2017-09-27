@@ -1,0 +1,34 @@
+evaluationDependsOn(':')
+
+sourceCompatibility = JavaVersion.VERSION_1_8
+targetCompatibility = JavaVersion.VERSION_1_8
+
+ext {
+    jersey2Version = '2.23.2'
+}
+
+dependencies {
+    compile(
+            project(":wingtips-servlet-api"),
+            "ch.qos.logback:logback-classic:$logbackVersion",
+            "org.glassfish.jersey.core:jersey-server:$jersey2Version",
+            "org.glassfish.jersey.containers:jersey-container-servlet:$jersey2Version",
+            "org.eclipse.jetty:jetty-server:$jettyVersion",
+            "org.eclipse.jetty:jetty-servlet:$jettyVersion"
+    )
+    testCompile(
+            "junit:junit:$junitVersion",
+            "org.mockito:mockito-core:$mockitoVersion",
+            "ch.qos.logback:logback-classic:$logbackVersion",
+            "org.assertj:assertj-core:$assertJVersion",
+            "com.tngtech.java:junit-dataprovider:$junitDataproviderVersion",
+            "io.rest-assured:rest-assured:$restAssuredVersion"
+    )
+}
+
+apply plugin: "application"
+mainClassName = "com.nike.wingtips.jersey2sample.Main"
+
+run {
+    systemProperties = System.getProperties()
+}
