@@ -40,7 +40,7 @@ import static com.nike.wingtips.util.AsyncWingtipsHelperJava7.unlinkTracingFromC
 public class RequestTracingFilter implements Filter {
     private static final Logger logger = LoggerFactory.getLogger(RequestTracingFilter.class);
 
-    private static boolean containerSupportsAsyncContexts;
+    protected static boolean containerSupportsAsyncContexts;
 
     static {
         containerSupportsAsyncContexts = areAsyncContextsOk(ServletRequest.class);

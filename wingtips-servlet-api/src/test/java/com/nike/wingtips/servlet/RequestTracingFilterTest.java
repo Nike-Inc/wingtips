@@ -64,6 +64,7 @@ public class RequestTracingFilterTest {
     private AsyncContext listenerCapturingAsyncContext;
     private List<AsyncListener> capturedAsyncListeners;
     private FilterConfig filterConfigMock;
+    private boolean savedContainerSupportsAsyncContexts;
 
     private static final String USER_ID_HEADER_KEY = "userId";
     private static final String ALT_USER_ID_HEADER_KEY = "altUserId";
@@ -106,7 +107,6 @@ public class RequestTracingFilterTest {
 
         doReturn(listenerCapturingAsyncContext).when(requestMock).getAsyncContext();
         doReturn(true).when(requestMock).isAsyncStarted();
-
         doAnswer(new Answer() {
             @Override
             public Object answer(InvocationOnMock invocation) throws Throwable {
@@ -122,6 +122,7 @@ public class RequestTracingFilterTest {
         responseMock = mock(HttpServletResponse.class);
         filterChainMock = mock(FilterChain.class);
         spanCapturingFilterChain = new SpanCapturingFilterChain();
+        savedContainerSupportsAsyncContexts = RequestTracingFilter.containerSupportsAsyncContexts;
 
         filterConfigMock = mock(FilterConfig.class);
         doReturn(USER_ID_HEADER_KEYS_INIT_PARAM_VALUE_STRING).when(filterConfigMock).getInitParameter(RequestTracingFilter.USER_ID_HEADER_KEYS_LIST_INIT_PARAM_NAME);
@@ -132,6 +133,8 @@ public class RequestTracingFilterTest {
     @After
     public void afterMethod() {
         resetTracing();
+
+        RequestTracingFilter.containerSupportsAsyncContexts = savedContainerSupportsAsyncContexts;
     }
 
     private void resetTracing() {
@@ -569,6 +572,25 @@ public class RequestTracingFilterTest {
         assertThat(spanCapturingFilterChain.capturedSpan.isCompleted()).isFalse();
         assertThat(capturedAsyncListeners).hasSize(1);
         assertThat(capturedAsyncListeners.get(0)).isInstanceOf(WingtipsRequestSpanCompletionAsyncListener.class);
+    }
+
+    @Test
+    public void doFilterInternal_should_not_add_async_listener_when_container_does_not_support_async_contexts(
+    ) throws ServletException, IOException {
+        // given
+        RequestTracingFilter filter = getBasicFilter();
+        setupAsyncContextWorkflow();
+
+        // and
+        RequestTracingFilter.containerSupportsAsyncContexts = false;
+
+        // when
+        filter.doFilterInternal(requestMock, responseMock, spanCapturingFilterChain);
+
+        // then
+        assertThat(spanCapturingFilterChain.capturedSpan).isNotNull();
+        assertThat(spanCapturingFilterChain.capturedSpan.isCompleted()).isTrue();
+        assertThat(capturedAsyncListeners).hasSize(0);
     }
 
     // VERIFY skipDispatch ==============================
