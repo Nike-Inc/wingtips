@@ -45,7 +45,7 @@ import java.util.function.Supplier;
  *   AsyncWingtipsHelper asyncHelper = AsyncWingtipsHelper.DEFAULT_IMPL;
  *   Executor executor = Executors.newSingleThreadExecutor();
  *
- *   executor.execute(asyncHelper.runnableWithTracing(() -> {
+ *   executor.execute(asyncHelper.runnableWithTracing(() -&gt; {
  *       // Code that needs tracing/MDC wrapping goes here
  *   }));
  * </pre>
@@ -54,7 +54,7 @@ import java.util.function.Supplier;
  * <pre>
  *   AsyncWingtipsHelper asyncHelper = AsyncWingtipsHelper.DEFAULT_IMPL;
  *
- *   CompletableFuture.supplyAsync(asyncHelper.supplierWithTracing(() -> {
+ *   CompletableFuture.supplyAsync(asyncHelper.supplierWithTracing(() -&gt; {
  *       // Supplier code that needs tracing/MDC wrapping goes here.
  *       return foo;
  *   }));
@@ -68,7 +68,7 @@ import java.util.function.Supplier;
  *     TracingState tracingInfo = requestContext.getTracingInfo();
  *
  *     asyncHelper.runnableWithTracing(
- *         () -> {
+ *         () -&gt; {
  *             // Code that needs tracing/MDC wrapping goes here
  *         },
  *         tracingInfo
