@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -37,7 +38,30 @@ import static com.nike.wingtips.util.AsyncWingtipsHelperJava7.unlinkTracingFromC
  */
 @SuppressWarnings("WeakerAccess")
 public class RequestTracingFilter implements Filter {
-    private final Logger logger = LoggerFactory.getLogger(this.getClass());
+    private static final Logger logger = LoggerFactory.getLogger(RequestTracingFilter.class);
+
+    private static boolean containerSupportsAsyncContexts;
+
+    static {
+        containerSupportsAsyncContexts = areAsyncContextsOk(ServletRequest.class);
+    }
+
+    /**
+     * Determines whether the current servlet container supports AsyncContexts.
+     *
+     * @param servletRequestClass ServletRequest class
+     * @return true if servletRequest class supports calls getAsyncContext(), otherwise false
+     */
+    protected static boolean areAsyncContextsOk(Class<?> servletRequestClass) {
+        Method asyncContextMethod = null;
+        try {
+            asyncContextMethod = servletRequestClass.getMethod("getAsyncContext");
+        } catch (Exception ex) {
+            logger.debug("No async context supported on the current container", ex);
+        }
+
+        return asyncContextMethod != null;
+    }
 
     /**
      * This attribute key will be set to a value of true via {@link ServletRequest#setAttribute(String, Object)} the
@@ -164,7 +188,7 @@ public class RequestTracingFilter implements Filter {
             try {
                 filterChain.doFilter(request, response);
             } finally {
-                if (request.isAsyncStarted()) {
+                if (containerSupportsAsyncContexts && request.isAsyncStarted()) {
                     // Async processing was started, so we have to complete it with a listener.
                     request.getAsyncContext().addListener(
                         new WingtipsRequestSpanCompletionAsyncListener(originalRequestTracingState)

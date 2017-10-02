@@ -508,7 +508,6 @@ public class RequestTracingFilterTest {
         Span newSpan = spanCapturingFilterChain.capturedSpan;
 
         assertThat(newSpan.getUserId()).isEqualTo("testUserId");
-
     }
 
     @DataProvider(value = {
@@ -620,4 +619,36 @@ public class RequestTracingFilterTest {
         assertThat(result).isEqualTo(expectedResult);
     }
 
+    /**
+     * Dummy class that has a good getAsyncContext function
+     */
+    private static final class GoodFakeServletRequest {
+        public Object getAsyncContext() {
+            return Boolean.TRUE;
+        }
+    }
+
+    @Test
+    public void areAsyncContextsOk_returns_true() throws Exception {
+        // expect
+        boolean result = RequestTracingFilter.areAsyncContextsOk(GoodFakeServletRequest.class);
+
+        // then
+        assertThat(result).isTrue();
+    }
+
+    /**
+     * Dummy class that does NOT have a getAsyncContext function
+     */
+    private static final class BadFakeServletRequest {
+    }
+
+    @Test
+    public void areAsyncContextsOk_returns_false() throws Exception {
+        // expect
+        boolean result = RequestTracingFilter.areAsyncContextsOk(BadFakeServletRequest.class);
+
+        // then
+        assertThat(result).isFalse();
+    }
 }
