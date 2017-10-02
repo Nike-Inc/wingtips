@@ -43,7 +43,7 @@ import static com.nike.wingtips.util.AsyncWingtipsHelper.DEFAULT_IMPL;
  *
  *   Executor executor = Executors.newSingleThreadExecutor();
  *
- *   executor.execute(runnableWithTracing(() -> {
+ *   executor.execute(runnableWithTracing(() -&gt; {
  *       // Code that needs tracing/MDC wrapping goes here
  *   }));
  * </pre>
@@ -54,7 +54,7 @@ import static com.nike.wingtips.util.AsyncWingtipsHelper.DEFAULT_IMPL;
  *
  *   // ...
  *
- *   CompletableFuture.supplyAsync(supplierWithTracing(() -> {
+ *   CompletableFuture.supplyAsync(supplierWithTracing(() -&gt; {
  *       // Supplier code that needs tracing/MDC wrapping goes here.
  *       return foo;
  *   }));
@@ -70,7 +70,7 @@ import static com.nike.wingtips.util.AsyncWingtipsHelper.DEFAULT_IMPL;
  *     
  *     TracingState tracingInfo = requestContext.getTracingInfo();
  *     runnableWithTracing(
- *         () -> {
+ *         () -&gt; {
  *             // Code that needs tracing/MDC wrapping goes here
  *         },
  *         tracingInfo
