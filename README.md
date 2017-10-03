@@ -11,10 +11,16 @@ Wingtips is a distributed tracing solution for Java 7 and greater based on the [
 
 There are a few modules associated with this project:
 
-* [wingtips-core](wingtips-core/README.md) - The core library providing the majority of the distributed tracing functionality.
-* [wingtips-java8](wingtips-java8/README.md) - Provides several Java 8 helpers, particularly around helping tracing and MDC information to hop threads in asynchronous/non-blocking use cases.
-* [wingtips-servlet-api](wingtips-servlet-api/README.md) - A plugin for Servlet-based applications for integrating distributed tracing with a simple Servlet Filter.
-* [wingtips-zipkin](wingtips-zipkin/README.md) - A plugin providing easy Zipkin integration by converting Wingtips spans to Zipkin spans and sending them to a Zipkin server.
+* [wingtips-core](wingtips-core/README.md) - The core library providing the majority of the distributed tracing 
+functionality.
+* [wingtips-java8](wingtips-java8/README.md) - Provides several Java 8 helpers, particularly around helping tracing and 
+MDC information to hop threads in asynchronous/non-blocking use cases.
+* [wingtips-servlet-api](wingtips-servlet-api/README.md) - A plugin for Servlet 3+ based applications for integrating 
+distributed tracing with a simple Servlet Filter.
+* [wingtips-old-servlet-api](wingtips-old-servlet-api/README.md) - A plugin for Servlet 2.x based applications for 
+integrating distributed tracing with a simple Servlet Filter.
+* [wingtips-zipkin](wingtips-zipkin/README.md) - A plugin providing easy Zipkin integration by converting Wingtips 
+spans to Zipkin spans and sending them to a Zipkin server.
 
 If you prefer hands-on exploration rather than readmes, the [sample applications](#samples) provide concrete examples 
 of using Wingtips that are simple, compact, and straightforward.
@@ -112,7 +118,11 @@ The `extractParentSpanFromRequest()` method is potentially different for differe
 <a name="servlet_filter_info"></a>  
 #### Is your application running in a Servlet-based framework?
 
-If your application is running in a Servlet environment (e.g. Spring MVC, Jersey, raw Servlets, etc) then this entire lifecycle can be handled by a Servlet `Filter`. We've created one for you that's ready to drop in and go - see the [wingtips-servlet-api](wingtips-servlet-api/README.md) Wingtips plugin module library for details. That plugin module is also a good resource to see how the code for a production-ready implementation of this library might look.
+If your application is running in a Servlet environment (e.g. Spring MVC, Jersey, raw Servlets, etc) then this entire 
+lifecycle can be handled by a Servlet `Filter`. We've created one for you that's ready to drop in and go - see the 
+[wingtips-servlet-api](wingtips-servlet-api/README.md) Wingtips plugin module library for details if you're in a 
+Servlet 3+ environment. For Servlet 2.x see [wingtips-old-servlet-api](wingtips-old-servlet-api/README.md). That plugin 
+module is also a good resource to see how the code for a production-ready implementation of this library might look.
 
 <a name="try_with_resources_info"></a>
 ### Simplified Span Management using Java `try-with-resources` Statements
@@ -222,7 +232,18 @@ You can use the sub-span ability to create parent-child span relationships withi
 
 The pattern for passing traces across network or application boundaries is that the calling service includes its "current span" information when calling the downstream service. The downstream service uses that information to generate its overall request span with the caller's span info as its parent span. This causes the downstream service's request span to contain the same Trace ID and sets up the correct parent-child relationship between the spans. 
 
-For HTTP requests it is assumed that you will pass the caller's span information to the downstream system using the request headers defined in `TraceHeaders`. All headers defined in that class should be included in the downstream request, as well as any application specific user ID header if you want to take advantage of the optional user ID functionality of spans. Note that to be [properly B3 compatible](http://zipkin.io/pages/instrumenting.html) you should send the `X-B3-Sampled` header value as `"0"` for `false` and `"1"` for `true`. All the other header values should be correct if you send the appropriate `Span` property as-is, e.g. send `Span.getTraceId()` for the `X-B3-TraceId` header as it should already be in the correct B3 format.
+For HTTP requests it is assumed that you will pass the caller's span information to the downstream system using the request headers defined in `TraceHeaders`. Most headers defined in that class should be included in the downstream request (see below), as well as any application specific user ID header if you want to take advantage of the optional user ID functionality of spans. Note that to be [properly B3 compatible](http://zipkin.io/pages/instrumenting.html) (and therefore compatible with Zipkin systems) you should send the `X-B3-Sampled` header value as `"0"` for `false` and `"1"` for `true`. All the other header values should be correct if you send the appropriate `Span` property as-is, e.g. send `Span.getTraceId()` for the `X-B3-TraceId` header as it should already be in the correct B3 format.
+
+**Propagation requirements:**
+ 
+* Trace ID: \[required]
+* Span ID: \[required]
+* Sampleable: \[optional but recommended]
+* Parent Span ID: \[optional when non-null, don't propagate when null]
+* Span Name: \[highly optional] - Propagating span name is optional, and you may wish to intentionally include or 
+exclude it depending on whether you want downstream systems to have access to that info. When calling downstream
+services you control it may be good to include it for extra debugging info, and for downstream services outside your 
+control you may wish to exclude it to prevent unintentional information leakage.
 
 <a name="adjusting_behavior"></a>
 ### Adjusting Behavior and Execution Options

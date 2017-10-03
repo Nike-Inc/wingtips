@@ -1,11 +1,11 @@
-# Wingtips - wingtips-servlet-api
+# Wingtips - wingtips-old-servlet-api
 
 Wingtips is a distributed tracing solution for Java based on the [Google Dapper paper](http://static.googleusercontent.com/media/research.google.com/en/us/pubs/archive/36356.pdf). 
 
-This module is a plugin extension module of the core Wingtips library and contains support for distributed tracing in a Java **Servlet 3 API** environment (for Servlet 2.x environments please refer to the [wingtips-old-servlet-api](../wingtips-old-servlet-api) module). The features it provides are:
+This module is a plugin extension module of the core Wingtips library and contains support for distributed tracing in a Java **Servlet 2.x API** environment (for Servlet 3+ environments please refer to the [wingtips-servlet-api](../wingtips-servlet-api) module). The features it provides are:
 
 * **HttpSpanFactory** - Utility class that extracts span information from incoming `HttpServletRequest` requests.
-* **RequestTracingFilter** - A Servlet Filter that handles all of the work for enabling a new span when a request comes in and completing it when the request finishes. This filter automatically uses `HttpSpanFactory` to extract parent span information from the incoming request headers for the new span if available. Sets the `X-B3-TraceId` response header to the Trace ID for each request. Supports Servlet 3.0+ asynchronous request processing. You can set the `user-id-header-keys-list` servlet filter param if you expect any request headers that represent a user ID (if you don't have any user ID headers then this can be ignored).
+* **RequestTracingFilterOldServlet** - A Servlet Filter that handles all of the work for enabling a new span when a request comes in and completing it when the request finishes. This filter automatically uses `HttpSpanFactory` to extract parent span information from the incoming request headers for the new span if available. Sets the `X-B3-TraceId` response header to the Trace ID for each request. You can set the `user-id-header-keys-list` servlet filter param if you expect any request headers that represent a user ID (if you don't have any user ID headers then this can be ignored).
 
 Please make sure you have read the [base project README.md](../README.md). This readme assumes you understand the principles and usage instructions described there.
 
@@ -18,7 +18,7 @@ The following example shows how you might setup the tracing Servlet Filter when 
 ``` xml
 <filter>
     <filter-name>traceFilter</filter-name>
-    <filter-class>com.nike.wingtips.servlet.RequestTracingFilter</filter-class>
+    <filter-class>com.nike.wingtips.servlet.RequestTracingFilterOldServlet</filter-class>
     <init-param>
         <param-name>user-id-header-keys-list</param-name>
         <param-value>userid,altuserid</param-value>
@@ -38,7 +38,7 @@ That's it for incoming requests. This Filter will do the right thing and start a
 **Embedded environments**
 
 For embedded Servlet container environments where you may not be using a `web.xml` file to setup Servlet components 
-you'll need to register `RequestTracingFilter` in whatever way your Servlet container allows or requires you 
+you'll need to register `RequestTracingFilterOldServlet` in whatever way your Servlet container allows or requires you 
 to register Servlet Filters. For example the `Main` classes in the `samples/sample-*` sample projects show how to 
 register `RequestTracingFilter` with embedded Jetty.  
 
@@ -69,16 +69,16 @@ to include it for extra debugging info, and for services outside your control yo
 unintentional information leakage.
 
 See the [base project readme's section on propagation](../README.md#propagating_traces) for further details on 
-propagating tracing information. You may also want to consider
+propagating tracing information. You may also want to consider 
 [wrapping downstream calls in a subspan](../README.md#sub_spans_for_downstream_calls).
 
-## NOTE - Servlet API 3.0.1 or later dependency required at runtime
+## NOTE - Servlet API 2.3 or later dependency required at runtime
 
-This `wingtips-servlet-api` module has a minimum Servlet 3.0.1 requirement, but does not export any transitive Servlet 
-API dependencies to prevent runtime version conflicts with whatever Servlet environment you deploy to. 
+This `wingtips-old-servlet-api` module has a minimum Servlet 2.3 requirement, but does not export any transitive 
+Servlet API dependencies to prevent runtime version conflicts with whatever Servlet environment you deploy to. 
 
 This should not affect most users since this library is likely to be used in a Servlet environment where the Servlet 
 API is on the classpath at runtime, however if you receive `NoClassDefFoundError`s related to Servlet API classes then 
-you'll need to pull a Servlet API dependency into your project that supports a minimum Servlet 3.0.1 version. For 
-reference, `wingtips-servlet-api` uses the compile-only Servlet API dependency 
-[`javax.servlet:javax.servlet-api:3.0.1`](http://search.maven.org/#artifactdetails%7Cjavax.servlet%7Cjavax.servlet-api%7C3.0.1%7Cjar). 
+you'll need to pull a Servlet API dependency into your project that supports a minimum Servlet 2.3 version. For 
+reference, `wingtips-old-servlet-api` uses the compile-only Servlet API dependency 
+[`javax.servlet:servlet-api:2.3`](http://search.maven.org/#artifactdetails%7Cjavax.servlet%7Cservlet-api%7C2.3%7Cjar). 

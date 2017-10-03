@@ -1,12 +1,16 @@
 evaluationDependsOn(':')
 
-dependencies {
+ext {
+    oldServletApiTargetVersion = '2.3'
+    oldMortbayJettyVersion = '6.1.7'
+}
 
+dependencies {
     compile(
-            project(":wingtips-old-servlet-api")
+            project(":wingtips-core"),
     )
     compileOnly(
-            "javax.servlet:javax.servlet-api:$servletApiVersion"
+            "javax.servlet:servlet-api:$oldServletApiTargetVersion"
     )
     testCompile(
             "junit:junit-dep:$junitVersion",
@@ -15,6 +19,6 @@ dependencies {
             "org.assertj:assertj-core:$assertJVersion",
             "com.tngtech.java:junit-dataprovider:$junitDataproviderVersion",
             "io.rest-assured:rest-assured:$restAssuredVersion",
-            "org.eclipse.jetty:jetty-webapp:$jettyVersion"
+            "org.mortbay.jetty:jetty:$oldMortbayJettyVersion"
     )
 }
