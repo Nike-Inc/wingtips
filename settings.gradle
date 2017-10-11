@@ -1,8 +1,12 @@
 rootProject.name = 'wingtips'
+
+        // Published-artifact modules
 include "wingtips-core",
+        "wingtips-old-servlet-api",
         "wingtips-servlet-api",
         "wingtips-zipkin",
         "wingtips-java8",
+        // Sample modules (not published)
         "samples:sample-jersey1",
         "samples:sample-jersey2",
         "samples:sample-spring-web-mvc"
