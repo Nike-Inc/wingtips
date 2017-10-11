@@ -1,4 +1,4 @@
-package com.nike.wingtips.springsample.componenttest;
+package com.nike.wingtips.springbootsample.componenttest;
 
 import com.nike.internal.util.MapBuilder;
 import com.nike.internal.util.Pair;
@@ -6,20 +6,21 @@ import com.nike.wingtips.Span;
 import com.nike.wingtips.TraceHeaders;
 import com.nike.wingtips.Tracer;
 import com.nike.wingtips.lifecyclelistener.SpanLifecycleListener;
-import com.nike.wingtips.springsample.Main;
-import com.nike.wingtips.springsample.controller.SampleController.EndpointSpanInfoDto;
-import com.nike.wingtips.springsample.controller.SampleController.SpanInfoDto;
+import com.nike.wingtips.springbootsample.Main;
+import com.nike.wingtips.springbootsample.controller.SampleController.EndpointSpanInfoDto;
+import com.nike.wingtips.springbootsample.controller.SampleController.SpanInfoDto;
 
 import com.tngtech.java.junit.dataprovider.DataProvider;
 import com.tngtech.java.junit.dataprovider.DataProviderRunner;
 
-import org.eclipse.jetty.server.Server;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.springframework.boot.SpringApplication;
+import org.springframework.context.ConfigurableApplicationContext;
 
 import java.io.IOException;
 import java.net.ServerSocket;
@@ -33,21 +34,21 @@ import java.util.concurrent.TimeUnit;
 
 import io.restassured.response.ExtractableResponse;
 
-import static com.nike.wingtips.springsample.controller.SampleController.ASYNC_CALLABLE_PATH;
-import static com.nike.wingtips.springsample.controller.SampleController.ASYNC_CALLABLE_RESULT;
-import static com.nike.wingtips.springsample.controller.SampleController.ASYNC_DEFERRED_RESULT_PATH;
-import static com.nike.wingtips.springsample.controller.SampleController.ASYNC_DEFERRED_RESULT_PAYLOAD;
-import static com.nike.wingtips.springsample.controller.SampleController.ASYNC_ERROR_PATH;
-import static com.nike.wingtips.springsample.controller.SampleController.ASYNC_FUTURE_PATH;
-import static com.nike.wingtips.springsample.controller.SampleController.ASYNC_FUTURE_RESULT;
-import static com.nike.wingtips.springsample.controller.SampleController.BLOCKING_PATH;
-import static com.nike.wingtips.springsample.controller.SampleController.BLOCKING_RESULT;
-import static com.nike.wingtips.springsample.controller.SampleController.NESTED_ASYNC_CALL_PATH;
-import static com.nike.wingtips.springsample.controller.SampleController.NESTED_BLOCKING_CALL_PATH;
-import static com.nike.wingtips.springsample.controller.SampleController.SIMPLE_PATH;
-import static com.nike.wingtips.springsample.controller.SampleController.SIMPLE_RESULT;
-import static com.nike.wingtips.springsample.controller.SampleController.SLEEP_TIME_MILLIS;
-import static com.nike.wingtips.springsample.controller.SampleController.SPAN_INFO_CALL_PATH;
+import static com.nike.wingtips.springbootsample.controller.SampleController.ASYNC_CALLABLE_PATH;
+import static com.nike.wingtips.springbootsample.controller.SampleController.ASYNC_CALLABLE_RESULT;
+import static com.nike.wingtips.springbootsample.controller.SampleController.ASYNC_DEFERRED_RESULT_PATH;
+import static com.nike.wingtips.springbootsample.controller.SampleController.ASYNC_DEFERRED_RESULT_PAYLOAD;
+import static com.nike.wingtips.springbootsample.controller.SampleController.ASYNC_ERROR_PATH;
+import static com.nike.wingtips.springbootsample.controller.SampleController.ASYNC_FUTURE_PATH;
+import static com.nike.wingtips.springbootsample.controller.SampleController.ASYNC_FUTURE_RESULT;
+import static com.nike.wingtips.springbootsample.controller.SampleController.BLOCKING_PATH;
+import static com.nike.wingtips.springbootsample.controller.SampleController.BLOCKING_RESULT;
+import static com.nike.wingtips.springbootsample.controller.SampleController.NESTED_ASYNC_CALL_PATH;
+import static com.nike.wingtips.springbootsample.controller.SampleController.NESTED_BLOCKING_CALL_PATH;
+import static com.nike.wingtips.springbootsample.controller.SampleController.SIMPLE_PATH;
+import static com.nike.wingtips.springbootsample.controller.SampleController.SIMPLE_RESULT;
+import static com.nike.wingtips.springbootsample.controller.SampleController.SLEEP_TIME_MILLIS;
+import static com.nike.wingtips.springbootsample.controller.SampleController.SPAN_INFO_CALL_PATH;
 import static io.restassured.RestAssured.given;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -61,28 +62,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class VerifySampleEndpointsComponentTest {
 
     private static final int SERVER_PORT = findFreePort();
-    private static Server server;
+    private static ConfigurableApplicationContext serverAppContext;
 
     private SpanRecorder spanRecorder;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        server = Main.createServer(SERVER_PORT);
-        server.start();
-        for (int i = 0; i < 100; i++) {
-            if (server.isStarted())
-                return;
-            Thread.sleep(100);
-        }
-        throw new IllegalStateException("Server is not up after waiting 10 seconds. Aborting tests.");
+        serverAppContext = SpringApplication.run(Main.class, "--server.port=" + SERVER_PORT);
     }
 
     @AfterClass
     public static void afterClass() throws Exception {
-        if (server != null) {
-            server.stop();
-            server.destroy();
-        }
+        SpringApplication.exit(serverAppContext);
     }
 
     private static int findFreePort() {
@@ -95,7 +86,7 @@ public class VerifySampleEndpointsComponentTest {
 
     @Before
     public void beforeMethod() {
-        clearTracerSpanLifecycleListeners();
+        removeSpanRecorderLifecycleListener();
 
         spanRecorder = new SpanRecorder();
         Tracer.getInstance().addSpanLifecycleListener(spanRecorder);
@@ -103,13 +94,15 @@ public class VerifySampleEndpointsComponentTest {
 
     @After
     public void afterMethod() {
-        clearTracerSpanLifecycleListeners();
+        removeSpanRecorderLifecycleListener();
     }
 
-    private void clearTracerSpanLifecycleListeners() {
+    private void removeSpanRecorderLifecycleListener() {
         List<SpanLifecycleListener> listeners = new ArrayList<>(Tracer.getInstance().getSpanLifecycleListeners());
         for (SpanLifecycleListener listener : listeners) {
-            Tracer.getInstance().removeSpanLifecycleListener(listener);
+            if (listener instanceof SpanRecorder) {
+                Tracer.getInstance().removeSpanLifecycleListener(listener);
+            }
         }
     }
 

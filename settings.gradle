@@ -7,9 +7,11 @@ include "wingtips-core",
         "wingtips-java8",
         "wingtips-spring",
         "wingtips-spring-boot",
+        "wingtips-zipkin-spring-boot",
         // Test-only modules (not published)
         "testonly:testonly-old-servlet",
         // Sample modules (not published)
         "samples:sample-jersey1",
         "samples:sample-jersey2",
-        "samples:sample-spring-web-mvc"
+        "samples:sample-spring-web-mvc",
+        "samples:sample-spring-boot"

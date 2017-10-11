@@ -3,21 +3,12 @@ evaluationDependsOn(':')
 sourceCompatibility = JavaVersion.VERSION_1_8
 targetCompatibility = JavaVersion.VERSION_1_8
 
-ext {
-    jacksonVersion = '2.9.1'
-}
-
 dependencies {
     compile(
-            project(":wingtips-servlet-api"),
+            project(":wingtips-zipkin-spring-boot"),
             project(":wingtips-java8"),
-            project(":wingtips-spring"),
-            "ch.qos.logback:logback-classic:$logbackVersion",
-            "org.springframework:spring-web:$springVersion",
-            "org.springframework:spring-webmvc:$springVersion",
-            "com.fasterxml.jackson.core:jackson-core:$jacksonVersion",
-            "com.fasterxml.jackson.core:jackson-databind:$jacksonVersion",
-            "org.eclipse.jetty:jetty-webapp:$jettyVersion"
+            "org.springframework.boot:spring-boot-starter-web:$springbootVersion",
+            "ch.qos.logback:logback-classic:$logbackVersion"
     )
     testCompile(
             "junit:junit:$junitVersion",
@@ -30,7 +21,7 @@ dependencies {
 }
 
 apply plugin: "application"
-mainClassName = "com.nike.wingtips.springsample.Main"
+mainClassName = "com.nike.wingtips.springbootsample.Main"
 
 run {
     systemProperties = System.getProperties()

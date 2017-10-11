@@ -1,11 +1,15 @@
-# Wingtips Sample Application - spring-web-mvc
+# Wingtips Sample Application - spring-boot
 
 Wingtips is a distributed tracing solution for Java 7 and greater based on the 
 [Google Dapper paper](http://static.googleusercontent.com/media/research.google.com/en/us/pubs/archive/36356.pdf).
 
-This submodule contains a sample application based on Spring Web MVC that integrates Wingtips' `RequestTracingFilter` 
-to automatically start and complete the overall request span for incoming requests. If the incoming request contains 
-tracing headers then they will be used as the parent span, otherwise a new trace will be started. 
+This submodule contains a sample application based on Spring Boot that uses `WingtipsWithZipkinSpringBootConfiguration` 
+from [`wingtips-zipkin-spring-boot`](../../wingtips-zipkin-spring-boot) to setup both Wingtips' 
+`RequestTracingFilter` (to automatically start and complete the overall request span for incoming requests) and 
+Wingtips' Zipkin [integration](../../wingtips-zipkin) (to send completed Wingtips spans to a 
+[Zipkin](http://zipkin.io/) server), all configured from the sample's `application.properties`. As always with 
+`RequestTracingFilter`, if the incoming request contains tracing headers then they will be used as the parent span, 
+otherwise a new trace will be started. 
 
 This sample also shows the other half of the equation 
 (the [Propagating Distributed Traces Across Network or Application Boundaries](../../README.md#propagating_traces) 
@@ -23,6 +27,21 @@ There are also a few examples showing how to make tracing state hop threads when
     * You can override the default port by passing in a system property to the run script, 
     e.g. to bind to port 8181: `./runSample.sh -DspringSample.server.port=8181`
  
+<a name="launching_zipkin"></a>
+## Launching a Zipkin server for use with the sample
+
+Part of what this sample application does is show how to integrate a Wingtips-enabled Spring Boot server with 
+[Zipkin](http://zipkin.io/). In order to see the results of this integration you'll need a locally-running Zipkin
+server. See the [Zipkin quickstart](http://zipkin.io/pages/quickstart) page to learn how to download and launch the 
+Zipkin server - it should only take a few seconds.
+
+Once your local Zipkin server is running and you've hit a few of the sample application's endpoints (and/or executed 
+`VerifySampleEndpointsComponentTest`) you can open [http://localhost:9411](http://localhost:9411) in a browser and 
+search for traces.
+
+If you don't launch a locally-running Zipkin server the sample application will log messages about not being able to 
+send spans to the Zipkin server, but will otherwise function normally.
+ 
 ## Things to try
  
 All examples here assume the sample app is running on port 8080, so you would hit each path by going to 
@@ -35,7 +54,9 @@ If you prefer to experiment via code you can run, debug, and otherwise explore t
 
 As you are doing the following you should check the logs that are output by the sample application and notice what is 
 included in the log messages. In particular notice how you can search for a specific trace ID that came back in the
-response headers and find all the relevant log message for that request in the logs. 
+response headers and find all the relevant log message for that request in the logs. Additionally if you [launch
+a local Zipkin server](#launching_zipkin) you can open [http://localhost:9411](http://localhost:9411) in a browser and
+search for traces.  
  
 * For all of the following things to try, you can specify `X-B3-TraceId` and `X-B3-SpanId` headers to cause the server
 to use those values as parent span information. Try sending requests with and without these headers to see how it

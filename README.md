@@ -17,8 +17,15 @@ functionality.
 MDC information to hop threads in asynchronous/non-blocking use cases.
 * [wingtips-servlet-api](wingtips-servlet-api/README.md) - A plugin for Servlet based applications for integrating 
 distributed tracing with a simple Servlet Filter. Supports Servlet 2.x and Servlet 3 (async request) environments. 
-* [wingtips-zipkin](wingtips-zipkin/README.md) - A plugin providing easy Zipkin integration by converting Wingtips 
-spans to Zipkin spans and sending them to a Zipkin server.
+* [wingtips-zipkin](wingtips-zipkin/README.md) - A plugin providing easy [Zipkin](http://zipkin.io/) integration by 
+converting Wingtips spans to Zipkin spans and sending them to a Zipkin server.
+* [wingtips-spring](wingtips-spring/README.md) - A plugin to help with Wingtips distributed tracing in 
+[Spring](https://spring.io/) environments.
+* [wingtips-spring-boot](wingtips-spring-boot/README.md) - A plugin to help with Wingtips distributed tracing in 
+[Spring Boot](https://spring.io/guides/gs/spring-boot/) environments.
+* [wingtips-zipkin-spring-boot](wingtips-zipkin-spring-boot/README.md) - A plugin to help with Wingtips distributed
+tracing in [Spring Boot](https://spring.io/guides/gs/spring-boot/) environments that also utilize 
+[Zipkin](http://zipkin.io/).  
 
 If you prefer hands-on exploration rather than readmes, the [sample applications](#samples) provide concrete examples 
 of using Wingtips that are simple, compact, and straightforward.
@@ -165,7 +172,7 @@ Because of these drawbacks, and because it's easy to forget about this caveat an
 date and not get the behavior you expect, it's not recommended that you use this feature as common practice - or if you 
 do make sure you call it out with some in-line comments for the inevitable future when someone tries to add a `catch` 
 block. Instead it's recommended that you complete the span in a `finally` block manually as described in the 
-<a href="#generic_pseudo_code">Generic Application Pseudo-Code</a> section. It's a few extra lines of code, but it's
+[Generic Application Pseudo-Code](#generic_pseudo_code) section. It's a few extra lines of code, but it's
 simple and prevents confusing unexpected behavior.
 
 Thanks to [Adrian Cole](https://github.com/adriancole) for pointing out this danger.   
@@ -397,6 +404,7 @@ See the sample app readmes for further information on building and running the s
 * [samples/sample-jersey1](samples/sample-jersey1/)
 * [samples/sample-jersey2](samples/sample-jersey2/)
 * [samples/sample-spring-web-mvc](samples/sample-spring-web-mvc/)
+* [samples/sample-spring-boot](samples/sample-spring-boot/)
 
 <a name="license"></a>
 ## License

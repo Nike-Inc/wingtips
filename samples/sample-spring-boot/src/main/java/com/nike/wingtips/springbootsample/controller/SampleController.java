@@ -1,4 +1,4 @@
-package com.nike.wingtips.springsample.controller;
+package com.nike.wingtips.springbootsample.controller;
 
 import com.nike.wingtips.Span;
 import com.nike.wingtips.TraceHeaders;
@@ -6,12 +6,12 @@ import com.nike.wingtips.Tracer;
 import com.nike.wingtips.servlet.HttpSpanFactory;
 import com.nike.wingtips.servlet.RequestTracingFilter;
 import com.nike.wingtips.spring.util.WingtipsSpringUtil;
-import com.nike.wingtips.springsample.Main;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.autoconfigure.web.ServerProperties;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -36,12 +36,12 @@ import javax.servlet.http.HttpServletRequest;
 
 import static com.nike.wingtips.spring.util.WingtipsSpringUtil.failureCallbackWithTracing;
 import static com.nike.wingtips.spring.util.WingtipsSpringUtil.successCallbackWithTracing;
-import static com.nike.wingtips.util.AsyncWingtipsHelperJava7.callableWithTracing;
-import static com.nike.wingtips.util.AsyncWingtipsHelperJava7.runnableWithTracing;
+import static com.nike.wingtips.util.AsyncWingtipsHelperStatic.callableWithTracing;
+import static com.nike.wingtips.util.AsyncWingtipsHelperStatic.runnableWithTracing;
 import static com.nike.wingtips.util.AsyncWingtipsHelperStatic.supplierWithTracing;
 
 /**
- * A set of example endpoints showing tracing working in a Spring MVC app. In particular it shows:
+ * A set of example endpoints showing tracing working in a Spring Boot app. In particular it shows:
  *
  * <ul>
  *     <li>
@@ -100,11 +100,15 @@ public class SampleController {
     private final AsyncRestTemplate wingtipsEnabledAsyncRestTemplate =
         WingtipsSpringUtil.createTracingEnabledAsyncRestTemplate();
 
-    private final List<String> userIdHeaderKeys = Arrays.asList(Main.USER_ID_HEADER_KEYS.split(","));
+    private final List<String> userIdHeaderKeys;
 
     @Autowired
-    public SampleController(@Qualifier("serverPort") int serverPort) {
-        this.serverPort = serverPort;
+    public SampleController(ServerProperties serverProps, Environment environment) {
+        this.serverPort = serverProps.getPort();
+        String userIdHeaderKeysFromEnv = environment.getProperty("wingtips.user-id-header-keys");
+        this.userIdHeaderKeys = (userIdHeaderKeysFromEnv == null)
+                                ? null
+                                : Arrays.asList(userIdHeaderKeysFromEnv.split(","));
     }
 
     @GetMapping(path = SIMPLE_PATH)
@@ -239,7 +243,7 @@ public class SampleController {
         HttpHeaders headers = new HttpHeaders();
         String userId = Tracer.getInstance().getCurrentSpan().getUserId();
 
-        if (userIdHeaderKeys.isEmpty() || userId == null) {
+        if (userIdHeaderKeys == null || userIdHeaderKeys.isEmpty() || userId == null) {
             return new HttpEntity(headers);
         }
 

@@ -107,7 +107,7 @@ Released on 2016-09-05.
 ### Updated
 
 - Zipkin updated to version 1.8.4.
-	- Updated by [Adrian Cole][contrib_adriancole] in pull request [#24](https://github.com/Nike-Inc/wingtips/pull/24).
+    - Updated by [Adrian Cole][contrib_adriancole] in pull request [#24](https://github.com/Nike-Inc/wingtips/pull/24).
 
 ## [0.11.0](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.11.0)
 
@@ -116,7 +116,7 @@ Released on 2016-08-20.
 ### Fixed
 
 - Trace and span ID generation changed to conform to Zipkin/B3 standards by encoding IDs in lowercase hexadecimal format.
-	- Fixed by [Nic Munroe][contrib_nicmunroe] in pull request [#16](https://github.com/Nike-Inc/wingtips/pull/16). For issues [#14](https://github.com/Nike-Inc/wingtips/issues/14) and [#15](https://github.com/Nike-Inc/wingtips/issues/15).
+    - Fixed by [Nic Munroe][contrib_nicmunroe] in pull request [#16](https://github.com/Nike-Inc/wingtips/pull/16). For issues [#14](https://github.com/Nike-Inc/wingtips/issues/14) and [#15](https://github.com/Nike-Inc/wingtips/issues/15).
 
 ## [0.10.0](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.10.0)
 
@@ -125,7 +125,7 @@ Released on 2016-08-11.
 ### Added
 
 - Zipkin integration.
-	- Added by [Nic Munroe][contrib_nicmunroe] in pull requests [#7](https://github.com/Nike-Inc/wingtips/pull/7), [#8](https://github.com/Nike-Inc/wingtips/pull/8), and [#10](https://github.com/Nike-Inc/wingtips/pull/10). For issue [#9](https://github.com/Nike-Inc/wingtips/issues/9).
+    - Added by [Nic Munroe][contrib_nicmunroe] in pull requests [#7](https://github.com/Nike-Inc/wingtips/pull/7), [#8](https://github.com/Nike-Inc/wingtips/pull/8), and [#10](https://github.com/Nike-Inc/wingtips/pull/10). For issue [#9](https://github.com/Nike-Inc/wingtips/issues/9).
 
 ## [0.9.0.1](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.9.0.1)
 
@@ -134,12 +134,12 @@ Released on 2016-07-19.
 ### Added
 
 - Javadoc jar, CONTRIBUTING.md doc, Travis CI badge in readme, Download badge in readme, artifact publishing support.
-	- Added by [Nic Munroe][contrib_nicmunroe].
+    - Added by [Nic Munroe][contrib_nicmunroe].
 
 ### Fixed
 
 - Broken Zipkin link.
-	- Fixed by [Adrian Cole][contrib_adriancole].
+    - Fixed by [Adrian Cole][contrib_adriancole].
 
 ## [0.9.0](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.9.0)
 
@@ -148,8 +148,8 @@ Released on 2016-06-07.
 ### Added
 
 - Initial open source code drop for Wingtips.
-	- Added by [Nic Munroe][contrib_nicmunroe].
-	
+    - Added by [Nic Munroe][contrib_nicmunroe].
+    
 
 [contrib_nicmunroe]: https://github.com/nicmunroe
 [contrib_adriancole]: https://github.com/adriancole
