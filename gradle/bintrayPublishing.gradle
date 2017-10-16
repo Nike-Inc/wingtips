@@ -1,5 +1,5 @@
 configure(subprojects.findAll {
-    return !it.name.startsWith("sample")
+    return !it.name.startsWith("sample") && !it.name.startsWith("testonly")
 }) {
     apply plugin: 'maven'
     apply plugin: 'maven-publish'

@@ -1,9 +1,14 @@
 evaluationDependsOn(':')
 
+compileTestJava {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
 dependencies {
 
     compile(
-            project(":wingtips-old-servlet-api")
+            project(":wingtips-core")
     )
     compileOnly(
             "javax.servlet:javax.servlet-api:$servletApiVersion"

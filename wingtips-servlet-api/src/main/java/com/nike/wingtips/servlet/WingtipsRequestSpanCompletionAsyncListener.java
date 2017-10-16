@@ -1,6 +1,7 @@
 package com.nike.wingtips.servlet;
 
 import com.nike.wingtips.Tracer;
+import com.nike.wingtips.servlet.ServletRuntime.Servlet3Runtime;
 import com.nike.wingtips.util.TracingState;
 
 import java.io.IOException;
@@ -12,9 +13,9 @@ import javax.servlet.AsyncListener;
 import static com.nike.wingtips.util.AsyncWingtipsHelperJava7.runnableWithTracing;
 
 /**
- * Helper class for {@link RequestTracingFilter} that implements {@link AsyncListener}, whose job is to complete the
+ * Helper class for {@link Servlet3Runtime} that implements {@link AsyncListener}, whose job is to complete the
  * overall request span when an async servlet request finishes. You should not need to worry about this class - it
- * is an internal implementation detail for {@link RequestTracingFilter}.
+ * is an internal implementation detail for {@link Servlet3Runtime}.
  *
  * @author Nic Munroe
  */
