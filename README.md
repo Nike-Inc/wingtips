@@ -15,10 +15,8 @@ There are a few modules associated with this project:
 functionality.
 * [wingtips-java8](wingtips-java8/README.md) - Provides several Java 8 helpers, particularly around helping tracing and 
 MDC information to hop threads in asynchronous/non-blocking use cases.
-* [wingtips-servlet-api](wingtips-servlet-api/README.md) - A plugin for Servlet 3+ based applications for integrating 
-distributed tracing with a simple Servlet Filter.
-* [wingtips-old-servlet-api](wingtips-old-servlet-api/README.md) - A plugin for Servlet 2.x based applications for 
-integrating distributed tracing with a simple Servlet Filter.
+* [wingtips-servlet-api](wingtips-servlet-api/README.md) - A plugin for Servlet based applications for integrating 
+distributed tracing with a simple Servlet Filter. Supports Servlet 2.x and Servlet 3 (async request) environments. 
 * [wingtips-zipkin](wingtips-zipkin/README.md) - A plugin providing easy Zipkin integration by converting Wingtips 
 spans to Zipkin spans and sending them to a Zipkin server.
 
@@ -118,10 +116,9 @@ The `extractParentSpanFromRequest()` method is potentially different for differe
 <a name="servlet_filter_info"></a>  
 #### Is your application running in a Servlet-based framework?
 
-If your application is running in a Servlet environment (e.g. Spring MVC, Jersey, raw Servlets, etc) then this entire 
-lifecycle can be handled by a Servlet `Filter`. We've created one for you that's ready to drop in and go - see the 
-[wingtips-servlet-api](wingtips-servlet-api/README.md) Wingtips plugin module library for details if you're in a 
-Servlet 3+ environment. For Servlet 2.x see [wingtips-old-servlet-api](wingtips-old-servlet-api/README.md). That plugin 
+If your application is running in a Servlet environment (e.g. Spring Boot, Spring MVC, Jersey, raw Servlets, etc) then 
+this entire lifecycle can be handled by a Servlet `Filter`. We've created one for you that's ready to drop in and go - 
+see the [wingtips-servlet-api](wingtips-servlet-api/README.md) Wingtips plugin module library for details. That plugin 
 module is also a good resource to see how the code for a production-ready implementation of this library might look.
 
 <a name="try_with_resources_info"></a>

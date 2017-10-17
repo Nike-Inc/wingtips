@@ -87,7 +87,7 @@ ext {
         //      like try-with-resources that generate many many branches in the bytecode that are realistically impossible to get coverage for.
         //      The combination of those issues mean we get artificially low coverage numbers even though it's clean correct code, so we just
         //      have to visually verify it.
-        configure(subprojects.findAll { !it.name.contains("wingtips-zipkin") && !it.name.startsWith("sample")}) {
+        configure(subprojects.findAll { !it.name.contains("wingtips-zipkin") && !it.name.startsWith("sample") && !it.name.startsWith("testonly")}) {
             jacocoCoverage {
                 // Enforce minimum code coverage. See https://github.com/palantir/gradle-jacoco-coverage for the full list of options.
                 reportThreshold 0.95, INSTRUCTION

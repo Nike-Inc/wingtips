@@ -6,7 +6,7 @@ import com.nike.wingtips.Span;
 import com.nike.wingtips.TraceHeaders;
 import com.nike.wingtips.Tracer;
 import com.nike.wingtips.lifecyclelistener.SpanLifecycleListener;
-import com.nike.wingtips.servlet.RequestTracingFilterOldServlet;
+import com.nike.wingtips.servlet.RequestTracingFilter;
 
 import com.tngtech.java.junit.dataprovider.DataProvider;
 import com.tngtech.java.junit.dataprovider.DataProviderRunner;
@@ -32,6 +32,7 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import javax.servlet.ServletException;
+import javax.servlet.ServletRequest;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -40,9 +41,11 @@ import io.restassured.response.ExtractableResponse;
 
 import static io.restassured.RestAssured.given;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
 
 /**
- * Component test to verify that {@link RequestTracingFilterOldServlet} works as expected when deployed to a real running server.
+ * Component test to verify that {@link RequestTracingFilter} works as expected when deployed to a real running server
+ * that *only* supports Servlet 2.x (no Servlet 3 API available on the classpath).
  *
  * @author Nic Munroe
  */
@@ -55,7 +58,30 @@ public class RequestTracingFilterOldServletComponentTest {
     private SpanRecorder spanRecorder;
 
     @BeforeClass
+    @SuppressWarnings("JavaReflectionMemberAccess")
     public static void beforeClass() throws Exception {
+        try {
+            ServletRequest.class.getMethod("getAsyncContext");
+            fail(
+                "Expected this test to run in an environment that does *NOT* support Servlet 3 API, "
+                + "however ServletRequest.getAsyncContext() method was found."
+            );
+        }
+        catch(NoSuchMethodException ex) {
+            // Expected - do nothing
+        }
+
+        try {
+            Class.forName("javax.servlet.AsyncListener");
+            fail(
+                "Expected this test to run in an environment that does *NOT* support Servlet 3 API, "
+                + "however javax.servlet.AsyncListener class was found."
+            );
+        }
+        catch(ClassNotFoundException ex) {
+            // Expected - do nothing
+        }
+
         port = findFreePort();
         server = new Server(port);
         server.setHandler(generateServletContextHandler());
@@ -187,7 +213,7 @@ public class RequestTracingFilterOldServletComponentTest {
 
     public static class SpanRecorder implements SpanLifecycleListener {
 
-        public final List<Span> completedSpans = new ArrayList<>();
+        final List<Span> completedSpans = new ArrayList<>();
 
         @Override
         public void spanStarted(Span span) { }
@@ -242,7 +268,7 @@ public class RequestTracingFilterOldServletComponentTest {
 
         servletHandler.addServletWithMapping(BlockingServlet.class, BLOCKING_PATH);
         servletHandler.addServletWithMapping(BlockingForwardServlet.class, BLOCKING_FORWARD_PATH);
-        servletHandler.addFilterWithMapping(RequestTracingFilterOldServlet.class.getName(), "/*", Handler.ALL);
+        servletHandler.addFilterWithMapping(RequestTracingFilter.class.getName(), "/*", Handler.ALL);
 
         Context context = new Context(null, null, null, servletHandler, null);
         context.setContextPath("/");

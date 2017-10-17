@@ -6,19 +6,15 @@ ext {
 }
 
 dependencies {
-    compile(
-            project(":wingtips-core"),
-    )
-    compileOnly(
-            "javax.servlet:servlet-api:$oldServletApiTargetVersion"
-    )
     testCompile(
+            project(":wingtips-servlet-api"),
             "junit:junit-dep:$junitVersion",
             "org.mockito:mockito-core:$mockitoVersion",
             "ch.qos.logback:logback-classic:$logbackVersion",
             "org.assertj:assertj-core:$assertJVersion",
             "com.tngtech.java:junit-dataprovider:$junitDataproviderVersion",
             "io.rest-assured:rest-assured:$restAssuredVersion",
+            "javax.servlet:servlet-api:$oldServletApiTargetVersion",
             "org.mortbay.jetty:jetty:$oldMortbayJettyVersion"
     )
 }
