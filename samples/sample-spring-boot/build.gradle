@@ -1,0 +1,28 @@
+evaluationDependsOn(':')
+
+sourceCompatibility = JavaVersion.VERSION_1_8
+targetCompatibility = JavaVersion.VERSION_1_8
+
+dependencies {
+    compile(
+            project(":wingtips-zipkin-spring-boot"),
+            project(":wingtips-java8"),
+            "org.springframework.boot:spring-boot-starter-web:$springbootVersion",
+            "ch.qos.logback:logback-classic:$logbackVersion"
+    )
+    testCompile(
+            "junit:junit:$junitVersion",
+            "org.mockito:mockito-core:$mockitoVersion",
+            "ch.qos.logback:logback-classic:$logbackVersion",
+            "org.assertj:assertj-core:$assertJVersion",
+            "com.tngtech.java:junit-dataprovider:$junitDataproviderVersion",
+            "io.rest-assured:rest-assured:$restAssuredVersion"
+    )
+}
+
+apply plugin: "application"
+mainClassName = "com.nike.wingtips.springbootsample.Main"
+
+run {
+    systemProperties = System.getProperties()
+}

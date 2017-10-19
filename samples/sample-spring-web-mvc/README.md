@@ -3,12 +3,20 @@
 Wingtips is a distributed tracing solution for Java 7 and greater based on the 
 [Google Dapper paper](http://static.googleusercontent.com/media/research.google.com/en/us/pubs/archive/36356.pdf).
 
-This submodule contains a sample application based on Spring Web MVC that integrates Wingtips' `RequestTracingFilter` to
-automatically start and complete the overall request span for incoming requests. If the incoming request contains 
-tracing headers then they will be used as the parent span, otherwise a new trace will be started. Note that this sample 
-only covers the server-receiving-requests side of the tracing equation. For the other half please see the 
-[Propagating Distributed Traces Across Network or Application Boundaries](../../README.md#propagating_traces) section 
-of the main Wingtips readme.
+This submodule contains a sample application based on Spring Web MVC that integrates Wingtips' `RequestTracingFilter` 
+to automatically start and complete the overall request span for incoming requests. If the incoming request contains 
+tracing headers then they will be used as the parent span, otherwise a new trace will be started. 
+
+This sample also shows the other half of the equation 
+(the [Propagating Distributed Traces Across Network or Application Boundaries](../../README.md#propagating_traces) 
+section of the main Wingtips readme). Specifically it shows how to use the interceptors from the 
+[`wingtips-spring`](../../wingtips-spring) module to make Spring `RestTemplate` and `AsyncRestTemplate` HTTP client 
+calls that automatically surround a downstream call in a separate subspan and propagate the tracing info in the 
+downstream call request headers.
+
+There are also a few examples showing how to make tracing state hop threads when you do asynchronous processing.
+
+## Building and running the sample 
  
 * Build the sample by running the `./buildSample.sh` script.
 * Launch the sample by running the `./runSample.sh` script. It will bind to port 8080 by default. 
@@ -32,7 +40,9 @@ response headers and find all the relevant log message for that request in the l
 * For all of the following things to try, you can specify `X-B3-TraceId` and `X-B3-SpanId` headers to cause the server
 to use those values as parent span information. Try sending requests with and without these headers to see how it
 affects the resulting server logs. If you are sending your own trace and span IDs you can also optionally send a 
-`X-B3-Sampled` header with a value of `0` to disable the `[DISTRIBUTED_TRACING]` log for that request. 
+`X-B3-Sampled` header with a value of `0` to disable the `[DISTRIBUTED_TRACING]` log for that request. Finally, this
+sample is configured to treat `userid` and `altuserid` headers as "User ID Header Keys" and populate the Span's user
+ID when one of those headers are found. 
 * `GET /sample/simple` - A basic blocking endpoint that returns as quickly as possible. The `[DISTRIBUTED_TRACING]` 
 log message for this endpoint should have very short `durationNanos` - note that because the duration is nanosecond
 precision you can accurately time endpoints that return in well under 1 millisecond. You should see a log message 
@@ -46,19 +56,31 @@ completing the request. The `[DISTRIBUTED_TRACING]` log message for this endpoin
 correct `traceId` - one for the endpoint before async processing is started, and another on the async thread before
 the request is completed.
 * `GET /sample/async-callable` - Similar to the `/sample/async` endpoint, but uses `Callable` instead of 
-`DeferredResult` to initiate the async processing. The `[DISTRIBUTED_TRACING]` log message for this endpoint should 
-have a `durationNanos` around `100000000` (100 milliseconds). You should see two log messages output by the endpoint 
-that are auto-tagged with the correct `traceId` - one for the endpoint before async processing is started, and another 
-on the async thread before the request is completed.
+`DeferredResult` to initiate the async processing.
 * `GET /sample/async-future` - Similar to the `/sample/async` endpoint, but uses `CompletableFuture` instead of 
-`DeferredResult` to initiate the async processing. The `[DISTRIBUTED_TRACING]` log message for this endpoint should
-have a `durationNanos` around `100000000` (100 milliseconds). You should see two log messages output by the endpoint
-that are auto-tagged with the correct `traceId` - one for the endpoint before async processing is started, and another
-on the async thread before the request is completed.
+`DeferredResult` to initiate the async processing. 
 * `GET /sample/async-error` - An async endpoint that sets the timeout for the request to 100 milliseconds 
 and then fails to complete the request, causing the request to return a timeout error after that timeout period
 passes. The `[DISTRIBUTED_TRACING]` log message for this endpoint should have a `durationNanos` around `100000000` 
 (100 milliseconds). You should see a log message output by the endpoint that is auto-tagged with the correct `traceId`.
+* `GET /sample/span-info` - A blocking endpoint that waits for 100 milliseconds and then returns a JSON response 
+payload that contains information about both the parent span that came in on the request headers (if any) and the 
+endpoint span. This can be helpful to visualize what's going on when you send in tracing headers on the request
+(essentially propagating your own tracing info to the sample server). The `[DISTRIBUTED_TRACING]` log message for this 
+endpoint should have a `durationNanos` around `100000000` (100 milliseconds). You should see a log message output by 
+the endpoint that is auto-tagged with the correct `traceId`.
+* `GET /sample/nested-blocking-call` - A blocking endpoint that waits 100 milliseconds and then uses a `RestTemplate`
+with tracing interceptor to make a HTTP client call to `/sample/span-info` that is automatically wrapped in a subspan
+and automatically propagates the tracing info on the downstream call. The result of `/sample/span-info` is returned.
+The total call time should be around 200 milliseconds (100 for each of the endpoints that are called). There should
+be three `[DISTRIBUTED_TRACING]` log messages - one for the innermost `/sample/span-info` endpoint, one for the subspan
+surrounding the `RestTemplate` HTTP client call, and one for the outermost `/sample/nested-blocking-call` endpoint. 
+You should see several log messages auto-tagged with the correct `traceId` across both endpoints.
+* `GET /sample/nested-async-call` - Similar to the `/sample/nested-blocking-call` endpoint described above, except
+it is fully async and uses `AsyncRestTemplate` instead of the blocking `RestTemplate` to make the HTTP client call. 
+All the notes from the `/sample/nested-blocking-call` description about timing and log messages apply to this 
+endpoint as well - in particular note how all the different log messages are tagged with the trace ID despite the
+request hopping threads several times.
 
 ## More Info
 

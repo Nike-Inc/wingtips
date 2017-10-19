@@ -12,7 +12,7 @@ This module is an optional plugin for the wingtips-core library. See the [wingti
 
 For a basic Zipkin integration using the minimum-dependencies default implementation provided by this submodule add the following line as early in your application startup procedure as possible (ideally before any requests hit the service that would generate spans) and you'll see the Wingtips spans show up in the Zipkin UI with the proper client-send, client-receive, server-send, and server-receive annotations:
 
-```java
+``` java
 Tracer.getInstance().addSpanLifecycleListener(
     new WingtipsToZipkinLifecycleListener("some-service-name", 
                                           "some-local-component-name", 
@@ -34,7 +34,7 @@ Zipkin's [Brave](https://github.com/openzipkin/brave) libraries provide numerous
 
 Simply pull in the Zipkin Brave dependencies into your project that are necessary to have access to the `SpanCollector` implementation you want to use, and create an adapter like the following:
 
-```java
+``` java
 public class BraveSpanCollectorAdapter implements ZipkinSpanSender {
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
@@ -76,7 +76,7 @@ public class BraveSpanCollectorAdapter implements ZipkinSpanSender {
 
 Once you have an adapter, you can register it with Wingtips like this:
 
-```java
+``` java
 Tracer.getInstance().addSpanLifecycleListener(
     new WingtipsToZipkinLifecycleListener("some-service-name", 
                                           "some-local-component-name", 

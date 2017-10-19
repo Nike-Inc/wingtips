@@ -1,0 +1,20 @@
+evaluationDependsOn(':')
+
+compileTestJava {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
+dependencies {
+    compile(
+            project(":wingtips-core"),
+            "org.springframework:spring-web:$springVersion"
+    )
+    testCompile(
+            "junit:junit-dep:$junitVersion",
+            "org.mockito:mockito-core:$mockitoVersion",
+            "org.assertj:assertj-core:$assertJVersion",
+            "com.tngtech.java:junit-dataprovider:$junitDataproviderVersion",
+            "ch.qos.logback:logback-classic:$logbackVersion"
+    )
+}

@@ -4,16 +4,19 @@ sourceCompatibility = JavaVersion.VERSION_1_8
 targetCompatibility = JavaVersion.VERSION_1_8
 
 ext {
-    springVersion = '4.3.2.RELEASE'
+    jacksonVersion = '2.9.1'
 }
 
 dependencies {
     compile(
             project(":wingtips-servlet-api"),
             project(":wingtips-java8"),
+            project(":wingtips-spring"),
             "ch.qos.logback:logback-classic:$logbackVersion",
             "org.springframework:spring-web:$springVersion",
             "org.springframework:spring-webmvc:$springVersion",
+            "com.fasterxml.jackson.core:jackson-core:$jacksonVersion",
+            "com.fasterxml.jackson.core:jackson-databind:$jacksonVersion",
             "org.eclipse.jetty:jetty-webapp:$jettyVersion"
     )
     testCompile(

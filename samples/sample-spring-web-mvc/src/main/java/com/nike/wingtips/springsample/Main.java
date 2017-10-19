@@ -3,8 +3,11 @@ package com.nike.wingtips.springsample;
 import com.nike.wingtips.servlet.RequestTracingFilter;
 
 import org.eclipse.jetty.server.Server;
+import org.eclipse.jetty.servlet.FilterHolder;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.context.ContextLoaderListener;
@@ -19,6 +22,8 @@ import java.util.EnumSet;
 
 import javax.servlet.DispatcherType;
 
+import static com.nike.wingtips.servlet.RequestTracingFilter.USER_ID_HEADER_KEYS_LIST_INIT_PARAM_NAME;
+
 /**
  * Starts up the Wingtips Spring Web MVC Sample server (on port 8080 by default).
  *
@@ -27,6 +32,8 @@ import javax.servlet.DispatcherType;
 public class Main {
 
     public static final String PORT_SYSTEM_PROP_KEY = "springSample.server.port";
+    public static final String USER_ID_HEADER_KEYS = "userid,altuserid";
+    private static int actualServerPort;
 
     public static void main(String[] args) throws Exception {
         Server server = createServer(Integer.parseInt(System.getProperty(PORT_SYSTEM_PROP_KEY, "8080")));
@@ -41,6 +48,8 @@ public class Main {
     }
 
     public static Server createServer(int port) throws Exception {
+        actualServerPort = port;
+        
         Server server = new Server(port);
         server.setHandler(generateServletContextHandler(generateWebAppContext()));
 
@@ -54,7 +63,10 @@ public class Main {
         contextHandler.setContextPath("/");
         contextHandler.addServlet(new ServletHolder(new DispatcherServlet(webappContext)), "/*");
         contextHandler.addEventListener(new ContextLoaderListener(webappContext));
-        contextHandler.addFilter(RequestTracingFilter.class, "/*", EnumSet.allOf(DispatcherType.class));
+        FilterHolder requestTracingFilterHolder = contextHandler.addFilter(
+            RequestTracingFilter.class, "/*", EnumSet.allOf(DispatcherType.class)
+        );
+        requestTracingFilterHolder.setInitParameter(USER_ID_HEADER_KEYS_LIST_INIT_PARAM_NAME, USER_ID_HEADER_KEYS);
         return contextHandler;
     }
 
@@ -70,6 +82,12 @@ public class Main {
     private static class SampleWebMvcConfig extends WebMvcConfigurerAdapter {
 
         SampleWebMvcConfig() {}
+
+        @Bean
+        @Qualifier("serverPort")
+        public int serverPort() {
+            return actualServerPort;
+        }
 
     }
 }
