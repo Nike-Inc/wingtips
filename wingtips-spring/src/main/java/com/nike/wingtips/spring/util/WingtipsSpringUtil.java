@@ -3,6 +3,7 @@ package com.nike.wingtips.spring.util;
 import com.nike.internal.util.Pair;
 import com.nike.wingtips.Span;
 import com.nike.wingtips.Tracer;
+import com.nike.wingtips.http.HttpRequestTracingUtils;
 import com.nike.wingtips.spring.interceptor.WingtipsAsyncClientHttpRequestInterceptor;
 import com.nike.wingtips.spring.interceptor.WingtipsClientHttpRequestInterceptor;
 import com.nike.wingtips.spring.util.asynchelperwrapper.FailureCallbackWithTracing;
@@ -11,8 +12,8 @@ import com.nike.wingtips.spring.util.asynchelperwrapper.SuccessCallbackWithTraci
 import com.nike.wingtips.util.TracingState;
 
 import org.slf4j.MDC;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMessage;
+import org.springframework.http.HttpMethod;
 import org.springframework.util.concurrent.FailureCallback;
 import org.springframework.util.concurrent.ListenableFutureCallback;
 import org.springframework.util.concurrent.SuccessCallback;
@@ -21,11 +22,6 @@ import org.springframework.web.client.RestTemplate;
 
 import java.util.Deque;
 import java.util.Map;
-
-import static com.nike.wingtips.TraceHeaders.PARENT_SPAN_ID;
-import static com.nike.wingtips.TraceHeaders.SPAN_ID;
-import static com.nike.wingtips.TraceHeaders.TRACE_ID;
-import static com.nike.wingtips.TraceHeaders.TRACE_SAMPLED;
 
 /**
  * Contains helper methods for integrating Wingtips in a Spring environment. In particular there are helpers for
@@ -106,16 +102,23 @@ public class WingtipsSpringUtil {
      * @param span The {@link Span} to get the tracing info from to set on the headers. Can be null - if this is null
      * then this method will do nothing.
      */
-    public static void setTracingPropagationHeaders(HttpMessage httpMessage, Span span) {
-        if (span == null || httpMessage == null)
-            return;
+    public static void propagateTracingHeaders(HttpMessage httpMessage, Span span) {
+        HttpHeadersForPropagation headersForPropagation = (httpMessage == null)
+                                                          ? null
+                                                          : new HttpHeadersForPropagation(httpMessage);
+        HttpRequestTracingUtils.propagateTracingHeaders(headersForPropagation, span);
+    }
 
-        HttpHeaders headers = httpMessage.getHeaders();
-        headers.set(TRACE_ID, span.getTraceId());
-        headers.set(SPAN_ID, span.getSpanId());
-        headers.set(TRACE_SAMPLED, (span.isSampleable()) ? "1" : "0");
-        if (span.getParentSpanId() != null)
-            headers.set(PARENT_SPAN_ID, span.getParentSpanId());
+    /**
+     * @param method The HTTP method.
+     * @return "UNKNOWN" if the method is null, otherwise {@link HttpMethod#name()}.
+     */
+    public static String getRequestMethodAsString(HttpMethod method) {
+        if (method == null) {
+            return "UNKNOWN";
+        }
+
+        return method.name();
     }
 
     /**

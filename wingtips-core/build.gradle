@@ -1,5 +1,10 @@
 evaluationDependsOn(':')
 
+compileTestJava {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
 dependencies {
     compile(
             "org.slf4j:slf4j-api:$slf4jVersion",

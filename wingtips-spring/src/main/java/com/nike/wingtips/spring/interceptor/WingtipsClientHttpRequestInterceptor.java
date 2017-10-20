@@ -3,9 +3,9 @@ package com.nike.wingtips.spring.interceptor;
 import com.nike.wingtips.Span;
 import com.nike.wingtips.Span.SpanPurpose;
 import com.nike.wingtips.Tracer;
+import com.nike.wingtips.http.HttpRequestTracingUtils;
 import com.nike.wingtips.spring.util.HttpRequestWrapperWithModifiableHeaders;
 
-import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpRequest;
 import org.springframework.http.client.ClientHttpRequestExecution;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
@@ -14,7 +14,8 @@ import org.springframework.web.client.RestTemplate;
 
 import java.io.IOException;
 
-import static com.nike.wingtips.spring.util.WingtipsSpringUtil.setTracingPropagationHeaders;
+import static com.nike.wingtips.spring.util.WingtipsSpringUtil.getRequestMethodAsString;
+import static com.nike.wingtips.spring.util.WingtipsSpringUtil.propagateTracingHeaders;
 
 /**
  * A {@link ClientHttpRequestInterceptor} which propagates Wingtips tracing information on a downstream {@link
@@ -82,7 +83,7 @@ public class WingtipsClientHttpRequestInterceptor implements ClientHttpRequestIn
             }
 
             HttpRequest wrapperRequest = new HttpRequestWrapperWithModifiableHeaders(request);
-            setTracingPropagationHeaders(wrapperRequest, tracer.getCurrentSpan());
+            propagateTracingHeaders(wrapperRequest, tracer.getCurrentSpan());
 
             return execution.execute(wrapperRequest, body);
         }
@@ -98,45 +99,17 @@ public class WingtipsClientHttpRequestInterceptor implements ClientHttpRequestIn
 
     /**
      * Returns the name that should be used for the subspan surrounding the call. Defaults to {@code
-     * resttemplate_downstream_call-[HTTP_METHOD]_[REQUEST_URI]}, e.g. for a GET call to https://foo.bar/baz,
-     * this would return {@code "resttemplate_downstream_call-GET_https://foo.bar/baz"}. You can override this method
+     * resttemplate_downstream_call-[HTTP_METHOD]_[REQUEST_URI]} with any query string stripped, e.g. for a GET
+     * call to https://foo.bar/baz?stuff=things, this would return {@code
+     * "resttemplate_downstream_call-GET_https://foo.bar/baz"}. You can override this method
      * to return something else if you want a different subspan name format.
      *
      * @param request The request that is about to be executed.
      * @return The name that should be used for the subspan surrounding the call.
      */
     protected String getSubspanSpanName(HttpRequest request) {
-        return "resttemplate_downstream_call-" + getRequestMethodAsString(request) + "_"
-               + stripQueryString(request.getURI().toString());
-    }
-
-    /**
-     * Helper method for stripping the query string (and everything after it) from a URI.
-     *
-     * @param uri The URI.
-     * @return The given {@code uri} string after removing everything following the query string question mark. If no
-     * query string is found then the given {@code uri} will be returned unmodified.
-     */
-    protected String stripQueryString(String uri) {
-        int indexOfQuestionMark = uri.indexOf('?');
-
-        if (indexOfQuestionMark == -1) {
-            return uri;
-        }
-
-        return uri.substring(0, indexOfQuestionMark);
-    }
-
-    /**
-     * @param request The request that is about to be executed.
-     * @return The given request's {@link HttpMethod#name()}, or "UNKNOWN" if the method is null.
-     */
-    protected String getRequestMethodAsString(HttpRequest request) {
-        HttpMethod method = request.getMethod();
-        if (method == null) {
-            return "UNKNOWN";
-        }
-
-        return method.name();
+        return HttpRequestTracingUtils.getSubspanSpanNameForHttpRequest(
+            "resttemplate_downstream_call", getRequestMethodAsString(request.getMethod()), request.getURI().toString()
+        );
     }
 }

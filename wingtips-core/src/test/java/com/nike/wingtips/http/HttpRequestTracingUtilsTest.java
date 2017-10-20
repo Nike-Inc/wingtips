@@ -21,9 +21,20 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
 
+import static com.nike.wingtips.TraceHeaders.PARENT_SPAN_ID;
+import static com.nike.wingtips.TraceHeaders.SPAN_ID;
+import static com.nike.wingtips.TraceHeaders.TRACE_ID;
+import static com.nike.wingtips.TraceHeaders.TRACE_SAMPLED;
+import static com.nike.wingtips.http.HttpRequestTracingUtils.convertSampleableBooleanToExpectedB3Value;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Matchers.anyString;
+import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyZeroInteractions;
 
 /**
  * Tests the functionality of {@link HttpRequestTracingUtils}
@@ -43,9 +54,12 @@ public class HttpRequestTracingUtilsTest {
 
     private static final List<String> USER_ID_HEADER_KEYS = Arrays.asList(USER_ID_HEADER_KEY, ALT_USER_ID_HEADER_KEY);
 
+    private HttpObjectForPropagation httpObjectForPropagationMock;
+
     @Before
     public void onSetup() {
         request = mock(RequestWithHeaders.class);
+        httpObjectForPropagationMock = mock(HttpObjectForPropagation.class);
     }
 
     @Test
@@ -423,6 +437,158 @@ public class HttpRequestTracingUtilsTest {
         assertThat(firstSpan.getSpanId()).isNotEmpty();
         assertThat(secondSpan.getSpanId()).isNotEmpty();
         assertThat(firstSpan.getSpanId()).isNotEqualTo(secondSpan.getTraceId());
+    }
+
+    @DataProvider(value = {
+        "true",
+        "false"
+    })
+    @Test
+    public void convertSampleableBooleanToExpectedB3Value_works_as_expected(boolean sampleable) {
+        // given
+        String expectedResult = (sampleable) ? "1" : "0";
+
+        // when
+        String result = convertSampleableBooleanToExpectedB3Value(sampleable);
+
+        // then
+        assertThat(result).isEqualTo(expectedResult);
+    }
+
+    @DataProvider(value = {
+        "true   |   true",
+        "true   |   false",
+        "false  |   true",
+        "false  |   false"
+    }, splitBy = "\\|")
+    @Test
+    public void propagateTracingHeaders_works_as_expected(
+        boolean httpObjIsNull, boolean spanIsNull
+    ) {
+        // given
+        if (httpObjIsNull)
+            httpObjectForPropagationMock = null;
+
+        Span spanSpy = (spanIsNull)
+                       ? null
+                       : spy(Span.newBuilder(UUID.randomUUID().toString(), SpanPurpose.CLIENT)
+                                 .withParentSpanId(UUID.randomUUID().toString())
+                                 .build());
+
+        // when
+        HttpRequestTracingUtils.propagateTracingHeaders(httpObjectForPropagationMock, spanSpy);
+
+        // then
+        if (httpObjIsNull || spanIsNull) {
+            if (httpObjectForPropagationMock != null)
+                verifyZeroInteractions(httpObjectForPropagationMock);
+
+            if (spanSpy != null)
+                verifyZeroInteractions(spanSpy);
+        }
+        else {
+            verify(httpObjectForPropagationMock).setHeader(TRACE_ID, spanSpy.getTraceId());
+            verify(httpObjectForPropagationMock).setHeader(SPAN_ID, spanSpy.getSpanId());
+            verify(httpObjectForPropagationMock)
+                .setHeader(TRACE_SAMPLED, convertSampleableBooleanToExpectedB3Value(spanSpy.isSampleable()));
+            verify(httpObjectForPropagationMock).setHeader(PARENT_SPAN_ID, spanSpy.getParentSpanId());
+        }
+    }
+
+    // See https://github.com/openzipkin/b3-propagation - we should pass "1" if it's sampleable, "0" if it's not.
+    @DataProvider(value = {
+        "true",
+        "false"
+    })
+    @Test
+    public void propagateTracingHeaders_uses_B3_spec_for_sampleable_header_value(
+        boolean sampleable
+    ) {
+        // given
+        Span span = Span.newBuilder("foo", SpanPurpose.CLIENT)
+                        .withSampleable(sampleable)
+                        .build();
+
+        // when
+        HttpRequestTracingUtils.propagateTracingHeaders(httpObjectForPropagationMock, span);
+
+        // then
+        verify(httpObjectForPropagationMock)
+            .setHeader(TRACE_SAMPLED, convertSampleableBooleanToExpectedB3Value(span.isSampleable()));
+    }
+
+    @DataProvider(value = {
+        "true",
+        "false"
+    })
+    @Test
+    public void propagateTracingHeaders_only_sends_parent_span_id_header_if_parent_span_id_exists(
+        boolean parentSpanIdExists
+    ) {
+        // given
+        String parentSpanId = (parentSpanIdExists) ? UUID.randomUUID().toString() : null;
+        Span span = Span.newBuilder("foo", SpanPurpose.CLIENT)
+                        .withParentSpanId(parentSpanId)
+                        .build();
+
+        // when
+        HttpRequestTracingUtils.propagateTracingHeaders(httpObjectForPropagationMock, span);
+
+        // then
+        if (parentSpanIdExists) {
+            verify(httpObjectForPropagationMock).setHeader(PARENT_SPAN_ID, parentSpanId);
+        }
+        else {
+            verify(httpObjectForPropagationMock, never()).setHeader(eq(PARENT_SPAN_ID), anyString());
+        }
+    }
+
+    @DataProvider(value = {
+        "true   |   true",
+        "false  |   true",
+        "true   |   false",
+        "false  |   false"
+    }, splitBy = "\\|")
+    @Test
+    public void getSubspanSpanNameForHttpRequest_works_as_expected(boolean prefixIsNull, boolean includeQueryString) {
+        // given
+        String prefix = (prefixIsNull) ? null : "prefix" + UUID.randomUUID().toString();
+        String method = UUID.randomUUID().toString();
+        String noQueryStringUri = "http://localhost:4242/foo/bar";
+        String uri = (includeQueryString)
+                     ? noQueryStringUri + "?a=b&c=d"
+                     : noQueryStringUri;
+
+        String expectedSuffix = method + "_" + noQueryStringUri;
+        String expectedResult = (prefixIsNull)
+                                ? expectedSuffix
+                                : prefix + "-" + expectedSuffix;
+
+        // when
+        String result = HttpRequestTracingUtils.getSubspanSpanNameForHttpRequest(prefix, method, uri);
+
+        // then
+        assertThat(result).isEqualTo(expectedResult);
+    }
+
+    @DataProvider(value = {
+        "true",
+        "false"
+    })
+    @Test
+    public void getSubspanSpanNameForHttpRequest_handles_null_values_without_exploding(boolean prefixIsNull) {
+        // given
+        String prefix = (prefixIsNull) ? null : "prefix" + UUID.randomUUID().toString();
+        String expectedSuffix = "null_null";
+        String expectedResult = (prefixIsNull)
+                                ? expectedSuffix
+                                : prefix + "-" + expectedSuffix;
+
+        // when
+        String result = HttpRequestTracingUtils.getSubspanSpanNameForHttpRequest(prefix, null, null);
+
+        // then
+        assertThat(result).isEqualTo(expectedResult);
     }
 
 }
