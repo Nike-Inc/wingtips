@@ -26,6 +26,8 @@ converting Wingtips spans to Zipkin spans and sending them to a Zipkin server.
 * [wingtips-zipkin-spring-boot](wingtips-zipkin-spring-boot/README.md) - A plugin to help with Wingtips distributed
 tracing in [Spring Boot](https://spring.io/guides/gs/spring-boot/) environments that also utilize 
 [Zipkin](http://zipkin.io/).  
+* [wingtips-apache-http-client](wingtips-apache-http-client/README.md) - A plugin to help with Wingtips distributed
+tracing when using Apache's `HttpClient`.
 
 If you prefer hands-on exploration rather than readmes, the [sample applications](#samples) provide concrete examples 
 of using Wingtips that are simple, compact, and straightforward.
@@ -265,6 +267,13 @@ For HTTP requests it is assumed that you will pass the caller's span information
 exclude it depending on whether you want downstream systems to have access to that info. When calling downstream
 services you control it may be good to include it for extra debugging info, and for downstream services outside your 
 control you may wish to exclude it to prevent unintentional information leakage.
+
+#### Tooling to help with tracing propagation
+
+The following Wingtips modules have helpers to simplify tracing propagation when using their respective technologies:
+
+* [wingtips-apache-http-client](wingtips-apache-http-client)
+* [wingtips-spring](wingtips-spring)
 
 <a name="adjusting_behavior"></a>
 ### Adjusting Behavior and Execution Options
