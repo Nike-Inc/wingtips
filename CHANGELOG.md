@@ -8,11 +8,44 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 
 #### 0.x Releases
 
+- `0.13.x` Releases - [0.13.0](#0130)
 - `0.12.x` Releases - [0.12.1](#0121), [0.12.0](#0120)
 - `0.11.x` Releases - [0.11.2](#0112), [0.11.1](#0111), [0.11.0](#0110)
 - `0.10.x` Releases - [0.10.0](#0100)
 - `0.9.x` Releases - [0.9.0.1](#0901), [0.9.0](#090)
 
+## [0.13.0](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.13.0)
+
+Released on 2017-10-25.
+
+### Added
+
+- Added support for Spring and Spring Boot projects, both on the incoming-request side and 
+propagating-tracing-downstream side (via Spring's `RestTemplate` HTTP client). Please see the readmes for the 
+[wingtips-spring](wingtips-spring/), [wingtips-spring-boot](wingtips-spring-boot/), and 
+[wingtips-zipkin-spring-boot](wingtips-zipkin-spring-boot/) modules for details and usage examples.
+    - Added by [Aleš Justin][contrib_alesj] in pull request [#37](https://github.com/Nike-Inc/wingtips/pull/37)
+    - and by [Nic Munroe][contrib_nicmunroe] in pull request [#51](https://github.com/Nike-Inc/wingtips/pull/51).
+- Added support for the Apache HTTP Client. See the [wingtips-apache-http-client](wingtips-apache-http-client/)
+module readme for details and usage examples.
+    - Added by [Nic Munroe][contrib_nicmunroe] in pull request [#53](https://github.com/Nike-Inc/wingtips/pull/53).  
+
+### Fixed
+
+- Fixed `RequestTracingFilter` to work properly for both Servlet 2.x and Servlet 3+ environments. Part of this fix 
+includes *not* exposing Servlet API as a transitive dependency of the `wingtips-servlet-api` module. This means you may 
+need to pull in the Servlet API into your project if it's not already there, although it is usually provided by your 
+Servlet container. See the
+["Servlet API dependency required at runtime"](wingtips-servlet-api/README.md#servlet_api_required_at_runtime) section
+of the `wingtips-servlet-api` readme for details.
+    - Fixed by [woldie][contrib_woldie] in pull request [#48](https://github.com/Nike-Inc/wingtips/pull/48)
+    - and by [Nic Munroe][contrib_nicmunroe] in pull requests [#49](https://github.com/Nike-Inc/wingtips/pull/49) and
+    [#52](https://github.com/Nike-Inc/wingtips/pull/52)
+    - and with help from [Adrian Cole][contrib_adriancole], in particular some comments in pull request 
+    [#49](https://github.com/Nike-Inc/wingtips/pull/49) that pointed us at the 
+    [ServletRuntime](https://github.com/openzipkin/brave/blob/master/instrumentation/servlet/src/main/java/brave/servlet/ServletRuntime.java)
+    class from [Brave](https://github.com/openzipkin/brave). 
+    
 ## [0.12.1](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.12.1)
 
 Released on 2017-09-27.
@@ -153,3 +186,5 @@ Released on 2016-06-07.
 
 [contrib_nicmunroe]: https://github.com/nicmunroe
 [contrib_adriancole]: https://github.com/adriancole
+[contrib_woldie]: https://github.com/woldie
+[contrib_alesj]: https://github.com/alesj

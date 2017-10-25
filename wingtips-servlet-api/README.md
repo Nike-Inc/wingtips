@@ -87,6 +87,7 @@ See the [base project readme's section on propagation](../README.md#propagating_
 propagating tracing information. You may also want to consider
 [wrapping downstream calls in a subspan](../README.md#sub_spans_for_downstream_calls).
 
+<a name="servlet_api_required_at_runtime"></a>
 ## NOTE - Servlet API dependency required at runtime
 
 This `wingtips-servlet-api` module does not export any transitive Servlet API dependencies to prevent runtime version 
