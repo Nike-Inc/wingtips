@@ -21,6 +21,7 @@ import org.mockito.internal.util.reflection.Whitebox;
 import org.slf4j.MDC;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMessage;
+import org.springframework.http.HttpMethod;
 import org.springframework.util.concurrent.FailureCallback;
 import org.springframework.util.concurrent.ListenableFutureCallback;
 import org.springframework.util.concurrent.SuccessCallback;
@@ -158,7 +159,7 @@ public class WingtipsSpringUtilTest {
         "false  |   false"
     }, splitBy = "\\|")
     @Test
-    public void setTracingPropagationHeaders_works_as_expected(
+    public void propagateTracingHeaders_works_as_expected(
         boolean httpMessageIsNull, boolean spanIsNull
     ) {
         // given
@@ -172,7 +173,7 @@ public class WingtipsSpringUtilTest {
                           .build();
 
         // when
-        WingtipsSpringUtil.setTracingPropagationHeaders(httpMessageMock, span);
+        WingtipsSpringUtil.propagateTracingHeaders(httpMessageMock, span);
 
         // then
         if (httpMessageIsNull || spanIsNull) {
@@ -192,7 +193,7 @@ public class WingtipsSpringUtilTest {
         "false"
     })
     @Test
-    public void setTracingPropagationHeaders_uses_B3_spec_for_sampleable_header_value(
+    public void propagateTracingHeaders_uses_B3_spec_for_sampleable_header_value(
         boolean sampleable
     ) {
         // given
@@ -201,7 +202,7 @@ public class WingtipsSpringUtilTest {
                         .build();
 
         // when
-        WingtipsSpringUtil.setTracingPropagationHeaders(httpMessageMock, span);
+        WingtipsSpringUtil.propagateTracingHeaders(httpMessageMock, span);
 
         // then
         verify(headersMock).set(TRACE_SAMPLED, convertSampleableBooleanToExpectedB3Value(span.isSampleable()));
@@ -212,7 +213,7 @@ public class WingtipsSpringUtilTest {
         "false"
     })
     @Test
-    public void setTracingPropagationHeaders_only_sends_parent_span_id_header_if_parent_span_id_exists(
+    public void propagateTracingHeaders_only_sends_parent_span_id_header_if_parent_span_id_exists(
         boolean parentSpanIdExists
     ) {
         // given
@@ -222,7 +223,7 @@ public class WingtipsSpringUtilTest {
                         .build();
 
         // when
-        WingtipsSpringUtil.setTracingPropagationHeaders(httpMessageMock, span);
+        WingtipsSpringUtil.propagateTracingHeaders(httpMessageMock, span);
 
         // then
         if (parentSpanIdExists) {
@@ -231,6 +232,31 @@ public class WingtipsSpringUtilTest {
         else {
             verify(headersMock, never()).set(eq(PARENT_SPAN_ID), anyString());
         }
+    }
+
+    @DataProvider(value = {
+        "GET",
+        "HEAD",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE",
+        "OPTIONS",
+        "TRACE",
+        "null"
+    })
+    @Test
+    public void getRequestMethodAsString_works_as_expected(
+        HttpMethod method
+    ) {
+        // given
+        String expectedResult = (method == null) ? "UNKNOWN" : method.name();
+
+        // when
+        String result = WingtipsSpringUtil.getRequestMethodAsString(method);
+
+        // then
+        assertThat(result).isEqualTo(expectedResult);
     }
 
     private void resetTracing() {

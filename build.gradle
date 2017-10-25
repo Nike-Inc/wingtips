@@ -67,6 +67,7 @@ ext {
     zipkinVersion = '1.16.2'
     springVersion = '4.3.7.RELEASE'
     springbootVersion = '1.5.2.RELEASE'
+    apacheHttpClientVersion = '4.4.1'
 
     nikeInternalUtilVersion = '0.9.0.1'
 
@@ -77,6 +78,7 @@ ext {
     assertJVersion = '2.5.0'
     junitDataproviderVersion = '1.10.1'
     restAssuredVersion = '3.0.1'
+    apacheCommonsIoVersion = '2.5'
 
     jettyVersion = '9.3.21.v20170918'
 

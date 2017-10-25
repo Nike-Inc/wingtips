@@ -1,0 +1,12 @@
+<configuration>
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <!-- NO_TRACE_RUNNING is used as a default since it is 16 chars - the same length as normal trace/span IDs -->
+            <pattern>traceId=%X{traceId:-NO_TRACE_RUNNING} %d{yyyy-MM-dd_HH:mm:ss.SSS} [%thread] |-%-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <root level="info">
+        <appender-ref ref="STDOUT" />
+    </root>
+</configuration>

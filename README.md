@@ -26,6 +26,8 @@ converting Wingtips spans to Zipkin spans and sending them to a Zipkin server.
 * [wingtips-zipkin-spring-boot](wingtips-zipkin-spring-boot/README.md) - A plugin to help with Wingtips distributed
 tracing in [Spring Boot](https://spring.io/guides/gs/spring-boot/) environments that also utilize 
 [Zipkin](http://zipkin.io/).  
+* [wingtips-apache-http-client](wingtips-apache-http-client/README.md) - A plugin to help with Wingtips distributed
+tracing when using Apache's `HttpClient`.
 
 If you prefer hands-on exploration rather than readmes, the [sample applications](#samples) provide concrete examples 
 of using Wingtips that are simple, compact, and straightforward.
@@ -236,6 +238,23 @@ You can use the sub-span ability to create parent-child span relationships withi
 
 The pattern for passing traces across network or application boundaries is that the calling service includes its "current span" information when calling the downstream service. The downstream service uses that information to generate its overall request span with the caller's span info as its parent span. This causes the downstream service's request span to contain the same Trace ID and sets up the correct parent-child relationship between the spans. 
 
+#### Propagating tracing info for HTTP client requests
+
+**TL;DR**
+
+Wingtips uses the [Zipkin/B3 specification](http://zipkin.io/pages/instrumenting.html) for HTTP tracing propagation 
+by setting specially-named request headers to the values of the caller's `Span`. There is a handy 
+`HttpRequestTracingUtils.propagateTracingHeaders(...)` helper method that performs this work so that it conforms to the 
+B3 spec - all you need to do is wrap your request or headers object in an implementation of the 
+`HttpObjectForPropagation` interface and pass it to `HttpRequestTracingUtils.propagateTracingHeaders(...)` along with 
+your current span. The helper method will set the B3 headers on your request to the appropriate values based on the 
+`Span` you pass in.  
+
+**Details**
+
+If you don't want to use the helper method described above then here are the technical details on how to propagate
+tracing info on a HTTP client request yourself:
+
 For HTTP requests it is assumed that you will pass the caller's span information to the downstream system using the request headers defined in `TraceHeaders`. Most headers defined in that class should be included in the downstream request (see below), as well as any application specific user ID header if you want to take advantage of the optional user ID functionality of spans. Note that to be [properly B3 compatible](http://zipkin.io/pages/instrumenting.html) (and therefore compatible with Zipkin systems) you should send the `X-B3-Sampled` header value as `"0"` for `false` and `"1"` for `true`. All the other header values should be correct if you send the appropriate `Span` property as-is, e.g. send `Span.getTraceId()` for the `X-B3-TraceId` header as it should already be in the correct B3 format.
 
 **Propagation requirements:**
@@ -248,6 +267,13 @@ For HTTP requests it is assumed that you will pass the caller's span information
 exclude it depending on whether you want downstream systems to have access to that info. When calling downstream
 services you control it may be good to include it for extra debugging info, and for downstream services outside your 
 control you may wish to exclude it to prevent unintentional information leakage.
+
+#### Tooling to help with tracing propagation
+
+The following Wingtips modules have helpers to simplify tracing propagation when using their respective technologies:
+
+* [wingtips-apache-http-client](wingtips-apache-http-client)
+* [wingtips-spring](wingtips-spring)
 
 <a name="adjusting_behavior"></a>
 ### Adjusting Behavior and Execution Options

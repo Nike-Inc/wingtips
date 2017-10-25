@@ -291,8 +291,7 @@ public class WingtipsClientHttpRequestInterceptorTest {
         // given
         WingtipsClientHttpRequestInterceptor interceptorSpy = spy(new WingtipsClientHttpRequestInterceptor());
 
-        String methodAsString = UUID.randomUUID().toString();
-        doReturn(methodAsString).when(interceptorSpy).getRequestMethodAsString(any(HttpRequest.class));
+        HttpMethod method = HttpMethod.PATCH;
 
         String noQueryStringUri = uri.toString();
         if (includeQueryString) {
@@ -301,44 +300,14 @@ public class WingtipsClientHttpRequestInterceptorTest {
 
         httpRequest = mock(HttpRequest.class);
         doReturn(uri).when(httpRequest).getURI();
+        doReturn(method).when(httpRequest).getMethod();
 
         // when
         String result = interceptorSpy.getSubspanSpanName(httpRequest);
 
         // then
-        assertThat(result).isEqualTo("resttemplate_downstream_call-" + methodAsString + "_" + noQueryStringUri);
-        verify(interceptorSpy).getRequestMethodAsString(httpRequest);
+        assertThat(result).isEqualTo("resttemplate_downstream_call-" + method.name() + "_" + noQueryStringUri);
         verify(httpRequest).getURI();
-    }
-
-    @DataProvider(value = {
-        "GET", 
-        "HEAD", 
-        "POST", 
-        "PUT", 
-        "PATCH", 
-        "DELETE", 
-        "OPTIONS", 
-        "TRACE",
-        "null"
-    })
-    @Test
-    public void getRequestMethodAsString_works_as_expected(
-        HttpMethod method
-    ) {
-        // given
-        WingtipsClientHttpRequestInterceptor interceptor = new WingtipsClientHttpRequestInterceptor();
-
-        httpRequest = mock(HttpRequest.class);
-        doReturn(method).when(httpRequest).getMethod();
-
-        String expectedResult = (method == null) ? "UNKNOWN" : method.name();
-
-        // when
-        String result = interceptor.getRequestMethodAsString(httpRequest);
-
-        // then
-        assertThat(result).isEqualTo(expectedResult);
     }
 
 }
