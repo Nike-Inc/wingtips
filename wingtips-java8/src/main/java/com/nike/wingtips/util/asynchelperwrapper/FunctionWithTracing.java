@@ -22,7 +22,7 @@ import static com.nike.wingtips.util.AsyncWingtipsHelperStatic.unlinkTracingFrom
 public class FunctionWithTracing<T, U> implements Function<T, U> {
 
     protected final Function<T, U> origFunction;
-    protected final Deque<Span> distributedTraceStackForExecution;
+    protected final Deque<Span> spanStackForExecution;
     protected final Map<String, String> mdcContextMapForExecution;
 
     /**
@@ -73,13 +73,13 @@ public class FunctionWithTracing<T, U> implements Function<T, U> {
      * means the corresponding info will not be available to the thread when the operation is executed.
      */
     public FunctionWithTracing(Function<T, U> origFunction,
-                               Deque<Span> distributedTraceStackForExecution,
+                               Deque<Span> spanStackForExecution,
                                Map<String, String> mdcContextMapForExecution) {
         if (origFunction == null)
             throw new IllegalArgumentException("origFunction cannot be null");
 
         this.origFunction = origFunction;
-        this.distributedTraceStackForExecution = distributedTraceStackForExecution;
+        this.spanStackForExecution = spanStackForExecution;
         this.mdcContextMapForExecution = mdcContextMapForExecution;
     }
 
@@ -129,7 +129,7 @@ public class FunctionWithTracing<T, U> implements Function<T, U> {
 
     /**
      * Equivalent to calling {@code
-     * new FunctionWithTracing(origFunction, distributedTraceStackForExecution, mdcContextMapForExecution)} -
+     * new FunctionWithTracing(origFunction, spanStackForExecution, mdcContextMapForExecution)} -
      * this allows you to do a static method import for cleaner looking code in some cases. This method uses the given
      * trace and MDC information, which will be associated with the thread when the given operation is executed.
      *
@@ -139,14 +139,14 @@ public class FunctionWithTracing<T, U> implements Function<T, U> {
      * <p>The trace and/or MDC info can be null and no error will be thrown, however any trace or MDC info that is null
      * means the corresponding info will not be available to the thread when the operation is executed.
      *
-     * @return {@code new FunctionWithTracing(origFunction, distributedTraceStackForExecution, mdcContextMapForExecution)}.
+     * @return {@code new FunctionWithTracing(origFunction, spanStackForExecution, mdcContextMapForExecution)}.
      * @see FunctionWithTracing#FunctionWithTracing(Function, Deque, Map)
      * @see FunctionWithTracing
      */
     public static <T, U> FunctionWithTracing<T, U> withTracing(Function<T, U> origFunction,
-                                                               Deque<Span> distributedTraceStackForExecution,
+                                                               Deque<Span> spanStackForExecution,
                                                                Map<String, String> mdcContextMapForExecution) {
-        return new FunctionWithTracing<>(origFunction, distributedTraceStackForExecution, mdcContextMapForExecution);
+        return new FunctionWithTracing<>(origFunction, spanStackForExecution, mdcContextMapForExecution);
     }
 
     @Override
@@ -154,7 +154,7 @@ public class FunctionWithTracing<T, U> implements Function<T, U> {
         TracingState originalThreadInfo = null;
         try {
             originalThreadInfo =
-                linkTracingToCurrentThread(distributedTraceStackForExecution, mdcContextMapForExecution);
+                linkTracingToCurrentThread(spanStackForExecution, mdcContextMapForExecution);
 
             return origFunction.apply(t);
         }

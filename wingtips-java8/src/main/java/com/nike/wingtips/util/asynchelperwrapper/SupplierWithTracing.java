@@ -22,7 +22,7 @@ import static com.nike.wingtips.util.AsyncWingtipsHelperStatic.unlinkTracingFrom
 public class SupplierWithTracing<U> implements Supplier<U> {
 
     protected final Supplier<U> origSupplier;
-    protected final Deque<Span> distributedTraceStackForExecution;
+    protected final Deque<Span> spanStackForExecution;
     protected final Map<String, String> mdcContextMapForExecution;
 
     /**
@@ -73,13 +73,13 @@ public class SupplierWithTracing<U> implements Supplier<U> {
      * means the corresponding info will not be available to the thread when the operation is executed.
      */
     public SupplierWithTracing(Supplier<U> origSupplier,
-                               Deque<Span> distributedTraceStackForExecution,
+                               Deque<Span> spanStackForExecution,
                                Map<String, String> mdcContextMapForExecution) {
         if (origSupplier == null)
             throw new IllegalArgumentException("origSupplier cannot be null");
 
         this.origSupplier = origSupplier;
-        this.distributedTraceStackForExecution = distributedTraceStackForExecution;
+        this.spanStackForExecution = spanStackForExecution;
         this.mdcContextMapForExecution = mdcContextMapForExecution;
     }
 
@@ -127,7 +127,7 @@ public class SupplierWithTracing<U> implements Supplier<U> {
 
     /**
      * Equivalent to calling {@code
-     * new SupplierWithTracing(origSupplier, distributedTraceStackForExecution, mdcContextMapForExecution)} -
+     * new SupplierWithTracing(origSupplier, spanStackForExecution, mdcContextMapForExecution)} -
      * this allows you to do a static method import for cleaner looking code in some cases. This method uses the given
      * trace and MDC information, which will be associated with the thread when the given operation is executed.
      *
@@ -137,14 +137,14 @@ public class SupplierWithTracing<U> implements Supplier<U> {
      * <p>The trace and/or MDC info can be null and no error will be thrown, however any trace or MDC info that is null
      * means the corresponding info will not be available to the thread when the operation is executed.
      *
-     * @return {@code new SupplierWithTracing(origSupplier, distributedTraceStackForExecution, mdcContextMapForExecution)}.
+     * @return {@code new SupplierWithTracing(origSupplier, spanStackForExecution, mdcContextMapForExecution)}.
      * @see SupplierWithTracing#SupplierWithTracing(Supplier, Deque, Map)
      * @see SupplierWithTracing
      */
     public static <U> SupplierWithTracing<U> withTracing(Supplier<U> origSupplier,
-                                                         Deque<Span> distributedTraceStackForExecution,
+                                                         Deque<Span> spanStackForExecution,
                                                          Map<String, String> mdcContextMapForExecution) {
-        return new SupplierWithTracing<>(origSupplier, distributedTraceStackForExecution, mdcContextMapForExecution);
+        return new SupplierWithTracing<>(origSupplier, spanStackForExecution, mdcContextMapForExecution);
     }
 
     @Override
@@ -152,7 +152,7 @@ public class SupplierWithTracing<U> implements Supplier<U> {
         TracingState originalThreadInfo = null;
         try {
             originalThreadInfo =
-                linkTracingToCurrentThread(distributedTraceStackForExecution, mdcContextMapForExecution);
+                linkTracingToCurrentThread(spanStackForExecution, mdcContextMapForExecution);
 
             return origSupplier.get();
         }

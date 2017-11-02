@@ -150,10 +150,10 @@ public interface AsyncWingtipsHelper {
      */
     @SuppressWarnings("deprecation")
     default Runnable runnableWithTracing(Runnable runnable,
-                                         Deque<Span> distributedTraceStackToLink,
+                                         Deque<Span> spanStackToLink,
                                          Map<String, String> mdcContextMapToLink) {
         return AsyncWingtipsHelperJava7.runnableWithTracing(
-            runnable, distributedTraceStackToLink, mdcContextMapToLink
+            runnable, spanStackToLink, mdcContextMapToLink
         );
     }
 
@@ -189,10 +189,10 @@ public interface AsyncWingtipsHelper {
      */
     @SuppressWarnings("deprecation")
     default <U> Callable<U> callableWithTracing(Callable<U> callable,
-                                                Deque<Span> distributedTraceStackToLink,
+                                                Deque<Span> spanStackToLink,
                                                 Map<String, String> mdcContextMapToLink) {
         return AsyncWingtipsHelperJava7.callableWithTracing(
-            callable, distributedTraceStackToLink, mdcContextMapToLink
+            callable, spanStackToLink, mdcContextMapToLink
         );
     }
 
@@ -225,9 +225,9 @@ public interface AsyncWingtipsHelper {
      * execution.
      */
     default <U> Supplier<U> supplierWithTracing(Supplier<U> supplier,
-                                                Deque<Span> distributedTraceStackToLink,
+                                                Deque<Span> spanStackToLink,
                                                 Map<String, String> mdcContextMapToLink) {
-        return new SupplierWithTracing<>(supplier, distributedTraceStackToLink, mdcContextMapToLink);
+        return new SupplierWithTracing<>(supplier, spanStackToLink, mdcContextMapToLink);
     }
 
     /**
@@ -259,9 +259,9 @@ public interface AsyncWingtipsHelper {
      * execution.
      */
     default <T, U> Function<T, U> functionWithTracing(Function<T, U> fn,
-                                                      Deque<Span> distributedTraceStackToLink,
+                                                      Deque<Span> spanStackToLink,
                                                       Map<String, String> mdcContextMapToLink) {
-        return new FunctionWithTracing<>(fn, distributedTraceStackToLink, mdcContextMapToLink);
+        return new FunctionWithTracing<>(fn, spanStackToLink, mdcContextMapToLink);
     }
 
     /**
@@ -295,9 +295,9 @@ public interface AsyncWingtipsHelper {
      * execution.
      */
     default <T, U, R> BiFunction<T, U, R> biFunctionWithTracing(BiFunction<T, U, R> fn,
-                                                                Deque<Span> distributedTraceStackToLink,
+                                                                Deque<Span> spanStackToLink,
                                                                 Map<String, String> mdcContextMapToLink) {
-        return new BiFunctionWithTracing<>(fn, distributedTraceStackToLink, mdcContextMapToLink);
+        return new BiFunctionWithTracing<>(fn, spanStackToLink, mdcContextMapToLink);
     }
 
     /**
@@ -329,9 +329,9 @@ public interface AsyncWingtipsHelper {
      * execution.
      */
     default <T> Consumer<T> consumerWithTracing(Consumer<T> consumer,
-                                                Deque<Span> distributedTraceStackToLink,
+                                                Deque<Span> spanStackToLink,
                                                 Map<String, String> mdcContextMapToLink) {
-        return new ConsumerWithTracing<>(consumer, distributedTraceStackToLink, mdcContextMapToLink);
+        return new ConsumerWithTracing<>(consumer, spanStackToLink, mdcContextMapToLink);
     }
 
     /**
@@ -365,9 +365,9 @@ public interface AsyncWingtipsHelper {
      * execution.
      */
     default <T, U> BiConsumer<T, U> biConsumerWithTracing(BiConsumer<T, U> biConsumer,
-                                                          Deque<Span> distributedTraceStackToLink,
+                                                          Deque<Span> spanStackToLink,
                                                           Map<String, String> mdcContextMapToLink) {
-        return new BiConsumerWithTracing<>(biConsumer, distributedTraceStackToLink, mdcContextMapToLink);
+        return new BiConsumerWithTracing<>(biConsumer, spanStackToLink, mdcContextMapToLink);
     }
 
     /**
@@ -399,9 +399,9 @@ public interface AsyncWingtipsHelper {
      * execution.
      */
     default <T> Predicate<T> predicateWithTracing(Predicate<T> predicate,
-                                                  Deque<Span> distributedTraceStackToLink,
+                                                  Deque<Span> spanStackToLink,
                                                   Map<String, String> mdcContextMapToLink) {
-        return new PredicateWithTracing<>(predicate, distributedTraceStackToLink, mdcContextMapToLink);
+        return new PredicateWithTracing<>(predicate, spanStackToLink, mdcContextMapToLink);
     }
 
     /**
@@ -435,9 +435,9 @@ public interface AsyncWingtipsHelper {
      * execution.
      */
     default <T, U> BiPredicate<T, U> biPredicateWithTracing(BiPredicate<T, U> biPredicate,
-                                                            Deque<Span> distributedTraceStackToLink,
+                                                            Deque<Span> spanStackToLink,
                                                             Map<String, String> mdcContextMapToLink) {
-        return new BiPredicateWithTracing<>(biPredicate, distributedTraceStackToLink, mdcContextMapToLink);
+        return new BiPredicateWithTracing<>(biPredicate, spanStackToLink, mdcContextMapToLink);
     }
 
     /**
@@ -446,20 +446,20 @@ public interface AsyncWingtipsHelper {
      * need to store the copy info returned by this method for later.
      *
      * @param threadInfoToLink
-     *     A {@link Pair} containing the distributed trace stack and MDC info you want to link to the current thread.
-     *     This argument can be null - if it is null then {@link Tracer} will be setup with an empty trace stack (wiping
+     *     A {@link Pair} containing the span stack and MDC info you want to link to the current thread.
+     *     This argument can be null - if it is null then {@link Tracer} will be setup with an empty span stack (wiping
      *     out any existing in-progress traces) *and* {@link MDC#clear()} will be called (wiping out any
      *     existing MDC info). The left and/or right portion of the pair can also be null, with any null portion of the
      *     pair causing the corresponding portion to be emptied/cleared while letting any non-null portion link to the
      *     thread as expected. You can pass in a {@link TracingState} for clearer less verbose code since it extends
      *     {@code Pair<Deque<Span>, Map<String, String>>}.
      *
-     * @return A *COPY* of the original trace stack and MDC info on the thread when this method was called (before being
+     * @return A *COPY* of the original span stack and MDC info on the thread when this method was called (before being
      * replaced with the given arguments). The returned {@link TracingState} object will never be null, but the values
      * it contains may be null. A copy is returned rather than the original to prevent undesired behavior (storing the
      * return value and then passing it in to {@link #unlinkTracingFromCurrentThread(Pair)} later should *guarantee*
      * that after calling that unlink method the thread state is exactly as it was right *before* calling this link
-     * method. If we returned the original trace stack this contract guarantee could be violated).
+     * method. If we returned the original span stack this contract guarantee could be violated).
      */
     @SuppressWarnings("deprecation")
     default TracingState linkTracingToCurrentThread(
@@ -473,28 +473,28 @@ public interface AsyncWingtipsHelper {
      * on the current thread will be wiped out and overridden, so if you need to go back to them in the future you'll
      * need to store the copy info returned by this method for later.
      *
-     * @param distributedTraceStackToLink
+     * @param spanStackToLink
      *     The stack of distributed traces that should be associated with the current thread. This can be null - if it
-     *     is null then {@link Tracer} will be setup with an empty trace stack (wiping out any existing in-progress
+     *     is null then {@link Tracer} will be setup with an empty span stack (wiping out any existing in-progress
      *     traces).
      * @param mdcContextMapToLink
      *     The MDC context map to associate with the current thread. This can be null - if it is null then {@link
      *     MDC#clear()} will be called (wiping out any existing MDC info).
      *
-     * @return A *COPY* of the original trace stack and MDC info on the thread when this method was called (before being
+     * @return A *COPY* of the original span stack and MDC info on the thread when this method was called (before being
      * replaced with the given arguments). The returned {@link TracingState} object will never be null, but the values
      * it contains may be null. A copy is returned rather than the original to prevent undesired behavior (storing the
      * return value and then passing it in to {@link #unlinkTracingFromCurrentThread(Pair)} later should *guarantee*
      * that after calling that unlink method the thread state is exactly as it was right *before* calling this link
-     * method. If we returned the original trace stack this contract guarantee could be violated).
+     * method. If we returned the original span stack this contract guarantee could be violated).
      */
     @SuppressWarnings("deprecation")
     default TracingState linkTracingToCurrentThread(
-        Deque<Span> distributedTraceStackToLink,
+        Deque<Span> spanStackToLink,
         Map<String, String> mdcContextMapToLink
     ) {
         return AsyncWingtipsHelperJava7.linkTracingToCurrentThread(
-            distributedTraceStackToLink, mdcContextMapToLink
+            spanStackToLink, mdcContextMapToLink
         );
     }
 
@@ -511,16 +511,16 @@ public interface AsyncWingtipsHelper {
 
     /**
      * Calls {@link Tracer#unregisterFromThread()} and {@link MDC#clear()} to reset this thread's tracing and
-     * MDC state to be completely clean, then (optionally) resets the trace stack and MDC info to the arguments
-     * provided. If the trace stack argument is null then the trace stack will *not* be reset, and similarly if the MDC
+     * MDC state to be completely clean, then (optionally) resets the span stack and MDC info to the arguments
+     * provided. If the span stack argument is null then the span stack will *not* be reset, and similarly if the MDC
      * info is null then the MDC info will *not* be reset. So if both are null then when this method finishes the trace
      * stack and MDC will be left in a blank state.
      */
     @SuppressWarnings("deprecation")
-    default void unlinkTracingFromCurrentThread(Deque<Span> distributedTraceStackToResetFor,
+    default void unlinkTracingFromCurrentThread(Deque<Span> spanStackToResetFor,
                                                 Map<String, String> mdcContextMapToResetFor) {
         AsyncWingtipsHelperJava7.unlinkTracingFromCurrentThread(
-            distributedTraceStackToResetFor, mdcContextMapToResetFor
+            spanStackToResetFor, mdcContextMapToResetFor
         );
     }
 

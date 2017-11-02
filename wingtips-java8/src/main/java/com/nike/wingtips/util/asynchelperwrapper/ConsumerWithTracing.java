@@ -22,7 +22,7 @@ import static com.nike.wingtips.util.AsyncWingtipsHelperStatic.unlinkTracingFrom
 public class ConsumerWithTracing<T> implements Consumer<T> {
 
     protected final Consumer<T> origConsumer;
-    protected final Deque<Span> distributedTraceStackForExecution;
+    protected final Deque<Span> spanStackForExecution;
     protected final Map<String, String> mdcContextMapForExecution;
 
     /**
@@ -73,13 +73,13 @@ public class ConsumerWithTracing<T> implements Consumer<T> {
      * means the corresponding info will not be available to the thread when the operation is executed.
      */
     public ConsumerWithTracing(Consumer<T> origConsumer,
-                               Deque<Span> distributedTraceStackForExecution,
+                               Deque<Span> spanStackForExecution,
                                Map<String, String> mdcContextMapForExecution) {
         if (origConsumer == null)
             throw new IllegalArgumentException("origConsumer cannot be null");
 
         this.origConsumer = origConsumer;
-        this.distributedTraceStackForExecution = distributedTraceStackForExecution;
+        this.spanStackForExecution = spanStackForExecution;
         this.mdcContextMapForExecution = mdcContextMapForExecution;
     }
 
@@ -127,7 +127,7 @@ public class ConsumerWithTracing<T> implements Consumer<T> {
 
     /**
      * Equivalent to calling {@code
-     * new ConsumerWithTracing(origConsumer, distributedTraceStackForExecution, mdcContextMapForExecution)} -
+     * new ConsumerWithTracing(origConsumer, spanStackForExecution, mdcContextMapForExecution)} -
      * this allows you to do a static method import for cleaner looking code in some cases. This method uses the given
      * trace and MDC information, which will be associated with the thread when the given operation is executed.
      *
@@ -137,14 +137,14 @@ public class ConsumerWithTracing<T> implements Consumer<T> {
      * <p>The trace and/or MDC info can be null and no error will be thrown, however any trace or MDC info that is null
      * means the corresponding info will not be available to the thread when the operation is executed.
      *
-     * @return {@code new ConsumerWithTracing(origConsumer, distributedTraceStackForExecution, mdcContextMapForExecution)}.
+     * @return {@code new ConsumerWithTracing(origConsumer, spanStackForExecution, mdcContextMapForExecution)}.
      * @see ConsumerWithTracing#ConsumerWithTracing(Consumer, Deque, Map)
      * @see ConsumerWithTracing
      */
     public static <T> ConsumerWithTracing<T> withTracing(Consumer<T> origConsumer,
-                                                         Deque<Span> distributedTraceStackForExecution,
+                                                         Deque<Span> spanStackForExecution,
                                                          Map<String, String> mdcContextMapForExecution) {
-        return new ConsumerWithTracing<>(origConsumer, distributedTraceStackForExecution, mdcContextMapForExecution);
+        return new ConsumerWithTracing<>(origConsumer, spanStackForExecution, mdcContextMapForExecution);
     }
     
     @Override
@@ -152,7 +152,7 @@ public class ConsumerWithTracing<T> implements Consumer<T> {
         TracingState originalThreadInfo = null;
         try {
             originalThreadInfo =
-                linkTracingToCurrentThread(distributedTraceStackForExecution, mdcContextMapForExecution);
+                linkTracingToCurrentThread(spanStackForExecution, mdcContextMapForExecution);
 
             origConsumer.accept(t);
         }

@@ -149,9 +149,9 @@ public class AsyncWingtipsHelperJava7 {
      */
     @Deprecated
     public static Runnable runnableWithTracing(Runnable runnable,
-                                               Deque<Span> distributedTraceStackToLink,
+                                               Deque<Span> spanStackToLink,
                                                Map<String, String> mdcContextMapToLink) {
-        return new RunnableWithTracing(runnable, distributedTraceStackToLink, mdcContextMapToLink);
+        return new RunnableWithTracing(runnable, spanStackToLink, mdcContextMapToLink);
     }
 
     /**
@@ -195,9 +195,9 @@ public class AsyncWingtipsHelperJava7 {
      */
     @Deprecated
     public static <U> Callable<U> callableWithTracing(Callable<U> callable,
-                                                      Deque<Span> distributedTraceStackToLink,
+                                                      Deque<Span> spanStackToLink,
                                                       Map<String, String> mdcContextMapToLink) {
-        return new CallableWithTracing<>(callable, distributedTraceStackToLink, mdcContextMapToLink);
+        return new CallableWithTracing<>(callable, spanStackToLink, mdcContextMapToLink);
     }
     
     /**
@@ -206,20 +206,20 @@ public class AsyncWingtipsHelperJava7 {
      * need to store the copy info returned by this method for later.
      *
      * @param threadInfoToLink
-     *     A {@link Pair} containing the distributed trace stack and MDC info you want to link to the current thread.
-     *     This argument can be null - if it is null then {@link Tracer} will be setup with an empty trace stack (wiping
+     *     A {@link Pair} containing the span stack and MDC info you want to link to the current thread.
+     *     This argument can be null - if it is null then {@link Tracer} will be setup with an empty span stack (wiping
      *     out any existing in-progress traces) *and* {@link MDC#clear()} will be called (wiping out any
      *     existing MDC info). The left and/or right portion of the pair can also be null, with any null portion of the
      *     pair causing the corresponding portion to be emptied/cleared while letting any non-null portion link to the
      *     thread as expected. You can pass in a {@link TracingState} for clearer less verbose code since it extends
      *     {@code Pair<Deque<Span>, Map<String, String>>}.
      *
-     * @return A *COPY* of the original trace stack and MDC info on the thread when this method was called (before being
+     * @return A *COPY* of the original span stack and MDC info on the thread when this method was called (before being
      * replaced with the given arguments). The returned {@link TracingState} object will never be null, but the values
      * it contains may be null. A copy is returned rather than the original to prevent undesired behavior (storing the
      * return value and then passing it in to {@link #unlinkTracingFromCurrentThread(Pair)} later should *guarantee*
      * that after calling that unlink method the thread state is exactly as it was right *before* calling this link
-     * method. If we returned the original trace stack this contract guarantee could be violated).
+     * method. If we returned the original span stack this contract guarantee could be violated).
      *
      * @deprecated Please move to the Java 8 version of this class and method ({@code AsyncWingtipsHelper} or the static
      * {@code AsyncWingtipsHelperStatic}) whenever possible.
@@ -228,10 +228,10 @@ public class AsyncWingtipsHelperJava7 {
     public static TracingState linkTracingToCurrentThread(
         Pair<Deque<Span>, Map<String, String>> threadInfoToLink
     ) {
-        Deque<Span> distributedTraceStack = (threadInfoToLink == null) ? null : threadInfoToLink.getLeft();
+        Deque<Span> spanStack = (threadInfoToLink == null) ? null : threadInfoToLink.getLeft();
         Map<String, String> mdcContextMap = (threadInfoToLink == null) ? null : threadInfoToLink.getRight();
 
-        return linkTracingToCurrentThread(distributedTraceStack, mdcContextMap);
+        return linkTracingToCurrentThread(spanStack, mdcContextMap);
     }
 
     /**
@@ -239,44 +239,44 @@ public class AsyncWingtipsHelperJava7 {
      * on the current thread will be wiped out and overridden, so if you need to go back to them in the future you'll
      * need to store the copy info returned by this method for later.
      *
-     * @param distributedTraceStackToLink
+     * @param spanStackToLink
      *     The stack of distributed traces that should be associated with the current thread. This can be null - if it
-     *     is null then {@link Tracer} will be setup with an empty trace stack (wiping out any existing in-progress
+     *     is null then {@link Tracer} will be setup with an empty span stack (wiping out any existing in-progress
      *     traces).
      * @param mdcContextMapToLink
      *     The MDC context map to associate with the current thread. This can be null - if it is null then {@link
      *     MDC#clear()} will be called (wiping out any existing MDC info).
      *
-     * @return A *COPY* of the original trace stack and MDC info on the thread when this method was called (before being
+     * @return A *COPY* of the original span stack and MDC info on the thread when this method was called (before being
      * replaced with the given arguments). The returned {@link TracingState} object will never be null, but the values
      * it contains may be null. A copy is returned rather than the original to prevent undesired behavior (storing the
      * return value and then passing it in to {@link #unlinkTracingFromCurrentThread(Pair)} later should *guarantee*
      * that after calling that unlink method the thread state is exactly as it was right *before* calling this link
-     * method. If we returned the original trace stack this contract guarantee could be violated).
+     * method. If we returned the original span stack this contract guarantee could be violated).
      *
      * @deprecated Please move to the Java 8 version of this class and method ({@code AsyncWingtipsHelper} or the static
      * {@code AsyncWingtipsHelperStatic}) whenever possible.
      */
     @Deprecated
     public static TracingState linkTracingToCurrentThread(
-        Deque<Span> distributedTraceStackToLink,
+        Deque<Span> spanStackToLink,
         Map<String, String> mdcContextMapToLink
     ) {
-        // Unregister the trace stack so that if there's already a trace on the stack we don't get exceptions when
+        // Unregister the span stack so that if there's already a trace on the stack we don't get exceptions when
         //      registering the desired stack with the thread, and keep a copy of the results.
         Map<String, String> callingThreadMdcContextMap = MDC.getCopyOfContextMap();
-        Deque<Span> callingThreadTraceStack = Tracer.getInstance().unregisterFromThread();
+        Deque<Span> callingThreadSpanStack = Tracer.getInstance().unregisterFromThread();
 
-        // Now setup the trace stack and MDC as desired
+        // Now setup the span stack and MDC as desired
         if (mdcContextMapToLink == null)
             MDC.clear();
         else
             MDC.setContextMap(mdcContextMapToLink);
 
-        Tracer.getInstance().registerWithThread(distributedTraceStackToLink);
+        Tracer.getInstance().registerWithThread(spanStackToLink);
 
         // Return the copied original data so that it can be re-linked later (if the caller wants)
-        return new TracingState(callingThreadTraceStack, callingThreadMdcContextMap);
+        return new TracingState(callingThreadSpanStack, callingThreadMdcContextMap);
     }
 
     /**
@@ -292,18 +292,18 @@ public class AsyncWingtipsHelperJava7 {
     public static void unlinkTracingFromCurrentThread(
         Pair<Deque<Span>, Map<String, String>> threadInfoToResetFor
     ) {
-        Deque<Span> traceStackToResetFor = (threadInfoToResetFor == null) ? null : threadInfoToResetFor.getLeft();
+        Deque<Span> spanStackToResetFor = (threadInfoToResetFor == null) ? null : threadInfoToResetFor.getLeft();
         Map<String, String> mdcContextMapToResetFor = (threadInfoToResetFor == null)
                                                       ? null
                                                       : threadInfoToResetFor.getRight();
 
-        unlinkTracingFromCurrentThread(traceStackToResetFor, mdcContextMapToResetFor);
+        unlinkTracingFromCurrentThread(spanStackToResetFor, mdcContextMapToResetFor);
     }
 
     /**
      * Calls {@link Tracer#unregisterFromThread()} and {@link MDC#clear()} to reset this thread's tracing and
-     * MDC state to be completely clean, then (optionally) resets the trace stack and MDC info to the arguments
-     * provided. If the trace stack argument is null then the trace stack will *not* be reset, and similarly if the MDC
+     * MDC state to be completely clean, then (optionally) resets the span stack and MDC info to the arguments
+     * provided. If the span stack argument is null then the span stack will *not* be reset, and similarly if the MDC
      * info is null then the MDC info will *not* be reset. So if both are null then when this method finishes the trace
      * stack and MDC will be left in a blank state.
      *
@@ -311,7 +311,7 @@ public class AsyncWingtipsHelperJava7 {
      * {@code AsyncWingtipsHelperStatic}) whenever possible.
      */
     @Deprecated
-    public static void unlinkTracingFromCurrentThread(Deque<Span> distributedTraceStackToResetFor,
+    public static void unlinkTracingFromCurrentThread(Deque<Span> spanStackToResetFor,
                                                       Map<String, String> mdcContextMapToResetFor) {
         Tracer.getInstance().unregisterFromThread();
         MDC.clear();
@@ -319,8 +319,8 @@ public class AsyncWingtipsHelperJava7 {
         if (mdcContextMapToResetFor != null)
             MDC.setContextMap(mdcContextMapToResetFor);
 
-        if (distributedTraceStackToResetFor != null)
-            Tracer.getInstance().registerWithThread(distributedTraceStackToResetFor);
+        if (spanStackToResetFor != null)
+            Tracer.getInstance().registerWithThread(spanStackToResetFor);
     }
     
 }

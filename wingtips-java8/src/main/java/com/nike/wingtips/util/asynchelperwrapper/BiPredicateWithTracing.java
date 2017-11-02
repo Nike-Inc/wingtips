@@ -22,7 +22,7 @@ import static com.nike.wingtips.util.AsyncWingtipsHelperStatic.unlinkTracingFrom
 public class BiPredicateWithTracing<T, U> implements BiPredicate<T, U> {
 
     protected final BiPredicate<T, U> origBiPredicate;
-    protected final Deque<Span> distributedTraceStackForExecution;
+    protected final Deque<Span> spanStackForExecution;
     protected final Map<String, String> mdcContextMapForExecution;
 
     /**
@@ -73,13 +73,13 @@ public class BiPredicateWithTracing<T, U> implements BiPredicate<T, U> {
      * means the corresponding info will not be available to the thread when the operation is executed.
      */
     public BiPredicateWithTracing(BiPredicate<T, U> origBiPredicate,
-                                  Deque<Span> distributedTraceStackForExecution,
+                                  Deque<Span> spanStackForExecution,
                                   Map<String, String> mdcContextMapForExecution) {
         if (origBiPredicate == null)
             throw new IllegalArgumentException("origBiPredicate cannot be null");
 
         this.origBiPredicate = origBiPredicate;
-        this.distributedTraceStackForExecution = distributedTraceStackForExecution;
+        this.spanStackForExecution = spanStackForExecution;
         this.mdcContextMapForExecution = mdcContextMapForExecution;
     }
 
@@ -129,7 +129,7 @@ public class BiPredicateWithTracing<T, U> implements BiPredicate<T, U> {
 
     /**
      * Equivalent to calling {@code
-     * new BiPredicateWithTracing(origBiPredicate, distributedTraceStackForExecution, mdcContextMapForExecution)} -
+     * new BiPredicateWithTracing(origBiPredicate, spanStackForExecution, mdcContextMapForExecution)} -
      * this allows you to do a static method import for cleaner looking code in some cases. This method uses the given
      * trace and MDC information, which will be associated with the thread when the given operation is executed.
      *
@@ -139,14 +139,14 @@ public class BiPredicateWithTracing<T, U> implements BiPredicate<T, U> {
      * <p>The trace and/or MDC info can be null and no error will be thrown, however any trace or MDC info that is null
      * means the corresponding info will not be available to the thread when the operation is executed.
      *
-     * @return {@code new BiPredicateWithTracing(origBiPredicate, distributedTraceStackForExecution, mdcContextMapForExecution)}.
+     * @return {@code new BiPredicateWithTracing(origBiPredicate, spanStackForExecution, mdcContextMapForExecution)}.
      * @see BiPredicateWithTracing#BiPredicateWithTracing(BiPredicate, Deque, Map)
      * @see BiPredicateWithTracing
      */
     public static <T, U> BiPredicateWithTracing<T, U> withTracing(BiPredicate<T, U> origBiPredicate,
-                                                                  Deque<Span> distributedTraceStackForExecution,
+                                                                  Deque<Span> spanStackForExecution,
                                                                   Map<String, String> mdcContextMapForExecution) {
-        return new BiPredicateWithTracing<>(origBiPredicate, distributedTraceStackForExecution, mdcContextMapForExecution);
+        return new BiPredicateWithTracing<>(origBiPredicate, spanStackForExecution, mdcContextMapForExecution);
     }
 
     @Override
@@ -154,7 +154,7 @@ public class BiPredicateWithTracing<T, U> implements BiPredicate<T, U> {
         TracingState originalThreadInfo = null;
         try {
             originalThreadInfo =
-                linkTracingToCurrentThread(distributedTraceStackForExecution, mdcContextMapForExecution);
+                linkTracingToCurrentThread(spanStackForExecution, mdcContextMapForExecution);
 
             return origBiPredicate.test(t, u);
         }

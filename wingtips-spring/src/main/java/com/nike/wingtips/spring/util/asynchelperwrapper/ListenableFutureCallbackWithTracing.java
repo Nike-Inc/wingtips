@@ -22,7 +22,7 @@ import static com.nike.wingtips.util.AsyncWingtipsHelperJava7.unlinkTracingFromC
 public class ListenableFutureCallbackWithTracing<T> implements ListenableFutureCallback<T> {
 
     protected final ListenableFutureCallback<T> origListenableFutureCallback;
-    protected final Deque<Span> distributedTraceStackForExecution;
+    protected final Deque<Span> spanStackForExecution;
     protected final Map<String, String> mdcContextMapForExecution;
 
     /**
@@ -73,13 +73,13 @@ public class ListenableFutureCallbackWithTracing<T> implements ListenableFutureC
      * means the corresponding info will not be available to the thread when the operation is executed.
      */
     public ListenableFutureCallbackWithTracing(ListenableFutureCallback<T> origListenableFutureCallback,
-                                               Deque<Span> distributedTraceStackForExecution,
+                                               Deque<Span> spanStackForExecution,
                                                Map<String, String> mdcContextMapForExecution) {
         if (origListenableFutureCallback == null)
             throw new IllegalArgumentException("origListenableFutureCallback cannot be null");
 
         this.origListenableFutureCallback = origListenableFutureCallback;
-        this.distributedTraceStackForExecution = distributedTraceStackForExecution;
+        this.spanStackForExecution = spanStackForExecution;
         this.mdcContextMapForExecution = mdcContextMapForExecution;
     }
 
@@ -127,7 +127,7 @@ public class ListenableFutureCallbackWithTracing<T> implements ListenableFutureC
 
     /**
      * Equivalent to calling {@code
-     * new ListenableFutureCallbackWithTracing(origListenableFutureCallback, distributedTraceStackForExecution, mdcContextMapForExecution)} -
+     * new ListenableFutureCallbackWithTracing(origListenableFutureCallback, spanStackForExecution, mdcContextMapForExecution)} -
      * this allows you to do a static method import for cleaner looking code in some cases. This method uses the given
      * trace and MDC information, which will be associated with the thread when the given operation is executed.
      *
@@ -137,14 +137,14 @@ public class ListenableFutureCallbackWithTracing<T> implements ListenableFutureC
      * <p>The trace and/or MDC info can be null and no error will be thrown, however any trace or MDC info that is null
      * means the corresponding info will not be available to the thread when the operation is executed.
      *
-     * @return {@code new ListenableFutureCallbackWithTracing(origListenableFutureCallback, distributedTraceStackForExecution, mdcContextMapForExecution)}.
+     * @return {@code new ListenableFutureCallbackWithTracing(origListenableFutureCallback, spanStackForExecution, mdcContextMapForExecution)}.
      * @see ListenableFutureCallbackWithTracing#ListenableFutureCallbackWithTracing(ListenableFutureCallback, Deque, Map)
      * @see ListenableFutureCallbackWithTracing
      */
     public static <T> ListenableFutureCallbackWithTracing<T> withTracing(ListenableFutureCallback<T> origListenableFutureCallback,
-                                                                         Deque<Span> distributedTraceStackForExecution,
+                                                                         Deque<Span> spanStackForExecution,
                                                                          Map<String, String> mdcContextMapForExecution) {
-        return new ListenableFutureCallbackWithTracing<>(origListenableFutureCallback, distributedTraceStackForExecution, mdcContextMapForExecution);
+        return new ListenableFutureCallbackWithTracing<>(origListenableFutureCallback, spanStackForExecution, mdcContextMapForExecution);
     }
 
     @Override
@@ -153,7 +153,7 @@ public class ListenableFutureCallbackWithTracing<T> implements ListenableFutureC
         TracingState originalThreadInfo = null;
         try {
             originalThreadInfo =
-                linkTracingToCurrentThread(distributedTraceStackForExecution, mdcContextMapForExecution);
+                linkTracingToCurrentThread(spanStackForExecution, mdcContextMapForExecution);
 
             origListenableFutureCallback.onSuccess(result);
         }
@@ -168,7 +168,7 @@ public class ListenableFutureCallbackWithTracing<T> implements ListenableFutureC
         TracingState originalThreadInfo = null;
         try {
             originalThreadInfo =
-                linkTracingToCurrentThread(distributedTraceStackForExecution, mdcContextMapForExecution);
+                linkTracingToCurrentThread(spanStackForExecution, mdcContextMapForExecution);
 
             origListenableFutureCallback.onFailure(ex);
         }

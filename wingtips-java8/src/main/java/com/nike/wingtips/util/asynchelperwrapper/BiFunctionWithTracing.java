@@ -22,7 +22,7 @@ import static com.nike.wingtips.util.AsyncWingtipsHelperStatic.unlinkTracingFrom
 public class BiFunctionWithTracing<T, U, R> implements BiFunction<T, U, R> {
 
     protected final BiFunction<T, U, R> origBiFunction;
-    protected final Deque<Span> distributedTraceStackForExecution;
+    protected final Deque<Span> spanStackForExecution;
     protected final Map<String, String> mdcContextMapForExecution;
 
     /**
@@ -73,13 +73,13 @@ public class BiFunctionWithTracing<T, U, R> implements BiFunction<T, U, R> {
      * means the corresponding info will not be available to the thread when the operation is executed.
      */
     public BiFunctionWithTracing(BiFunction<T, U, R> origBiFunction,
-                                 Deque<Span> distributedTraceStackForExecution,
+                                 Deque<Span> spanStackForExecution,
                                  Map<String, String> mdcContextMapForExecution) {
         if (origBiFunction == null)
             throw new IllegalArgumentException("origBiFunction cannot be null");
 
         this.origBiFunction = origBiFunction;
-        this.distributedTraceStackForExecution = distributedTraceStackForExecution;
+        this.spanStackForExecution = spanStackForExecution;
         this.mdcContextMapForExecution = mdcContextMapForExecution;
     }
 
@@ -129,7 +129,7 @@ public class BiFunctionWithTracing<T, U, R> implements BiFunction<T, U, R> {
 
     /**
      * Equivalent to calling {@code
-     * new BiFunctionWithTracing(origBiFunction, distributedTraceStackForExecution, mdcContextMapForExecution)} -
+     * new BiFunctionWithTracing(origBiFunction, spanStackForExecution, mdcContextMapForExecution)} -
      * this allows you to do a static method import for cleaner looking code in some cases. This method uses the given
      * trace and MDC information, which will be associated with the thread when the given operation is executed.
      *
@@ -139,14 +139,14 @@ public class BiFunctionWithTracing<T, U, R> implements BiFunction<T, U, R> {
      * <p>The trace and/or MDC info can be null and no error will be thrown, however any trace or MDC info that is null
      * means the corresponding info will not be available to the thread when the operation is executed.
      *
-     * @return {@code new BiFunctionWithTracing(origBiFunction, distributedTraceStackForExecution, mdcContextMapForExecution)}.
+     * @return {@code new BiFunctionWithTracing(origBiFunction, spanStackForExecution, mdcContextMapForExecution)}.
      * @see BiFunctionWithTracing#BiFunctionWithTracing(BiFunction, Deque, Map)
      * @see BiFunctionWithTracing
      */
     public static <T, U, R> BiFunctionWithTracing<T, U, R> withTracing(BiFunction<T, U, R> origBiFunction,
-                                                                       Deque<Span> distributedTraceStackForExecution,
+                                                                       Deque<Span> spanStackForExecution,
                                                                        Map<String, String> mdcContextMapForExecution) {
-        return new BiFunctionWithTracing<>(origBiFunction, distributedTraceStackForExecution, mdcContextMapForExecution);
+        return new BiFunctionWithTracing<>(origBiFunction, spanStackForExecution, mdcContextMapForExecution);
     }
 
     @Override
@@ -154,7 +154,7 @@ public class BiFunctionWithTracing<T, U, R> implements BiFunction<T, U, R> {
         TracingState originalThreadInfo = null;
         try {
             originalThreadInfo =
-                linkTracingToCurrentThread(distributedTraceStackForExecution, mdcContextMapForExecution);
+                linkTracingToCurrentThread(spanStackForExecution, mdcContextMapForExecution);
 
             return origBiFunction.apply(t, u);
         }

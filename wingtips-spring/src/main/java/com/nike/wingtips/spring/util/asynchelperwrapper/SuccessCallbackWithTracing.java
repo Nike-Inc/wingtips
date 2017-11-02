@@ -22,7 +22,7 @@ import static com.nike.wingtips.util.AsyncWingtipsHelperJava7.unlinkTracingFromC
 public class SuccessCallbackWithTracing<T> implements SuccessCallback<T> {
 
     protected final SuccessCallback<T> origSuccessCallback;
-    protected final Deque<Span> distributedTraceStackForExecution;
+    protected final Deque<Span> spanStackForExecution;
     protected final Map<String, String> mdcContextMapForExecution;
 
     /**
@@ -73,13 +73,13 @@ public class SuccessCallbackWithTracing<T> implements SuccessCallback<T> {
      * means the corresponding info will not be available to the thread when the operation is executed.
      */
     public SuccessCallbackWithTracing(SuccessCallback<T> origSuccessCallback,
-                                      Deque<Span> distributedTraceStackForExecution,
+                                      Deque<Span> spanStackForExecution,
                                       Map<String, String> mdcContextMapForExecution) {
         if (origSuccessCallback == null)
             throw new IllegalArgumentException("origSuccessCallback cannot be null");
 
         this.origSuccessCallback = origSuccessCallback;
-        this.distributedTraceStackForExecution = distributedTraceStackForExecution;
+        this.spanStackForExecution = spanStackForExecution;
         this.mdcContextMapForExecution = mdcContextMapForExecution;
     }
 
@@ -127,7 +127,7 @@ public class SuccessCallbackWithTracing<T> implements SuccessCallback<T> {
 
     /**
      * Equivalent to calling {@code
-     * new SuccessCallbackWithTracing(origSuccessCallback, distributedTraceStackForExecution, mdcContextMapForExecution)} -
+     * new SuccessCallbackWithTracing(origSuccessCallback, spanStackForExecution, mdcContextMapForExecution)} -
      * this allows you to do a static method import for cleaner looking code in some cases. This method uses the given
      * trace and MDC information, which will be associated with the thread when the given operation is executed.
      *
@@ -137,14 +137,14 @@ public class SuccessCallbackWithTracing<T> implements SuccessCallback<T> {
      * <p>The trace and/or MDC info can be null and no error will be thrown, however any trace or MDC info that is null
      * means the corresponding info will not be available to the thread when the operation is executed.
      *
-     * @return {@code new SuccessCallbackWithTracing(origSuccessCallback, distributedTraceStackForExecution, mdcContextMapForExecution)}.
+     * @return {@code new SuccessCallbackWithTracing(origSuccessCallback, spanStackForExecution, mdcContextMapForExecution)}.
      * @see SuccessCallbackWithTracing#SuccessCallbackWithTracing(SuccessCallback, Deque, Map)
      * @see SuccessCallbackWithTracing
      */
     public static <T> SuccessCallbackWithTracing<T> withTracing(SuccessCallback<T> origSuccessCallback,
-                                                         Deque<Span> distributedTraceStackForExecution,
+                                                         Deque<Span> spanStackForExecution,
                                                          Map<String, String> mdcContextMapForExecution) {
-        return new SuccessCallbackWithTracing<>(origSuccessCallback, distributedTraceStackForExecution, mdcContextMapForExecution);
+        return new SuccessCallbackWithTracing<>(origSuccessCallback, spanStackForExecution, mdcContextMapForExecution);
     }
 
     @Override
@@ -153,7 +153,7 @@ public class SuccessCallbackWithTracing<T> implements SuccessCallback<T> {
         TracingState originalThreadInfo = null;
         try {
             originalThreadInfo =
-                linkTracingToCurrentThread(distributedTraceStackForExecution, mdcContextMapForExecution);
+                linkTracingToCurrentThread(spanStackForExecution, mdcContextMapForExecution);
 
             origSuccessCallback.onSuccess(result);
         }
