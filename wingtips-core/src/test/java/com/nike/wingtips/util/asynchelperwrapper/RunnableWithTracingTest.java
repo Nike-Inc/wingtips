@@ -91,7 +91,7 @@ public class RunnableWithTracingTest {
 
         // then
         assertThat(instance.origRunnable).isSameAs(runnableMock);
-        assertThat(instance.distributedTraceStackForExecution).isEqualTo(spanStackMock);
+        assertThat(instance.spanStackForExecution).isEqualTo(spanStackMock);
         assertThat(instance.mdcContextMapForExecution).isEqualTo(mdcInfoMock);
     }
 
@@ -121,7 +121,7 @@ public class RunnableWithTracingTest {
 
         // then
         assertThat(instance.origRunnable).isSameAs(runnableMock);
-        assertThat(instance.distributedTraceStackForExecution).isEqualTo(spanStackMock);
+        assertThat(instance.spanStackForExecution).isEqualTo(spanStackMock);
         assertThat(instance.mdcContextMapForExecution).isEqualTo(mdcInfoMock);
     }
 
@@ -138,7 +138,7 @@ public class RunnableWithTracingTest {
 
         // then
         assertThat(instance.origRunnable).isSameAs(runnableMock);
-        assertThat(instance.distributedTraceStackForExecution).isNull();
+        assertThat(instance.spanStackForExecution).isNull();
         assertThat(instance.mdcContextMapForExecution).isNull();
     }
 
@@ -159,7 +159,7 @@ public class RunnableWithTracingTest {
 
         // then
         assertThat(instance.origRunnable).isSameAs(runnableMock);
-        assertThat(instance.distributedTraceStackForExecution).isEqualTo(spanStackMock);
+        assertThat(instance.spanStackForExecution).isEqualTo(spanStackMock);
         assertThat(instance.mdcContextMapForExecution).isEqualTo(mdcInfoMock);
     }
 

@@ -22,7 +22,7 @@ import static com.nike.wingtips.util.AsyncWingtipsHelperJava7.unlinkTracingFromC
 public class CallableWithTracing<U> implements Callable<U> {
 
     protected final Callable<U> origCallable;
-    protected final Deque<Span> distributedTraceStackForExecution;
+    protected final Deque<Span> spanStackForExecution;
     protected final Map<String, String> mdcContextMapForExecution;
 
     /**
@@ -73,13 +73,13 @@ public class CallableWithTracing<U> implements Callable<U> {
      * means the corresponding info will not be available to the thread when the operation is executed.
      */
     public CallableWithTracing(Callable<U> origCallable,
-                               Deque<Span> distributedTraceStackForExecution,
+                               Deque<Span> spanStackForExecution,
                                Map<String, String> mdcContextMapForExecution) {
         if (origCallable == null)
             throw new IllegalArgumentException("origCallable cannot be null");
 
         this.origCallable = origCallable;
-        this.distributedTraceStackForExecution = distributedTraceStackForExecution;
+        this.spanStackForExecution = spanStackForExecution;
         this.mdcContextMapForExecution = mdcContextMapForExecution;
     }
 
@@ -127,7 +127,7 @@ public class CallableWithTracing<U> implements Callable<U> {
 
     /**
      * Equivalent to calling {@code
-     * new CallableWithTracing(origCallable, distributedTraceStackForExecution, mdcContextMapForExecution)} -
+     * new CallableWithTracing(origCallable, spanStackForExecution, mdcContextMapForExecution)} -
      * this allows you to do a static method import for cleaner looking code in some cases. This method uses the given
      * trace and MDC information, which will be associated with the thread when the given operation is executed.
      *
@@ -137,14 +137,14 @@ public class CallableWithTracing<U> implements Callable<U> {
      * <p>The trace and/or MDC info can be null and no error will be thrown, however any trace or MDC info that is null
      * means the corresponding info will not be available to the thread when the operation is executed.
      *
-     * @return {@code new CallableWithTracing(origCallable, distributedTraceStackForExecution, mdcContextMapForExecution)}.
+     * @return {@code new CallableWithTracing(origCallable, spanStackForExecution, mdcContextMapForExecution)}.
      * @see CallableWithTracing#CallableWithTracing(Callable, Deque, Map)
      * @see CallableWithTracing
      */
     public static <U> CallableWithTracing<U> withTracing(Callable<U> origCallable,
-                                                         Deque<Span> distributedTraceStackForExecution,
+                                                         Deque<Span> spanStackForExecution,
                                                          Map<String, String> mdcContextMapForExecution) {
-        return new CallableWithTracing<>(origCallable, distributedTraceStackForExecution, mdcContextMapForExecution);
+        return new CallableWithTracing<>(origCallable, spanStackForExecution, mdcContextMapForExecution);
     }
 
     @Override
@@ -153,7 +153,7 @@ public class CallableWithTracing<U> implements Callable<U> {
         TracingState originalThreadInfo = null;
         try {
             originalThreadInfo =
-                linkTracingToCurrentThread(distributedTraceStackForExecution, mdcContextMapForExecution);
+                linkTracingToCurrentThread(spanStackForExecution, mdcContextMapForExecution);
 
             return origCallable.call();
         }

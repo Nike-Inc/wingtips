@@ -92,7 +92,7 @@ public class AsyncWingtipsHelperJava7Test {
                                                         Map<String, String> expectedMdcInfo) {
         assertThat(result).isInstanceOf(RunnableWithTracing.class);
         assertThat(Whitebox.getInternalState(result, "origRunnable")).isSameAs(expectedCoreRunnable);
-        assertThat(Whitebox.getInternalState(result, "distributedTraceStackForExecution")).isEqualTo(expectedSpanStack);
+        assertThat(Whitebox.getInternalState(result, "spanStackForExecution")).isEqualTo(expectedSpanStack);
         assertThat(Whitebox.getInternalState(result, "mdcContextMapForExecution")).isEqualTo(expectedMdcInfo);
     }
 
@@ -149,7 +149,7 @@ public class AsyncWingtipsHelperJava7Test {
                                                         Map<String, String> expectedMdcInfo) {
         assertThat(result).isInstanceOf(CallableWithTracing.class);
         assertThat(Whitebox.getInternalState(result, "origCallable")).isSameAs(expectedCoreInstance);
-        assertThat(Whitebox.getInternalState(result, "distributedTraceStackForExecution")).isEqualTo(expectedSpanStack);
+        assertThat(Whitebox.getInternalState(result, "spanStackForExecution")).isEqualTo(expectedSpanStack);
         assertThat(Whitebox.getInternalState(result, "mdcContextMapForExecution")).isEqualTo(expectedMdcInfo);
     }
 

@@ -22,7 +22,7 @@ import static com.nike.wingtips.util.AsyncWingtipsHelperStatic.unlinkTracingFrom
 public class BiConsumerWithTracing<T, U> implements BiConsumer<T, U> {
 
     protected final BiConsumer<T, U> origBiConsumer;
-    protected final Deque<Span> distributedTraceStackForExecution;
+    protected final Deque<Span> spanStackForExecution;
     protected final Map<String, String> mdcContextMapForExecution;
 
     /**
@@ -73,13 +73,13 @@ public class BiConsumerWithTracing<T, U> implements BiConsumer<T, U> {
      * means the corresponding info will not be available to the thread when the operation is executed.
      */
     public BiConsumerWithTracing(BiConsumer<T, U> origBiConsumer,
-                                 Deque<Span> distributedTraceStackForExecution,
+                                 Deque<Span> spanStackForExecution,
                                  Map<String, String> mdcContextMapForExecution) {
         if (origBiConsumer == null)
             throw new IllegalArgumentException("origBiConsumer cannot be null");
 
         this.origBiConsumer = origBiConsumer;
-        this.distributedTraceStackForExecution = distributedTraceStackForExecution;
+        this.spanStackForExecution = spanStackForExecution;
         this.mdcContextMapForExecution = mdcContextMapForExecution;
     }
 
@@ -129,7 +129,7 @@ public class BiConsumerWithTracing<T, U> implements BiConsumer<T, U> {
 
     /**
      * Equivalent to calling {@code
-     * new BiConsumerWithTracing(origBiConsumer, distributedTraceStackForExecution, mdcContextMapForExecution)} -
+     * new BiConsumerWithTracing(origBiConsumer, spanStackForExecution, mdcContextMapForExecution)} -
      * this allows you to do a static method import for cleaner looking code in some cases. This method uses the given
      * trace and MDC information, which will be associated with the thread when the given operation is executed.
      *
@@ -139,14 +139,14 @@ public class BiConsumerWithTracing<T, U> implements BiConsumer<T, U> {
      * <p>The trace and/or MDC info can be null and no error will be thrown, however any trace or MDC info that is null
      * means the corresponding info will not be available to the thread when the operation is executed.
      *
-     * @return {@code new BiConsumerWithTracing(origBiConsumer, distributedTraceStackForExecution, mdcContextMapForExecution)}.
+     * @return {@code new BiConsumerWithTracing(origBiConsumer, spanStackForExecution, mdcContextMapForExecution)}.
      * @see BiConsumerWithTracing#BiConsumerWithTracing(BiConsumer, Deque, Map)
      * @see BiConsumerWithTracing
      */
     public static <T, U> BiConsumerWithTracing<T, U> withTracing(BiConsumer<T, U> origBiConsumer,
-                                                                 Deque<Span> distributedTraceStackForExecution,
+                                                                 Deque<Span> spanStackForExecution,
                                                                  Map<String, String> mdcContextMapForExecution) {
-        return new BiConsumerWithTracing<>(origBiConsumer, distributedTraceStackForExecution, mdcContextMapForExecution);
+        return new BiConsumerWithTracing<>(origBiConsumer, spanStackForExecution, mdcContextMapForExecution);
     }
 
     @Override
@@ -154,7 +154,7 @@ public class BiConsumerWithTracing<T, U> implements BiConsumer<T, U> {
         TracingState originalThreadInfo = null;
         try {
             originalThreadInfo =
-                linkTracingToCurrentThread(distributedTraceStackForExecution, mdcContextMapForExecution);
+                linkTracingToCurrentThread(spanStackForExecution, mdcContextMapForExecution);
 
             origBiConsumer.accept(t, u);
         }

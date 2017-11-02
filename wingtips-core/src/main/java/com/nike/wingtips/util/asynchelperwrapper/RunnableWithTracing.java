@@ -21,7 +21,7 @@ import static com.nike.wingtips.util.AsyncWingtipsHelperJava7.unlinkTracingFromC
 public class RunnableWithTracing implements Runnable {
 
     protected final Runnable origRunnable;
-    protected final Deque<Span> distributedTraceStackForExecution;
+    protected final Deque<Span> spanStackForExecution;
     protected final Map<String, String> mdcContextMapForExecution;
 
     /**
@@ -72,13 +72,13 @@ public class RunnableWithTracing implements Runnable {
      * means the corresponding info will not be available to the thread when the operation is executed.
      */
     public RunnableWithTracing(Runnable origRunnable,
-                               Deque<Span> distributedTraceStackForExecution,
+                               Deque<Span> spanStackForExecution,
                                Map<String, String> mdcContextMapForExecution) {
         if (origRunnable == null)
             throw new IllegalArgumentException("origRunnable cannot be null");
 
         this.origRunnable = origRunnable;
-        this.distributedTraceStackForExecution = distributedTraceStackForExecution;
+        this.spanStackForExecution = spanStackForExecution;
         this.mdcContextMapForExecution = mdcContextMapForExecution;
     }
 
@@ -126,7 +126,7 @@ public class RunnableWithTracing implements Runnable {
 
     /**
      * Equivalent to calling {@code
-     * new RunnableWithTracing(origRunnable, distributedTraceStackForExecution, mdcContextMapForExecution)} -
+     * new RunnableWithTracing(origRunnable, spanStackForExecution, mdcContextMapForExecution)} -
      * this allows you to do a static method import for cleaner looking code in some cases. This method uses the given
      * trace and MDC information, which will be associated with the thread when the given operation is executed.
      *
@@ -136,14 +136,14 @@ public class RunnableWithTracing implements Runnable {
      * <p>The trace and/or MDC info can be null and no error will be thrown, however any trace or MDC info that is null
      * means the corresponding info will not be available to the thread when the operation is executed.
      *
-     * @return {@code new RunnableWithTracing(origRunnable, distributedTraceStackForExecution, mdcContextMapForExecution)}.
+     * @return {@code new RunnableWithTracing(origRunnable, spanStackForExecution, mdcContextMapForExecution)}.
      * @see RunnableWithTracing#RunnableWithTracing(Runnable, Deque, Map)
      * @see RunnableWithTracing
      */
     public static  RunnableWithTracing withTracing(Runnable origRunnable,
-                                                   Deque<Span> distributedTraceStackForExecution,
+                                                   Deque<Span> spanStackForExecution,
                                                    Map<String, String> mdcContextMapForExecution) {
-        return new RunnableWithTracing(origRunnable, distributedTraceStackForExecution, mdcContextMapForExecution);
+        return new RunnableWithTracing(origRunnable, spanStackForExecution, mdcContextMapForExecution);
     }
 
     @Override
@@ -152,7 +152,7 @@ public class RunnableWithTracing implements Runnable {
         TracingState originalThreadInfo = null;
         try {
             originalThreadInfo =
-                linkTracingToCurrentThread(distributedTraceStackForExecution, mdcContextMapForExecution);
+                linkTracingToCurrentThread(spanStackForExecution, mdcContextMapForExecution);
 
             origRunnable.run();
         }

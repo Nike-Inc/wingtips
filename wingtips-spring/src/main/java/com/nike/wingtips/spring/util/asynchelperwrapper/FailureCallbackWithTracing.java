@@ -22,7 +22,7 @@ import static com.nike.wingtips.util.AsyncWingtipsHelperJava7.unlinkTracingFromC
 public class FailureCallbackWithTracing implements FailureCallback {
 
     protected final FailureCallback origFailureCallback;
-    protected final Deque<Span> distributedTraceStackForExecution;
+    protected final Deque<Span> spanStackForExecution;
     protected final Map<String, String> mdcContextMapForExecution;
 
     /**
@@ -73,13 +73,13 @@ public class FailureCallbackWithTracing implements FailureCallback {
      * means the corresponding info will not be available to the thread when the operation is executed.
      */
     public FailureCallbackWithTracing(FailureCallback origFailureCallback,
-                                      Deque<Span> distributedTraceStackForExecution,
+                                      Deque<Span> spanStackForExecution,
                                       Map<String, String> mdcContextMapForExecution) {
         if (origFailureCallback == null)
             throw new IllegalArgumentException("origFailureCallback cannot be null");
 
         this.origFailureCallback = origFailureCallback;
-        this.distributedTraceStackForExecution = distributedTraceStackForExecution;
+        this.spanStackForExecution = spanStackForExecution;
         this.mdcContextMapForExecution = mdcContextMapForExecution;
     }
 
@@ -127,7 +127,7 @@ public class FailureCallbackWithTracing implements FailureCallback {
 
     /**
      * Equivalent to calling {@code
-     * new FailureCallbackWithTracing(origFailureCallback, distributedTraceStackForExecution, mdcContextMapForExecution)} -
+     * new FailureCallbackWithTracing(origFailureCallback, spanStackForExecution, mdcContextMapForExecution)} -
      * this allows you to do a static method import for cleaner looking code in some cases. This method uses the given
      * trace and MDC information, which will be associated with the thread when the given operation is executed.
      *
@@ -137,14 +137,14 @@ public class FailureCallbackWithTracing implements FailureCallback {
      * <p>The trace and/or MDC info can be null and no error will be thrown, however any trace or MDC info that is null
      * means the corresponding info will not be available to the thread when the operation is executed.
      *
-     * @return {@code new FailureCallbackWithTracing(origFailureCallback, distributedTraceStackForExecution, mdcContextMapForExecution)}.
+     * @return {@code new FailureCallbackWithTracing(origFailureCallback, spanStackForExecution, mdcContextMapForExecution)}.
      * @see FailureCallbackWithTracing#FailureCallbackWithTracing(FailureCallback, Deque, Map)
      * @see FailureCallbackWithTracing
      */
     public static FailureCallbackWithTracing withTracing(FailureCallback origFailureCallback,
-                                                         Deque<Span> distributedTraceStackForExecution,
+                                                         Deque<Span> spanStackForExecution,
                                                          Map<String, String> mdcContextMapForExecution) {
-        return new FailureCallbackWithTracing(origFailureCallback, distributedTraceStackForExecution, mdcContextMapForExecution);
+        return new FailureCallbackWithTracing(origFailureCallback, spanStackForExecution, mdcContextMapForExecution);
     }
 
     @Override
@@ -153,7 +153,7 @@ public class FailureCallbackWithTracing implements FailureCallback {
         TracingState originalThreadInfo = null;
         try {
             originalThreadInfo =
-                linkTracingToCurrentThread(distributedTraceStackForExecution, mdcContextMapForExecution);
+                linkTracingToCurrentThread(spanStackForExecution, mdcContextMapForExecution);
 
             origFailureCallback.onFailure(ex);
         }

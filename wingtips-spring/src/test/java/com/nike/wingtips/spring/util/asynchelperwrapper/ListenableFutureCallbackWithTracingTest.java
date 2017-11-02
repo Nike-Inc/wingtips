@@ -97,7 +97,7 @@ public class ListenableFutureCallbackWithTracingTest {
 
         // then
         assertThat(instance.origListenableFutureCallback).isSameAs(listenableFutureCallbackMock);
-        assertThat(instance.distributedTraceStackForExecution).isEqualTo(spanStackMock);
+        assertThat(instance.spanStackForExecution).isEqualTo(spanStackMock);
         assertThat(instance.mdcContextMapForExecution).isEqualTo(mdcInfoMock);
     }
 
@@ -127,7 +127,7 @@ public class ListenableFutureCallbackWithTracingTest {
 
         // then
         assertThat(instance.origListenableFutureCallback).isSameAs(listenableFutureCallbackMock);
-        assertThat(instance.distributedTraceStackForExecution).isEqualTo(spanStackMock);
+        assertThat(instance.spanStackForExecution).isEqualTo(spanStackMock);
         assertThat(instance.mdcContextMapForExecution).isEqualTo(mdcInfoMock);
     }
 
@@ -144,7 +144,7 @@ public class ListenableFutureCallbackWithTracingTest {
 
         // then
         assertThat(instance.origListenableFutureCallback).isSameAs(listenableFutureCallbackMock);
-        assertThat(instance.distributedTraceStackForExecution).isNull();
+        assertThat(instance.spanStackForExecution).isNull();
         assertThat(instance.mdcContextMapForExecution).isNull();
     }
 
@@ -165,7 +165,7 @@ public class ListenableFutureCallbackWithTracingTest {
 
         // then
         assertThat(instance.origListenableFutureCallback).isSameAs(listenableFutureCallbackMock);
-        assertThat(instance.distributedTraceStackForExecution).isEqualTo(spanStackMock);
+        assertThat(instance.spanStackForExecution).isEqualTo(spanStackMock);
         assertThat(instance.mdcContextMapForExecution).isEqualTo(mdcInfoMock);
     }
 

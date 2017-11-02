@@ -92,7 +92,7 @@ public class BiFunctionWithTracingTest {
 
         // then
         assertThat(instance.origBiFunction).isSameAs(biFunctionMock);
-        assertThat(instance.distributedTraceStackForExecution).isEqualTo(spanStackMock);
+        assertThat(instance.spanStackForExecution).isEqualTo(spanStackMock);
         assertThat(instance.mdcContextMapForExecution).isEqualTo(mdcInfoMock);
     }
 
@@ -122,7 +122,7 @@ public class BiFunctionWithTracingTest {
 
         // then
         assertThat(instance.origBiFunction).isSameAs(biFunctionMock);
-        assertThat(instance.distributedTraceStackForExecution).isEqualTo(spanStackMock);
+        assertThat(instance.spanStackForExecution).isEqualTo(spanStackMock);
         assertThat(instance.mdcContextMapForExecution).isEqualTo(mdcInfoMock);
     }
 
@@ -139,7 +139,7 @@ public class BiFunctionWithTracingTest {
 
         // then
         assertThat(instance.origBiFunction).isSameAs(biFunctionMock);
-        assertThat(instance.distributedTraceStackForExecution).isNull();
+        assertThat(instance.spanStackForExecution).isNull();
         assertThat(instance.mdcContextMapForExecution).isNull();
     }
 
@@ -160,7 +160,7 @@ public class BiFunctionWithTracingTest {
 
         // then
         assertThat(instance.origBiFunction).isSameAs(biFunctionMock);
-        assertThat(instance.distributedTraceStackForExecution).isEqualTo(spanStackMock);
+        assertThat(instance.spanStackForExecution).isEqualTo(spanStackMock);
         assertThat(instance.mdcContextMapForExecution).isEqualTo(mdcInfoMock);
     }
 

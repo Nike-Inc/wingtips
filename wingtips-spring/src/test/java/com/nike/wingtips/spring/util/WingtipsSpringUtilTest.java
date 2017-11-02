@@ -286,7 +286,7 @@ public class WingtipsSpringUtilTest {
                                                   Map<String, String> expectedMdcInfo) {
         assertThat(result).isInstanceOf(SuccessCallbackWithTracing.class);
         assertThat(Whitebox.getInternalState(result, "origSuccessCallback")).isSameAs(expectedCoreInstance);
-        assertThat(Whitebox.getInternalState(result, "distributedTraceStackForExecution")).isEqualTo(expectedSpanStack);
+        assertThat(Whitebox.getInternalState(result, "spanStackForExecution")).isEqualTo(expectedSpanStack);
         assertThat(Whitebox.getInternalState(result, "mdcContextMapForExecution")).isEqualTo(expectedMdcInfo);
     }
 
@@ -334,7 +334,7 @@ public class WingtipsSpringUtilTest {
                                                   Map<String, String> expectedMdcInfo) {
         assertThat(result).isInstanceOf(FailureCallbackWithTracing.class);
         assertThat(Whitebox.getInternalState(result, "origFailureCallback")).isSameAs(expectedCoreInstance);
-        assertThat(Whitebox.getInternalState(result, "distributedTraceStackForExecution")).isEqualTo(expectedSpanStack);
+        assertThat(Whitebox.getInternalState(result, "spanStackForExecution")).isEqualTo(expectedSpanStack);
         assertThat(Whitebox.getInternalState(result, "mdcContextMapForExecution")).isEqualTo(expectedMdcInfo);
     }
 
@@ -382,7 +382,7 @@ public class WingtipsSpringUtilTest {
                                                            Map<String, String> expectedMdcInfo) {
         assertThat(result).isInstanceOf(ListenableFutureCallbackWithTracing.class);
         assertThat(Whitebox.getInternalState(result, "origListenableFutureCallback")).isSameAs(expectedCoreInstance);
-        assertThat(Whitebox.getInternalState(result, "distributedTraceStackForExecution")).isEqualTo(expectedSpanStack);
+        assertThat(Whitebox.getInternalState(result, "spanStackForExecution")).isEqualTo(expectedSpanStack);
         assertThat(Whitebox.getInternalState(result, "mdcContextMapForExecution")).isEqualTo(expectedMdcInfo);
     }
 

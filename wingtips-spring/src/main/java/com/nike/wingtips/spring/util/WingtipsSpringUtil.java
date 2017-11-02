@@ -153,10 +153,10 @@ public class WingtipsSpringUtil {
      */
     public static <T> SuccessCallback<T> successCallbackWithTracing(
         SuccessCallback<T> successCallback,
-        Deque<Span> distributedTraceStackToLink,
+        Deque<Span> spanStackToLink,
         Map<String, String> mdcContextMapToLink
     ) {
-        return new SuccessCallbackWithTracing<>(successCallback, distributedTraceStackToLink, mdcContextMapToLink);
+        return new SuccessCallbackWithTracing<>(successCallback, spanStackToLink, mdcContextMapToLink);
     }
 
     /**
@@ -188,9 +188,9 @@ public class WingtipsSpringUtil {
      * execution.
      */
     public static FailureCallback failureCallbackWithTracing(FailureCallback failureCallback,
-                                                             Deque<Span> distributedTraceStackToLink,
+                                                             Deque<Span> spanStackToLink,
                                                              Map<String, String> mdcContextMapToLink) {
-        return new FailureCallbackWithTracing(failureCallback, distributedTraceStackToLink, mdcContextMapToLink);
+        return new FailureCallbackWithTracing(failureCallback, spanStackToLink, mdcContextMapToLink);
     }
 
     /**
@@ -227,9 +227,9 @@ public class WingtipsSpringUtil {
      */
     public static <T> ListenableFutureCallback<T> listenableFutureCallbackWithTracing(
         ListenableFutureCallback<T> listenableFutureCallback,
-        Deque<Span> distributedTraceStackToLink,
+        Deque<Span> spanStackToLink,
         Map<String, String> mdcContextMapToLink
     ) {
-        return new ListenableFutureCallbackWithTracing<>(listenableFutureCallback, distributedTraceStackToLink, mdcContextMapToLink);
+        return new ListenableFutureCallbackWithTracing<>(listenableFutureCallback, spanStackToLink, mdcContextMapToLink);
     }
 }

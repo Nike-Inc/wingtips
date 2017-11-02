@@ -22,7 +22,7 @@ import static com.nike.wingtips.util.AsyncWingtipsHelperStatic.unlinkTracingFrom
 public class PredicateWithTracing<T> implements Predicate<T> {
 
     protected final Predicate<T> origPredicate;
-    protected final Deque<Span> distributedTraceStackForExecution;
+    protected final Deque<Span> spanStackForExecution;
     protected final Map<String, String> mdcContextMapForExecution;
 
     /**
@@ -73,13 +73,13 @@ public class PredicateWithTracing<T> implements Predicate<T> {
      * means the corresponding info will not be available to the thread when the operation is executed.
      */
     public PredicateWithTracing(Predicate<T> origPredicate,
-                                Deque<Span> distributedTraceStackForExecution,
+                                Deque<Span> spanStackForExecution,
                                 Map<String, String> mdcContextMapForExecution) {
         if (origPredicate == null)
             throw new IllegalArgumentException("origPredicate cannot be null");
 
         this.origPredicate = origPredicate;
-        this.distributedTraceStackForExecution = distributedTraceStackForExecution;
+        this.spanStackForExecution = spanStackForExecution;
         this.mdcContextMapForExecution = mdcContextMapForExecution;
     }
 
@@ -127,7 +127,7 @@ public class PredicateWithTracing<T> implements Predicate<T> {
 
     /**
      * Equivalent to calling {@code
-     * new PredicateWithTracing(origPredicate, distributedTraceStackForExecution, mdcContextMapForExecution)} -
+     * new PredicateWithTracing(origPredicate, spanStackForExecution, mdcContextMapForExecution)} -
      * this allows you to do a static method import for cleaner looking code in some cases. This method uses the given
      * trace and MDC information, which will be associated with the thread when the given operation is executed.
      *
@@ -137,14 +137,14 @@ public class PredicateWithTracing<T> implements Predicate<T> {
      * <p>The trace and/or MDC info can be null and no error will be thrown, however any trace or MDC info that is null
      * means the corresponding info will not be available to the thread when the operation is executed.
      *
-     * @return {@code new PredicateWithTracing(origPredicate, distributedTraceStackForExecution, mdcContextMapForExecution)}.
+     * @return {@code new PredicateWithTracing(origPredicate, spanStackForExecution, mdcContextMapForExecution)}.
      * @see PredicateWithTracing#PredicateWithTracing(Predicate, Deque, Map)
      * @see PredicateWithTracing
      */
     public static <T> PredicateWithTracing<T> withTracing(Predicate<T> origPredicate,
-                                                          Deque<Span> distributedTraceStackForExecution,
+                                                          Deque<Span> spanStackForExecution,
                                                           Map<String, String> mdcContextMapForExecution) {
-        return new PredicateWithTracing<>(origPredicate, distributedTraceStackForExecution, mdcContextMapForExecution);
+        return new PredicateWithTracing<>(origPredicate, spanStackForExecution, mdcContextMapForExecution);
     }
 
     @Override
@@ -152,7 +152,7 @@ public class PredicateWithTracing<T> implements Predicate<T> {
         TracingState originalThreadInfo = null;
         try {
             originalThreadInfo =
-                linkTracingToCurrentThread(distributedTraceStackForExecution, mdcContextMapForExecution);
+                linkTracingToCurrentThread(spanStackForExecution, mdcContextMapForExecution);
 
             return origPredicate.test(o);
         }
