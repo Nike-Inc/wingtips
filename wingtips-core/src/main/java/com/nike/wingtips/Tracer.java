@@ -129,6 +129,7 @@ import java.util.List;
  *
  * @author Nic Munroe
  * @author Robert Roeser
+ * @author Ales Justin
  */
 @SuppressWarnings("WeakerAccess")
 public class Tracer {
@@ -332,12 +333,22 @@ public class Tracer {
                 ? parentSpan.generateChildSpan(spanName, spanPurpose)
                 : Span.generateRootSpanForNewTrace(spanName, spanPurpose).withSampleable(isNextRootSpanSampleable()).build();
 
+        handleSubSpan(childSpan);
+
+        return childSpan;
+    }
+
+    /**
+     * Handle sub span.
+     * See {@link Tracer#startSubSpan(String, SpanPurpose)} for more info.
+     *
+     * @param childSpan the sub span
+     */
+    protected void handleSubSpan(Span childSpan) {
         pushSpanOntoCurrentSpanStack(childSpan);
 
         notifySpanStarted(childSpan);
         notifyIfSpanSampled(childSpan);
-
-        return childSpan;
     }
 
     /**
@@ -473,13 +484,22 @@ public class Tracer {
             .withUserId(userId)
             .build();
 
+        handleRootSpan(span);
+
+        return span;
+    }
+
+    /**
+     * Handle root span.
+     *
+     * @param span the current root span
+     */
+    protected void handleRootSpan(Span span) {
         // Since this is a "starting from scratch/new request" call we clear out and restart the current span stack even if it already had something in it.
         startNewSpanStack(span);
 
         notifySpanStarted(span);
         notifyIfSpanSampled(span);
-
-        return span;
     }
 
     /**
@@ -523,6 +543,30 @@ public class Tracer {
                 return span.toKeyValueString();
             default:
                 throw new IllegalStateException("Unknown span logging representation type: " + spanLoggingRepresentation);
+        }
+    }
+
+    /**
+     * Manage span, see {@link #getCurrentManagedStatusForSpan(Span)} for more info.
+     * If span is already managed by this {@link Tracer}, ignore it.
+     *
+     * @param span the span to manage
+     */
+    protected void manageSpan(Span span) {
+        TracerManagedSpanStatus status = getCurrentManagedStatusForSpan(span);
+        if (status.isManagedByTracerForThisThread()) {
+            return; // already managed
+        }
+
+        Span currentSpan = getCurrentSpan();
+        if (currentSpan == null) {
+            // we're root
+            handleRootSpan(span);
+        } else {
+            if (!currentSpan.getSpanId().equals(span.getParentSpanId())) {
+                throw new IllegalStateException(String.format("Expecting parent %s, but is %s.", span.getParentSpanId(), currentSpan.getSpanId()));
+            }
+            handleSubSpan(span);
         }
     }
 

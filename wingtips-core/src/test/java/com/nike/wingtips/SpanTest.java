@@ -1404,5 +1404,17 @@ public class SpanTest {
         assertThat(tmssManual).isEqualTo(TracerManagedSpanStatus.UNMANAGED_SPAN);
         assertThat(tmssCompleted).isEqualTo(TracerManagedSpanStatus.UNMANAGED_SPAN);
     }
+
+    @Test
+    public void testSpanHandle() {
+        Span span = Span.newBuilder("span", SpanPurpose.LOCAL_ONLY).build();
+        span.setHandle("test-handle");
+        assertThat(span.getHandle(Integer.class)).isNull();
+        String testHandle = span.getHandle(String.class);
+        assertThat(testHandle).isEqualTo("test-handle");
+        int x = 123;
+        span.setHandle(x);
+        assertThat(span.getHandle(Integer.class)).isEqualTo(x);
+    }
 }
 
