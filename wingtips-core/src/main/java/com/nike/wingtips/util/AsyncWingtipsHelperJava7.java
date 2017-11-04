@@ -4,6 +4,7 @@ import com.nike.internal.util.Pair;
 import com.nike.wingtips.Span;
 import com.nike.wingtips.Tracer;
 import com.nike.wingtips.util.asynchelperwrapper.CallableWithTracing;
+import com.nike.wingtips.util.asynchelperwrapper.ExecutorServiceWithTracing;
 import com.nike.wingtips.util.asynchelperwrapper.RunnableWithTracing;
 
 import org.slf4j.MDC;
@@ -12,6 +13,7 @@ import java.util.Deque;
 import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 
 /**
  * Helper class that provides static methods for dealing with async stuff in Wingtips, mainly providing easy ways
@@ -38,6 +40,25 @@ import java.util.concurrent.Executor;
  *           // Code that needs tracing/MDC wrapping goes here
  *       }
  *   }));
+ * </pre>
+ *
+ * <p>Functionally equivalent to the {@link Executor} example above, but with a {@link ExecutorServiceWithTracing} to
+ * automate the thread-hopping behavior whenever the {@link Executor} (or {@link ExecutorService}) executes something
+ * (be careful about this if you spin off work that *shouldn't* automatically inherit the calling thread's tracing
+ * state - see the warning on {@link #executorServiceWithTracing(ExecutorService)}):
+ * <pre>
+ *   import static com.nike.wingtips.util.AsyncWingtipsHelperStatic.executorServiceWithTracing;
+ *
+ *   // ...
+ *
+ *   Executor executor = executorServiceWithTracing(Executors.newCachedThreadPool());
+ *
+ *   executor.execute(new Runnable() {
+ *       &amp;Override
+ *       public void run() {
+ *           // Code that needs tracing/MDC wrapping goes here
+ *       }
+ *   });
  * </pre>
  *
  * <p>This example shows how you might accomplish tasks in an environment where the tracing information is attached
@@ -199,6 +220,24 @@ public class AsyncWingtipsHelperJava7 {
                                                       Map<String, String> mdcContextMapToLink) {
         return new CallableWithTracing<>(callable, spanStackToLink, mdcContextMapToLink);
     }
+
+    /**
+     * @return An {@link ExecutorService} that wraps the given delegate {@link ExecutorService} so that when
+     * {@link Runnable}s or {@link Callable}s are executed through it they will automatically inherit the tracing state
+     * of the thread that called the {@link ExecutorService} method. Equivalent to calling:
+     * {@code new ExecutorServiceWithTracing(delegate)}.
+     *
+     * <p>WARNING: Keep in mind that you should avoid using a {@link ExecutorServiceWithTracing} when spinning off
+     * background threads that aren't tied to a specific trace, or in any other situation where an executed
+     * {@link Runnable}/{@link Callable} should *not* automatically inherit the calling thread's tracing state!
+     *
+     * @deprecated Please move to the Java 8 version of this class and method ({@code AsyncWingtipsHelper} or the static
+     * {@code AsyncWingtipsHelperStatic}) whenever possible.
+     */
+    @Deprecated
+    public static ExecutorServiceWithTracing executorServiceWithTracing(ExecutorService delegate) {
+        return new ExecutorServiceWithTracing(delegate);
+    }
     
     /**
      * Links the given distributed tracing and logging MDC info to the current thread. Any existing tracing and MDC info
@@ -322,5 +361,5 @@ public class AsyncWingtipsHelperJava7 {
         if (spanStackToResetFor != null)
             Tracer.getInstance().registerWithThread(spanStackToResetFor);
     }
-    
+
 }

@@ -328,6 +328,23 @@ executor.execute(withTracing(() -> {
 }));
 ```
 
+* Or use `ExecutorServiceWithTracing` so you don't forget to wrap your `Runnable`s or `Callable`s (WARNING: be careful
+if you have to spin off work that *shouldn't* automatically inherit the calling thread's tracing state, e.g. long-lived
+background threads - in those cases you should *not* use an `ExecutorServiceWithTracing` to spin off that work):
+
+``` java
+import static com.nike.wingtips.util.asynchelperwrapper.ExecutorServiceWithTracing.withTracing;
+
+// ...
+
+// Just an example - please use an appropriate Executor for your use case.
+Executor executor = withTracing(Executors.newSingleThreadExecutor());
+
+executor.execute(() -> {
+    // Code that needs tracing/MDC wrapping goes here
+});
+```
+
 * A similar example using `CompletableFuture`:
 
 ``` java
@@ -378,7 +395,10 @@ finally {
 }
 ```
 
-**ALSO NOTE:** `wingtips-core` does contain a small subset of the async helper functionality described above for the bits that are Java 7 compatible, such as `Runnable` and `Callable`. See `AsyncWingtipsHelperJava7` if you're in a Java 7 environment and cannot upgrade to Java 8. If you're in Java 8, please use `AsyncWingtipsHelper` or `AsyncWingtipsHelperStatic` rather than `AsyncWingtipsHelperJava7`.
+**ALSO NOTE:** `wingtips-core` does contain a small subset of the async helper functionality described above for the 
+bits that are Java 7 compatible, such as `Runnable`, `Callable`, and `ExecutorService`. See `AsyncWingtipsHelperJava7` 
+if you're in a Java 7 environment and cannot upgrade to Java 8. If you're in Java 8, please use `AsyncWingtipsHelper` 
+or `AsyncWingtipsHelperStatic` rather than `AsyncWingtipsHelperJava7`.
 
 <a name="using_dtracing_for_errors"></a>
 ## Using Distributed Tracing to Help with Debugging Issues/Errors/Problems

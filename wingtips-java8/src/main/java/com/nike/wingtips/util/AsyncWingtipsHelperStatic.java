@@ -3,6 +3,7 @@ package com.nike.wingtips.util;
 import com.nike.internal.util.Pair;
 import com.nike.wingtips.Span;
 import com.nike.wingtips.Tracer;
+import com.nike.wingtips.util.asynchelperwrapper.ExecutorServiceWithTracing;
 
 import org.slf4j.MDC;
 
@@ -11,6 +12,7 @@ import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
@@ -46,6 +48,25 @@ import static com.nike.wingtips.util.AsyncWingtipsHelper.DEFAULT_IMPL;
  *   executor.execute(runnableWithTracing(() -> {
  *       // Code that needs tracing/MDC wrapping goes here
  *   }));
+ * </pre>
+ *
+ * <p>Functionally equivalent to the {@link Executor} example above, but with a {@link ExecutorServiceWithTracing} to
+ * automate the thread-hopping behavior whenever the {@link Executor} (or {@link ExecutorService}) executes something
+ * (be careful about this if you spin off work that *shouldn't* automatically inherit the calling thread's tracing
+ * state - see the warning on {@link #executorServiceWithTracing(ExecutorService)}):
+ * <pre>
+ *   import static com.nike.wingtips.util.AsyncWingtipsHelperStatic.executorServiceWithTracing;
+ *
+ *   // ...
+ *   
+ *   Executor executor = executorServiceWithTracing(Executors.newCachedThreadPool());
+ *
+ *   executor.execute(new Runnable() {
+ *       &amp;Override
+ *       public void run() {
+ *           // Code that needs tracing/MDC wrapping goes here
+ *       }
+ *   });
  * </pre>
  *
  * <p>And here's a similar example using {@link CompletableFuture}:
@@ -432,6 +453,20 @@ public class AsyncWingtipsHelperStatic {
                                                                   Deque<Span> spanStackToLink,
                                                                   Map<String, String> mdcContextMapToLink) {
         return DEFAULT_IMPL.biPredicateWithTracing(biPredicate, spanStackToLink, mdcContextMapToLink);
+    }
+
+    /**
+     * @return An {@link ExecutorService} that wraps the given delegate {@link ExecutorService} so that when
+     * {@link Runnable}s or {@link Callable}s are executed through it they will automatically inherit the tracing state
+     * of the thread that called the {@link ExecutorService} method. Equivalent to calling:
+     * {@code new ExecutorServiceWithTracing(delegate)}.
+     *
+     * <p>WARNING: Keep in mind that you should avoid using a {@link ExecutorServiceWithTracing} when spinning off
+     * background threads that aren't tied to a specific trace, or in any other situation where an executed
+     * {@link Runnable}/{@link Callable} should *not* automatically inherit the calling thread's tracing state!
+     */
+    public static ExecutorServiceWithTracing executorServiceWithTracing(ExecutorService delegate) {
+        return DEFAULT_IMPL.executorServiceWithTracing(delegate);
     }
 
     /**

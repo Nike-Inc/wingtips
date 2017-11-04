@@ -7,6 +7,7 @@ import com.nike.wingtips.util.asynchelperwrapper.BiConsumerWithTracing;
 import com.nike.wingtips.util.asynchelperwrapper.BiFunctionWithTracing;
 import com.nike.wingtips.util.asynchelperwrapper.BiPredicateWithTracing;
 import com.nike.wingtips.util.asynchelperwrapper.ConsumerWithTracing;
+import com.nike.wingtips.util.asynchelperwrapper.ExecutorServiceWithTracing;
 import com.nike.wingtips.util.asynchelperwrapper.FunctionWithTracing;
 import com.nike.wingtips.util.asynchelperwrapper.PredicateWithTracing;
 import com.nike.wingtips.util.asynchelperwrapper.SupplierWithTracing;
@@ -18,6 +19,7 @@ import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
@@ -48,6 +50,19 @@ import java.util.function.Supplier;
  *   executor.execute(asyncHelper.runnableWithTracing(() -> {
  *       // Code that needs tracing/MDC wrapping goes here
  *   }));
+ * </pre>
+ *
+ * <p>Functionally equivalent to the {@link Executor} example above, but with a {@link ExecutorServiceWithTracing} to
+ * automate the thread-hopping behavior whenever the {@link Executor} (or {@link ExecutorService}) executes something
+ * (be careful about this if you spin off work that *shouldn't* automatically inherit the calling thread's tracing
+ * state - see the warning on {@link #executorServiceWithTracing(ExecutorService)}):
+ * <pre>
+ *   AsyncWingtipsHelper asyncHelper = AsyncWingtipsHelper.DEFAULT_IMPL;
+ *   Executor executor = asyncHelper.executorServiceWithTracing(Executors.newCachedThreadPool());
+ *
+ *   executor.execute(() -> {
+ *       // Code that needs tracing/MDC wrapping goes here
+ *   });
  * </pre>
  *
  * <p>And here's a similar example using {@link CompletableFuture}:
@@ -438,6 +453,21 @@ public interface AsyncWingtipsHelper {
                                                             Deque<Span> spanStackToLink,
                                                             Map<String, String> mdcContextMapToLink) {
         return new BiPredicateWithTracing<>(biPredicate, spanStackToLink, mdcContextMapToLink);
+    }
+
+    /**
+     * @return An {@link ExecutorService} that wraps the given delegate {@link ExecutorService} so that when
+     * {@link Runnable}s or {@link Callable}s are executed through it they will automatically inherit the tracing state
+     * of the thread that called the {@link ExecutorService} method. Equivalent to calling:
+     * {@code new ExecutorServiceWithTracing(delegate)}.
+     *
+     * <p>WARNING: Keep in mind that you should avoid using a {@link ExecutorServiceWithTracing} when spinning off
+     * background threads that aren't tied to a specific trace, or in any other situation where an executed
+     * {@link Runnable}/{@link Callable} should *not* automatically inherit the calling thread's tracing state!
+     */
+    @SuppressWarnings("deprecation")
+    default ExecutorServiceWithTracing executorServiceWithTracing(ExecutorService delegate) {
+        return AsyncWingtipsHelperJava7.executorServiceWithTracing(delegate);
     }
 
     /**
