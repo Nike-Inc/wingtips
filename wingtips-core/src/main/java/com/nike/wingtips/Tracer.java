@@ -209,10 +209,6 @@ public class Tracer {
      */
     public Span getCurrentSpan() {
         Deque<Span> spanStack = currentSpanStackThreadLocal.get();
-        if (spanStack == null || spanStack.isEmpty()) {
-            setCurrentSpanFromMdcIfNotAlreadySet();
-            spanStack = currentSpanStackThreadLocal.get();
-        }
 
         return (spanStack == null) ? null : spanStack.peek();
     }
@@ -544,28 +540,6 @@ public class Tracer {
         currentStack.push(pushMe);
         configureMDC(pushMe);
         classLogger.debug("** starting sample for span {}", serializeSpanToDesiredStringRepresentation(pushMe));
-    }
-
-    /**
-     * Sets the current {@link Span} on {@link #currentSpanStackThreadLocal} by extracting and deserializing it from the logging {@link org.slf4j.MDC} <b>if and only if</b>
-     * {@link #currentSpanStackThreadLocal} is null/empty <b>AND</b> the MDC contains the span JSON. If there's already a span on the span stack or MDC does not contain any
-     * span JSON then this method will do nothing.
-     */
-    protected void setCurrentSpanFromMdcIfNotAlreadySet() {
-        // We only want to try to pull it from the MDC if there's not already a span available.
-        Deque<Span> spanStack = currentSpanStackThreadLocal.get();
-        if (spanStack != null && !spanStack.isEmpty())
-            return;
-
-        // No span already on this thread. See if we can pull it from the logging MDC.
-        String json = MDC.get(Tracer.SPAN_JSON_MDC_KEY);
-        if (json == null)
-            return;
-
-        // We were able to find a span JSON in the MDC. Deserialize it and push it onto a new stack.
-        Deque<Span> newStack = new LinkedList<>();
-        newStack.add(Span.fromJSON(json));
-        currentSpanStackThreadLocal.set(newStack);
     }
 
     /**
