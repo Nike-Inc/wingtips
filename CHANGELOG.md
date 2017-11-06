@@ -8,12 +8,41 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 
 #### 0.x Releases
 
+- `0.14.x` Releases - [0.14.0](#0140)
 - `0.13.x` Releases - [0.13.0](#0130)
 - `0.12.x` Releases - [0.12.1](#0121), [0.12.0](#0120)
 - `0.11.x` Releases - [0.11.2](#0112), [0.11.1](#0111), [0.11.0](#0110)
 - `0.10.x` Releases - [0.10.0](#0100)
 - `0.9.x` Releases - [0.9.0.1](#0901), [0.9.0](#090)
 
+## [0.14.0](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.14.0)
+
+Released on 2017-11-06.
+
+### Added
+
+- Added `ExecutorServiceWithTracing` to automate having tracing state hop threads when using `Executor` or 
+`ExecutorService` to do work on async threads. See the 
+[async section of the main readme](https://github.com/Nike-Inc/wingtips#async_usage), the 
+[readme for the Java 8 module](https://github.com/Nike-Inc/wingtips/tree/master/wingtips-java8), or the javadocs on 
+`ExecutorServiceWithTracing` for usage examples. 
+    - Added by [Nic Munroe][contrib_nicmunroe] in pull request [#58](https://github.com/Nike-Inc/wingtips/pull/58).
+    
+### Removed
+
+- Removed the "auto resurrect tracing state from SLF4J MDC" behavior from `Tracer` when the tracing state doesn't exist 
+in `Tracer` explicitly. This was possible with some SLF4J implementations where MDC state is inherited by child threads,
+however this could cause spans to hop threads when you don't want them to (e.g. long-lived background threads). We now 
+have helper classes and methods for explicitly and intentionally hopping threads in a way that isn't surprising like 
+the MDC auto-resurrect behavior so those features should be used instead for async thread-hopping. Note that this 
+brings Wingtips in line with Logback, which also intentionally removed the "MDC inheritance in child thread" behavior 
+for similar reasons (see the Logback version 1.1.5 notes in the [logback changelog](https://logback.qos.ch/news.html)). 
+For Wingtips users that relied on this auto-resurrection-from-MDC behavior in Wingtips please refer to the
+[async section of the main readme](https://github.com/Nike-Inc/wingtips#async_usage) and/or the
+[readme for the Java 8 module](https://github.com/Nike-Inc/wingtips/tree/master/wingtips-java8) for information on 
+explicitly and intentionally causing tracing state to hop threads.
+    - Removed by [Nic Munroe][contrib_nicmunroe] in pull request [#57](https://github.com/Nike-Inc/wingtips/pull/57).    
+    
 ## [0.13.0](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.13.0)
 
 Released on 2017-10-25.
