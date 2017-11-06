@@ -54,6 +54,23 @@ executor.execute(withTracing(() -> {
 }));
 ```
 
+* Or use `ExecutorServiceWithTracing` so you don't forget to wrap your `Runnable`s or `Callable`s (WARNING: be careful
+if you have to spin off work that *shouldn't* automatically inherit the calling thread's tracing state, e.g. long-lived
+background threads - in those cases you should *not* use an `ExecutorServiceWithTracing` to spin off that work):
+
+``` java
+import static com.nike.wingtips.util.asynchelperwrapper.ExecutorServiceWithTracing.withTracing;
+
+// ...
+
+// Just an example - please use an appropriate Executor for your use case.
+Executor executor = withTracing(Executors.newSingleThreadExecutor());
+
+executor.execute(() -> {
+    // Code that needs tracing/MDC wrapping goes here
+});
+```
+
 * A similar example using `CompletableFuture`:
 
 ``` java

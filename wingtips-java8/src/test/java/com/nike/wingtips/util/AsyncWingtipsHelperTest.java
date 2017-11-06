@@ -8,6 +8,7 @@ import com.nike.wingtips.util.asynchelperwrapper.BiFunctionWithTracing;
 import com.nike.wingtips.util.asynchelperwrapper.BiPredicateWithTracing;
 import com.nike.wingtips.util.asynchelperwrapper.CallableWithTracing;
 import com.nike.wingtips.util.asynchelperwrapper.ConsumerWithTracing;
+import com.nike.wingtips.util.asynchelperwrapper.ExecutorServiceWithTracing;
 import com.nike.wingtips.util.asynchelperwrapper.FunctionWithTracing;
 import com.nike.wingtips.util.asynchelperwrapper.PredicateWithTracing;
 import com.nike.wingtips.util.asynchelperwrapper.RunnableWithTracing;
@@ -29,6 +30,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
@@ -43,6 +45,7 @@ import static com.nike.wingtips.util.AsyncWingtipsHelperStatic.biFunctionWithTra
 import static com.nike.wingtips.util.AsyncWingtipsHelperStatic.biPredicateWithTracing;
 import static com.nike.wingtips.util.AsyncWingtipsHelperStatic.callableWithTracing;
 import static com.nike.wingtips.util.AsyncWingtipsHelperStatic.consumerWithTracing;
+import static com.nike.wingtips.util.AsyncWingtipsHelperStatic.executorServiceWithTracing;
 import static com.nike.wingtips.util.AsyncWingtipsHelperStatic.functionWithTracing;
 import static com.nike.wingtips.util.AsyncWingtipsHelperStatic.linkTracingToCurrentThread;
 import static com.nike.wingtips.util.AsyncWingtipsHelperStatic.predicateWithTracing;
@@ -69,6 +72,7 @@ public class AsyncWingtipsHelperTest {
     private BiConsumer biConsumerMock;
     private Predicate predicateMock;
     private BiPredicate biPredicateMock;
+    private ExecutorService executorServiceMock;
     
     @Before
     public void beforeMethod() {
@@ -81,6 +85,7 @@ public class AsyncWingtipsHelperTest {
         biConsumerMock = mock(BiConsumer.class);
         predicateMock = mock(Predicate.class);
         biPredicateMock = mock(BiPredicate.class);
+        executorServiceMock = mock(ExecutorService.class);
         
         resetTracing();
     }
@@ -691,6 +696,21 @@ public class AsyncWingtipsHelperTest {
 
         // then
         verifyBiPredicateWithTracing(result, biPredicateMock, setupInfo.getLeft(), setupInfo.getRight());
+    }
+
+    @DataProvider(value = {
+        "true",
+        "false"
+    })
+    @Test
+    public void executorServiceWithTracing_works_as_expected(boolean useStaticMethod) {
+        // when
+        ExecutorServiceWithTracing result = (useStaticMethod)
+                                            ? executorServiceWithTracing(executorServiceMock)
+                                            : DEFAULT_IMPL.executorServiceWithTracing(executorServiceMock);
+
+        // then
+        assertThat(Whitebox.getInternalState(result, "delegate")).isSameAs(executorServiceMock);
     }
 
     @DataProvider(value = {

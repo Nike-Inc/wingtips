@@ -4,6 +4,7 @@ import com.nike.internal.util.Pair;
 import com.nike.wingtips.Span;
 import com.nike.wingtips.Tracer;
 import com.nike.wingtips.util.asynchelperwrapper.CallableWithTracing;
+import com.nike.wingtips.util.asynchelperwrapper.ExecutorServiceWithTracing;
 import com.nike.wingtips.util.asynchelperwrapper.RunnableWithTracing;
 
 import com.tngtech.java.junit.dataprovider.DataProvider;
@@ -22,8 +23,10 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
 
 import static com.nike.wingtips.util.AsyncWingtipsHelperJava7.callableWithTracing;
+import static com.nike.wingtips.util.AsyncWingtipsHelperJava7.executorServiceWithTracing;
 import static com.nike.wingtips.util.AsyncWingtipsHelperJava7.linkTracingToCurrentThread;
 import static com.nike.wingtips.util.AsyncWingtipsHelperJava7.runnableWithTracing;
 import static com.nike.wingtips.util.AsyncWingtipsHelperJava7.unlinkTracingFromCurrentThread;
@@ -40,11 +43,13 @@ import static org.mockito.Mockito.mock;
 public class AsyncWingtipsHelperJava7Test {
     private Runnable runnableMock;
     private Callable callableMock;
+    private ExecutorService executorServiceMock;
 
     @Before
     public void beforeMethod() {
         runnableMock = mock(Runnable.class);
         callableMock = mock(Callable.class);
+        executorServiceMock = mock(ExecutorService.class);
 
         resetTracing();
     }
@@ -199,6 +204,15 @@ public class AsyncWingtipsHelperJava7Test {
 
         // then
         verifyCallableWithTracing(result, callableMock, setupInfo.getLeft(), setupInfo.getRight());
+    }
+
+    @Test
+    public void executorServiceWithTracing_works_as_expected() {
+        // when
+        ExecutorServiceWithTracing result = executorServiceWithTracing(executorServiceMock);
+
+        // then
+        assertThat(Whitebox.getInternalState(result, "delegate")).isSameAs(executorServiceMock);
     }
 
     @DataProvider(value = {
