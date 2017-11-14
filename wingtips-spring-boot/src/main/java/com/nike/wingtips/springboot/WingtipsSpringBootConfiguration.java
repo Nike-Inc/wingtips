@@ -9,6 +9,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.Ordered;
 
 import java.io.IOException;
 
@@ -106,6 +107,8 @@ public class WingtipsSpringBootConfiguration {
             frb.addInitParameter(RequestTracingFilter.USER_ID_HEADER_KEYS_LIST_INIT_PARAM_NAME,
                                  wingtipsProperties.getUserIdHeaderKeys());
         }
+        // Set the order so that the tracing filter is registered first
+        frb.setOrder(Ordered.HIGHEST_PRECEDENCE);
         return frb;
     }
 

@@ -16,6 +16,7 @@ import org.junit.runner.RunWith;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.core.Ordered;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -115,6 +116,8 @@ public class WingtipsSpringBootConfigurationTest {
         else {
             assertThat(userIdHeaderKeysFilterInitParam).isEqualTo(userIdHeaderKeys);
         }
+
+        assertThat(filterRegistrationBean.getOrder()).isEqualTo(Ordered.HIGHEST_PRECEDENCE);
     }
 
     @Test
