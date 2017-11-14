@@ -4,7 +4,6 @@ import com.nike.wingtips.Span.SpanPurpose;
 import com.nike.wingtips.zipkin.WingtipsToZipkinLifecycleListener;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.stereotype.Component;
 
 /**
  * A {@link ConfigurationProperties} companion for {@link WingtipsWithZipkinSpringBootConfiguration} that allows you to
@@ -51,7 +50,6 @@ import org.springframework.stereotype.Component;
  *
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
  */
-@Component
 @ConfigurationProperties("wingtips.zipkin")
 @SuppressWarnings("WeakerAccess")
 public class WingtipsZipkinProperties {

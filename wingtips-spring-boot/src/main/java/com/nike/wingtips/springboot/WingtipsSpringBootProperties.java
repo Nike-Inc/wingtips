@@ -4,7 +4,6 @@ import com.nike.wingtips.Tracer;
 import com.nike.wingtips.servlet.RequestTracingFilter;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.stereotype.Component;
 
 /**
  * A {@link ConfigurationProperties} companion for {@link WingtipsSpringBootConfiguration} that allows you to customize
@@ -38,7 +37,6 @@ import org.springframework.stereotype.Component;
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
  * @author Nic Munroe
  */
-@Component
 @ConfigurationProperties("wingtips")
 @SuppressWarnings("WeakerAccess")
 public class WingtipsSpringBootProperties {

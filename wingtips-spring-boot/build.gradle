@@ -1,5 +1,10 @@
 evaluationDependsOn(':')
 
+ext {
+    // Springboot requires Servlet API to be at least version 3.1
+    servletApiForTestsVersion = '3.1.0'
+}
+
 dependencies {
     compile(
             project(":wingtips-servlet-api"),
@@ -15,7 +20,7 @@ dependencies {
             "ch.qos.logback:logback-classic:$logbackVersion",
             "org.assertj:assertj-core:$assertJVersion",
             "com.tngtech.java:junit-dataprovider:$junitDataproviderVersion",
-            "org.springframework.boot:spring-boot-starter-test:$springbootVersion",
-            "javax.servlet:javax.servlet-api:$servletApiVersion"
+            "org.springframework.boot:spring-boot-starter-web:$springbootVersion",
+            "javax.servlet:javax.servlet-api:$servletApiForTestsVersion"
     )
 }

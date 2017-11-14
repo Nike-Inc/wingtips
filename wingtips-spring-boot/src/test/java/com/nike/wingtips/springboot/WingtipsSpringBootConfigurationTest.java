@@ -4,15 +4,22 @@ import com.nike.wingtips.Tracer;
 import com.nike.wingtips.Tracer.SpanLoggingRepresentation;
 import com.nike.wingtips.servlet.RequestTracingFilter;
 import com.nike.wingtips.springboot.WingtipsSpringBootConfiguration.DoNothingServletFilter;
+import com.nike.wingtips.springboot.componenttest.componentscanonly.ComponentTestMainWithComponentScanOnly;
+import com.nike.wingtips.springboot.componenttest.manualimportandcomponentscan.ComponentTestMainWithBothManualImportAndComponentScan;
+import com.nike.wingtips.springboot.componenttest.manualimportonly.ComponentTestMainManualImportOnly;
 
 import com.tngtech.java.junit.dataprovider.DataProvider;
 import com.tngtech.java.junit.dataprovider.DataProviderRunner;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.springframework.boot.SpringApplication;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.net.ServerSocket;
 import java.util.UUID;
 
 import javax.servlet.FilterChain;
@@ -153,6 +160,76 @@ public class WingtipsSpringBootConfigurationTest {
         
         // then
         verifyNoMoreInteractions(requestMock, responseMock, filterChainMock, filterConfigMock);
+    }
+
+    private enum ComponentTestSetup {
+        MANUAL_IMPORT_ONLY(ComponentTestMainManualImportOnly.class, false),
+        COMPONENT_SCAN_ONLY(ComponentTestMainWithComponentScanOnly.class, true),
+        BOTH_MANUAL_AND_COMPONENT_SCAN(ComponentTestMainWithBothManualImportAndComponentScan.class, true);
+
+        final boolean expectComponentScannedObjects;
+        final Class<?> mainClass;
+
+        ComponentTestSetup(Class<?> mainClass, boolean expectComponentScannedObjects) {
+            this.mainClass = mainClass;
+            this.expectComponentScannedObjects = expectComponentScannedObjects;
+        }
+    }
+
+    // This component test verifies that a Spring Boot application successfully utilizes WingtipsSpringBootConfiguration
+    //      and WingtipsSpringBootProperties when it is component scanned, imported manually, or both. Specifically
+    //      we should not get multiple bean definition errors even when WingtipsSpringBootConfiguration is *both*
+    //      component scanned *and* imported manually.
+    @DataProvider(value = {
+        "MANUAL_IMPORT_ONLY",
+        "COMPONENT_SCAN_ONLY",
+        "BOTH_MANUAL_AND_COMPONENT_SCAN"
+    })
+    @Test
+    public void component_test(ComponentTestSetup componentTestSetup) {
+        // given
+        int serverPort = findFreePort();
+        Class<?> mainClass = componentTestSetup.mainClass;
+
+        ConfigurableApplicationContext serverAppContext = SpringApplication.run(mainClass, "--server.port=" + serverPort);
+
+        try {
+            // when
+            WingtipsSpringBootConfiguration config = serverAppContext.getBean(WingtipsSpringBootConfiguration.class);
+            WingtipsSpringBootProperties props = serverAppContext.getBean(WingtipsSpringBootProperties.class);
+            String[] someComponentScannedClassBeanNames =
+                serverAppContext.getBeanNamesForType(SomeComponentScannedClass.class);
+
+            // then
+            // Sanity check that we component scanned (or not) as appropriate.
+            if (componentTestSetup.expectComponentScannedObjects) {
+                assertThat(someComponentScannedClassBeanNames).isNotEmpty();
+            }
+            else {
+                assertThat(someComponentScannedClassBeanNames).isEmpty();
+            }
+
+            // WingtipsSpringBootConfiguration and WingtipsSpringBootProperties should be available as beans, and
+            //      the config should use the same props we received.
+            assertThat(config).isNotNull();
+            assertThat(props).isNotNull();
+            assertThat(config.wingtipsProperties).isSameAs(props);
+        }
+        finally {
+            SpringApplication.exit(serverAppContext);
+        }
+    }
+
+    private static int findFreePort() {
+        try (ServerSocket serverSocket = new ServerSocket(0)) {
+            return serverSocket.getLocalPort();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Component
+    private static class SomeComponentScannedClass {
     }
 
 }
