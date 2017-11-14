@@ -8,13 +8,27 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 
 #### 0.x Releases
 
-- `0.14.x` Releases - [0.14.0](#0140)
+- `0.14.x` Releases - [0.14.1](#0141), [0.14.0](#0140)
 - `0.13.x` Releases - [0.13.0](#0130)
 - `0.12.x` Releases - [0.12.1](#0121), [0.12.0](#0120)
 - `0.11.x` Releases - [0.11.2](#0112), [0.11.1](#0111), [0.11.0](#0110)
 - `0.10.x` Releases - [0.10.0](#0100)
 - `0.9.x` Releases - [0.9.0.1](#0901), [0.9.0](#090)
 
+## [0.14.1](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.14.1)
+
+Released on 2017-11-14.
+
+### Fixed
+
+- Fixed `WingtipsSpringBootProperties` and `WingtipsZipkinProperties` to not be a Spring `@Component`. This was causing
+multiple-bean-definition errors when component scanning those classes. Those springboot autoconfig classes now work
+when component scanning or when manually imported into an application.
+    - Fixed by [Nic Munroe][contrib_nicmunroe] in pull request [#61](https://github.com/Nike-Inc/wingtips/pull/61).
+- Fixed `WingtipsSpringBootConfiguration` to set `RequestTracingFilter` to the highest precedence so that it will
+execute as the first Servlet filter, since overall-request-spans should encompass as much of the request as possible.
+    - Fixed by [Nic Munroe][contrib_nicmunroe] in pull request [#62](https://github.com/Nike-Inc/wingtips/pull/62).
+    
 ## [0.14.0](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.14.0)
 
 Released on 2017-11-06.
