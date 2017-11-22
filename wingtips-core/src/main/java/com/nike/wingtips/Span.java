@@ -2,13 +2,14 @@ package com.nike.wingtips;
 
 import com.nike.wingtips.util.TracerManagedSpanStatus;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Represents some logical "unit of work" that is part of the larger distributed trace. A given request's trace tree is made up of all the spans with the same {@link #traceId}
@@ -43,6 +44,7 @@ import java.util.concurrent.TimeUnit;
  * </pre>
  *
  * @author Nic Munroe
+ * @author Ales Justin
  */
 @SuppressWarnings("WeakerAccess")
 public class Span implements AutoCloseable {
@@ -78,11 +80,15 @@ public class Span implements AutoCloseable {
     private final long spanStartTimeEpochMicros;
     private final long spanStartTimeNanos;
 
+    private long spanFinishTimeNanos;
+
     private Long durationNanos;
 
     private String cachedJsonRepresentation;
 
     private String cachedKeyValueRepresentation;
+
+    private Object handle;
 
     /**
      * Represents a span's intended purpose in the distributed trace. This is not strictly necessary for distributed tracing to work, but it
@@ -167,6 +173,58 @@ public class Span implements AutoCloseable {
     }
 
     /**
+     * Get span's handle.
+     * The handle is meant to simplify any external mapping between {@link Span} and 3rd party libs.
+     *
+     * @param expectedHandleType the expected handle type
+     * @return return casted handle or null if current handle is not of expected type
+     */
+    public synchronized <T> T getHandle(Class<T> expectedHandleType) {
+        if (expectedHandleType == null) {
+            throw new IllegalArgumentException("Null expectedHandleType!");
+        }
+
+        if (handle == null) {
+            return null;
+        }
+
+        if (handle instanceof Map) {
+            Object value = Map.class.cast(handle).get(expectedHandleType);
+            return expectedHandleType.cast(value);
+        } else {
+            return (expectedHandleType.isInstance(handle) ? expectedHandleType.cast(handle) : null);
+        }
+    }
+
+    /**
+     * Set handle.
+     *
+     * Can be anything, see {@link Span#getHandle(Class)} for more info.
+     * If handle is already set, we change it to {@link Map},
+     * with keys as handles classes, and handles as values.
+     *
+     * If handle parameter is null, do nothing.
+     *
+     * @param handle the handle
+     */
+    public synchronized void setHandle(Object handle) {
+        if (handle == null) {
+            return;
+        }
+
+        Object currentHandle = this.handle;
+        if (currentHandle != null) {
+            if (!(currentHandle instanceof Map)) {
+                this.handle = new HashMap<>(Collections.<Class<?>, Object>singletonMap(currentHandle.getClass(), currentHandle));
+            }
+            //noinspection unchecked
+            Map.class.cast(this.handle).put(handle.getClass(), handle);
+        } else {
+            this.handle = handle;
+        }
+    }
+
+    /**
      * @param spanName The {@link Span#getSpanName()} to initialize the builder with.
      * @param spanPurpose The {@link SpanPurpose} to initialize the builder with. See the javadocs for {@link SpanPurpose} for full details on what each enum option
      *                    means. If you pass in null for this then {@link SpanPurpose#UNKNOWN} will be used.
@@ -177,7 +235,7 @@ public class Span implements AutoCloseable {
      *          before calling {@link Builder#build()} (e.g. setting a user ID via {@link Builder#withUserId(String)}.
      */
     public static Builder generateRootSpanForNewTrace(String spanName, SpanPurpose spanPurpose) {
-        return Span.newBuilder(spanName, spanPurpose);
+        return newBuilder(spanName, spanPurpose);
     }
 
     /**
@@ -319,7 +377,7 @@ public class Span implements AutoCloseable {
         if (this.durationNanos != null)
             throw new IllegalStateException("This Span is already completed.");
 
-        this.durationNanos = System.nanoTime() - spanStartTimeNanos;
+        this.durationNanos = (spanFinishTimeNanos > 0 ? spanFinishTimeNanos : System.nanoTime()) - spanStartTimeNanos;
         // We need to recalculate the JSON and/or key/value representation(s) of this span now that the state of the span has been modified.
         // By setting a cached value to null it will be regenerated the next time it is requested.
         cachedJsonRepresentation = null;
@@ -393,6 +451,29 @@ public class Span implements AutoCloseable {
         }
 
         return builder.toString();
+    }
+
+    /**
+     * Put span's info into map.
+     *
+     * @return span's info as a map
+     */
+    public Map<String, Object> toMap() {
+        Map<String, Object> map = new HashMap<>();
+
+        map.put(TRACE_ID_FIELD, traceId);
+        map.put(PARENT_SPAN_ID_FIELD, parentSpanId);
+        map.put(SPAN_ID_FIELD, spanId);
+        map.put(SPAN_NAME_FIELD, spanName);
+        map.put(SAMPLEABLE_FIELD, sampleable);
+        map.put(USER_ID_FIELD, userId);
+        map.put(SPAN_PURPOSE_FIELD, spanPurpose.name());
+        map.put(START_TIME_EPOCH_MICROS_FIELD, spanStartTimeEpochMicros);
+        if (isCompleted()) {
+            map.put(DURATION_NANOS_FIELD, durationNanos);
+        }
+
+        return map;
     }
 
     /**
@@ -486,7 +567,12 @@ public class Span implements AutoCloseable {
         }
     }
 
-    private static Span fromKeyValueMap(Map<String, String> map) {
+    /**
+     *
+     * @param map the map of Span's keys and values
+     * @return The {@link Span} represented by the given map parameter
+     */
+    public static Span fromKeyValueMap(Map<String, String> map) {
         // Use the map to get the field values for the span.
         String traceId = nullSafeGetString(map, TRACE_ID_FIELD);
         String spanId = nullSafeGetString(map, SPAN_ID_FIELD);
@@ -543,6 +629,15 @@ public class Span implements AutoCloseable {
     }
 
     /**
+     * Handle span's scope.
+     * e.g. if it was handled manually before, push it appropriately onto stack.
+     */
+    public void handleScope() {
+        Tracer tracer = Tracer.getInstance();
+        tracer.manageSpan(this);
+    }
+
+    /**
      * Handles the implementation of {@link AutoCloseable#close()} for spans to allow them to be used in
      * try-with-resources statements.
      * <ul>
@@ -581,6 +676,17 @@ public class Span implements AutoCloseable {
     @Override
     public void close() {
         Tracer.getInstance().handleSpanCloseMethod(this);
+    }
+
+    /**
+     * Close span with explicit finish time (in nanos).
+     * See {@link Span#close()} for more details.
+     *
+     * @param spanFinishTimeNanos span finish time (in nanos)
+     */
+    public void close(long spanFinishTimeNanos) {
+        this.spanFinishTimeNanos = spanFinishTimeNanos;
+        close();
     }
 
     @Override

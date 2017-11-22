@@ -1,0 +1,14 @@
+evaluationDependsOn(':')
+
+dependencies {
+    compile(
+            project(":wingtips-core"),
+            "io.opentracing:opentracing-api:$opentracingVersion"
+    )
+    testCompile(
+            "junit:junit-dep:$junitVersion",
+            "org.mockito:mockito-core:$mockitoVersion",
+            "ch.qos.logback:logback-classic:$logbackVersion",
+            "org.assertj:assertj-core:$assertJVersion"
+    )
+}
