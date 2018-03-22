@@ -667,7 +667,7 @@ public class Tracer {
     }
 
     /**
-     * Handles the implementation of {@link Span#close()} (for {@link AutoCloseable}) for spans to allow them to be
+     * Handles the implementation of {@link Span#close()} (for {@link java.io.Closeable}) for spans to allow them to be
      * used in try-with-resources statements. We do the work here instead of in {@link Span#close()} itself since we
      * have more visibility into whether a span is valid to be closed or not given the current state of the span stack.
      * <ul>
