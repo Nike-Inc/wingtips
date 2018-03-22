@@ -5,6 +5,7 @@ import com.nike.wingtips.util.TracerManagedSpanStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.Closeable;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -45,7 +46,7 @@ import java.util.concurrent.TimeUnit;
  * @author Nic Munroe
  */
 @SuppressWarnings("WeakerAccess")
-public class Span implements AutoCloseable {
+public class Span implements Closeable {
 
     private static final Logger logger = LoggerFactory.getLogger(Span.class);
 
@@ -543,8 +544,8 @@ public class Span implements AutoCloseable {
     }
 
     /**
-     * Handles the implementation of {@link AutoCloseable#close()} for spans to allow them to be used in
-     * try-with-resources statements.
+     * Handles the implementation of {@link Closeable#close()} for spans to allow them to be used in
+     * try-with-resources statements or other libraries that work with {@link Closeable} objects.
      * <ul>
      *     <li>
      *         If this span is already completed ({@link #isCompleted()} returns true) then an error will be logged
