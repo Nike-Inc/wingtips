@@ -8,12 +8,25 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 
 #### 0.x Releases
 
-- `0.14.x` Releases - [0.14.1](#0141), [0.14.0](#0140)
+- `0.14.x` Releases - [0.14.2](#0142), [0.14.1](#0141), [0.14.0](#0140)
 - `0.13.x` Releases - [0.13.0](#0130)
 - `0.12.x` Releases - [0.12.1](#0121), [0.12.0](#0120)
 - `0.11.x` Releases - [0.11.2](#0112), [0.11.1](#0111), [0.11.0](#0110)
 - `0.10.x` Releases - [0.10.0](#0100)
 - `0.9.x` Releases - [0.9.0.1](#0901), [0.9.0](#090)
+
+## [0.14.2](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.14.2)
+
+Released on 2018-03-22.
+
+### Changed
+
+- Changed `Span` to implement `Closeable` instead of `AutoCloseable`. `Closeable` extends `AutoCloseable` and the
+`Span.close()` method signature did not change, so this has no effect other than to enable using `Span`s with code
+that requires a `Closeable`. For example, after this change `Span`s can now be used with Apache Commons 
+`IOUtils.closeQuietly(span)`.
+    - Fixed by [Nic Munroe][contrib_nicmunroe] in pull request [#65](https://github.com/Nike-Inc/wingtips/pull/65).
+    For issue [#64](https://github.com/Nike-Inc/wingtips/issues/64). 
 
 ## [0.14.1](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.14.1)
 
