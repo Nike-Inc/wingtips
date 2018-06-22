@@ -3,6 +3,7 @@ package com.nike.wingtips.zipkin.util;
 import com.tngtech.java.junit.dataprovider.DataProvider;
 import com.tngtech.java.junit.dataprovider.DataProviderRunner;
 
+import java.util.concurrent.LinkedBlockingQueue;
 import org.assertj.core.api.ThrowableAssert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -22,7 +23,6 @@ import java.util.List;
 import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.zip.GZIPInputStream;
@@ -30,9 +30,11 @@ import java.util.zip.GZIPInputStream;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
-import zipkin.Codec;
-import zipkin.junit.HttpFailure;
-import zipkin.junit.ZipkinRule;
+import zipkin2.Span;
+import zipkin2.codec.SpanBytesDecoder;
+import zipkin2.codec.SpanBytesEncoder;
+import zipkin2.junit.HttpFailure;
+import zipkin2.junit.ZipkinRule;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
@@ -182,7 +184,7 @@ public class ZipkinSpanSenderDefaultHttpImplTest {
     @Test
     public void handleSpan_offers_span_to_zipkinSpanSendingQueue() {
         // given
-        zipkin.Span zipkinSpan = zipkinSpan(42, "foo");
+        zipkin2.Span zipkinSpan = zipkinSpan(42, "foo");
         assertThat(implSpy.zipkinSpanSendingQueue.isEmpty());
 
         // when
@@ -206,11 +208,11 @@ public class ZipkinSpanSenderDefaultHttpImplTest {
     @Test
     public void sendSpans_with_span_list_delegates_to_sendSpans_with_byte_array() throws IOException {
         // given
-        List<zipkin.Span> zipkinSpans = new ArrayList<>();
+        List<zipkin2.Span> zipkinSpans = new ArrayList<>();
         for (int i = 0; i < 10; i++) {
             zipkinSpans.add(zipkinSpan(random.nextLong(), UUID.randomUUID().toString()));
         }
-        byte[] expectedBytesPayload = Codec.JSON.writeSpans(zipkinSpans);
+        byte[] expectedBytesPayload = SpanBytesEncoder.JSON_V2.encodeList(zipkinSpans);
 
         // when
         implSpy.sendSpans(zipkinSpans);
@@ -259,7 +261,7 @@ public class ZipkinSpanSenderDefaultHttpImplTest {
     @Test
     public void sendSpans_sends_to_zipkin_server_as_expected() {
         // given
-        List<zipkin.Span> zipkinSpans = new ArrayList<>();
+        List<zipkin2.Span> zipkinSpans = new ArrayList<>();
         for (int i = 0; i < 10; i++) {
             zipkinSpans.add(zipkinSpan(random.nextLong(), UUID.randomUUID().toString()));
         }
@@ -270,9 +272,9 @@ public class ZipkinSpanSenderDefaultHttpImplTest {
         // then
         assertThat(zipkinRule.httpRequestCount()).isEqualTo(1);
         // Each span has its own trace ID
-        List<zipkin.Span>[] expectedTraces = new List[zipkinSpans.size()];
+        List<zipkin2.Span>[] expectedTraces = new List[zipkinSpans.size()];
         for (int i = 0; i < zipkinSpans.size(); i++) {
-            zipkin.Span span = zipkinSpans.get(i);
+            zipkin2.Span span = zipkinSpans.get(i);
             expectedTraces[i] = Collections.singletonList(span);
         }
         assertThat(zipkinRule.getTraces()).contains(expectedTraces);
@@ -293,11 +295,11 @@ public class ZipkinSpanSenderDefaultHttpImplTest {
             Whitebox.setInternalState(implSpy, "compressZipkinSpanPayload", compressPayload);
             Whitebox.setInternalState(implSpy, "postZipkinSpansUrl", new URL(zipkinServer.url("/api/v1/spans").toString()));
 
-            List<zipkin.Span> sentSpans = new ArrayList<>();
+            List<zipkin2.Span> sentSpans = new ArrayList<>();
             for (int i = 0; i < 10; i++) {
                 sentSpans.add(zipkinSpan(random.nextLong(), UUID.randomUUID().toString()));
             }
-            long expectedUncompressedPayloadSize = Codec.JSON.writeSpans(sentSpans).length;
+            long expectedUncompressedPayloadSize = SpanBytesEncoder.JSON_V2.encodeList(sentSpans).length;
 
             // when
             implSpy.sendSpans(sentSpans);
@@ -313,7 +315,7 @@ public class ZipkinSpanSenderDefaultHttpImplTest {
             byte[] receivedPayloadBytes = zipkinServerReq.getBody().readByteArray();
             byte[] deserializableBytes = (compressPayload) ? unGzip(receivedPayloadBytes) : receivedPayloadBytes;
 
-            List<zipkin.Span> receivedSpans = Codec.JSON.readSpans(deserializableBytes);
+            List<zipkin2.Span> receivedSpans = SpanBytesDecoder.JSON_V2.decodeList(deserializableBytes);
             assertThat(receivedSpans).isEqualTo(sentSpans);
         } finally {
             zipkinServer.shutdown();
@@ -340,8 +342,8 @@ public class ZipkinSpanSenderDefaultHttpImplTest {
     public void ZipkinSpanSenderJob_drains_from_blocking_queue_and_calls_sendSpans_method() {
         // given
         ZipkinSpanSenderDefaultHttpImpl senderImplMock = mock(ZipkinSpanSenderDefaultHttpImpl.class);
-        BlockingQueue<zipkin.Span> spanBlockingQueueSpy = spy(new LinkedBlockingQueue<zipkin.Span>());
-        List<zipkin.Span> zipkinSpans = new ArrayList<>();
+        BlockingQueue<zipkin2.Span> spanBlockingQueueSpy = spy(new LinkedBlockingQueue<Span>());
+        List<zipkin2.Span> zipkinSpans = new ArrayList<>();
         for (int i = 0; i < 10; i++) {
             zipkinSpans.add(zipkinSpan(random.nextLong(), UUID.randomUUID().toString()));
         }
@@ -362,7 +364,7 @@ public class ZipkinSpanSenderDefaultHttpImplTest {
     public void ZipkinSpanSenderJob_does_nothing_if_blocking_queue_is_empty() {
         // given
         ZipkinSpanSenderDefaultHttpImpl senderImplMock = mock(ZipkinSpanSenderDefaultHttpImpl.class);
-        BlockingQueue<zipkin.Span> emptySpanBlockingQueueSpy = spy(new LinkedBlockingQueue<zipkin.Span>());
+        BlockingQueue<zipkin2.Span> emptySpanBlockingQueueSpy = spy(new LinkedBlockingQueue<zipkin2.Span>());
 
         ZipkinSpanSenderDefaultHttpImpl.ZipkinSpanSenderJob senderJob =
             new ZipkinSpanSenderDefaultHttpImpl.ZipkinSpanSenderJob(senderImplMock, emptySpanBlockingQueueSpy);
@@ -380,7 +382,7 @@ public class ZipkinSpanSenderDefaultHttpImplTest {
     public void ZipkinSpanSenderJob_does_nothing_if_blocking_queue_isEmpty_method_returns_false_but_queue_empties_before_draining() {
         // given
         ZipkinSpanSenderDefaultHttpImpl senderImplMock = mock(ZipkinSpanSenderDefaultHttpImpl.class);
-        BlockingQueue<zipkin.Span> spanBlockingQueueMock = mock(BlockingQueue.class);
+        BlockingQueue<zipkin2.Span> spanBlockingQueueMock = mock(BlockingQueue.class);
         doReturn(false).when(spanBlockingQueueMock).isEmpty();
         doReturn(0).when(spanBlockingQueueMock).drainTo(any(Collection.class));
 
@@ -400,7 +402,7 @@ public class ZipkinSpanSenderDefaultHttpImplTest {
     public void ZipkinSpanSenderJob_does_not_propagate_any_errors() {
         // given
         ZipkinSpanSenderDefaultHttpImpl senderImplMock = mock(ZipkinSpanSenderDefaultHttpImpl.class);
-        BlockingQueue<zipkin.Span> spanBlockingQueueMock = mock(BlockingQueue.class);
+        BlockingQueue<zipkin2.Span> spanBlockingQueueMock = mock(BlockingQueue.class);
         doThrow(new RuntimeException("kaboom")).when(spanBlockingQueueMock).isEmpty();
 
         final ZipkinSpanSenderDefaultHttpImpl.ZipkinSpanSenderJob senderJob =
@@ -457,8 +459,9 @@ public class ZipkinSpanSenderDefaultHttpImplTest {
         assertThat(ex).isNull();
     }
 
-    static zipkin.Span zipkinSpan(long traceId, String spanName) {
-        return zipkin.Span.builder().traceId(traceId).id(traceId).name(spanName).build();
+    static zipkin2.Span zipkinSpan(long traceIdLong, String spanName) {
+        String traceId = Long.toHexString(traceIdLong);
+        return zipkin2.Span.newBuilder().traceId(traceId).id(traceId).name(spanName).build();
     }
 
 }

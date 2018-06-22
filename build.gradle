@@ -41,6 +41,7 @@ allprojects {
     }
 
     repositories {
+        mavenLocal()
         jcenter()
     }
 
@@ -64,7 +65,7 @@ javadocJar.enabled = false
 ext {
     slf4jVersion = '1.7.25'
     servletApiVersion = '3.0.1'
-    zipkinVersion = '1.16.2'
+    zipkinVersion = '2.9.5-SNAPSHOT'
     springVersion = '4.3.7.RELEASE'
     springbootVersion = '1.5.2.RELEASE'
     apacheHttpClientVersion = '4.4.1'

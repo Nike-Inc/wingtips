@@ -28,7 +28,7 @@ public interface ZipkinSpanSender extends Flushable {
      *
      * @param span The Zipkin span to handle.
      */
-    void handleSpan(zipkin.Span span);
+    void handleSpan(zipkin2.Span span);
 
     /**
      * <p>

@@ -20,8 +20,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.zip.GZIPOutputStream;
-
-import zipkin.Codec;
+import zipkin2.codec.SpanBytesEncoder;
 
 /**
  * A default no-dependencies implementation of {@link ZipkinSpanSender} that collects spans into batches and sends them to the Zipkin server
@@ -43,7 +42,7 @@ public class ZipkinSpanSenderDefaultHttpImpl implements ZipkinSpanSender {
     protected final int readTimeoutMillis;
     protected final ZipkinSpanSenderJob senderJob;
 
-    protected final BlockingQueue<zipkin.Span> zipkinSpanSendingQueue = new LinkedBlockingQueue<>();
+    protected final BlockingQueue<zipkin2.Span> zipkinSpanSendingQueue = new LinkedBlockingQueue<>();
     protected final ScheduledExecutorService zipkinSpanSendingScheduler;
 
     /**
@@ -96,7 +95,7 @@ public class ZipkinSpanSenderDefaultHttpImpl implements ZipkinSpanSender {
     }
 
     @Override
-    public void handleSpan(zipkin.Span span) {
+    public void handleSpan(zipkin2.Span span) {
         zipkinSpanSendingQueue.offer(span);
     }
 
@@ -114,13 +113,13 @@ public class ZipkinSpanSenderDefaultHttpImpl implements ZipkinSpanSender {
         });
     }
 
-    protected void sendSpans(List<zipkin.Span> spanList) {
+    protected void sendSpans(List<zipkin2.Span> spanList) {
         try {
-            sendSpans(Codec.JSON.writeSpans(spanList));
+            sendSpans(SpanBytesEncoder.JSON_V2.encodeList(spanList));
         } catch (IOException e) {
             Set<String> affectedTraceIds = new HashSet<>(spanList.size());
-            for (zipkin.Span span : spanList) {
-                affectedTraceIds.add(String.valueOf(span.traceId));
+            for (zipkin2.Span span : spanList) {
+                affectedTraceIds.add(span.traceId());
             }
             logger.error("An error occurred attempting to post Zipkin spans to the Zipkin server. affected_trace_ids={}, exception_cause=\"{}\"",
                          affectedTraceIds.toString(), e.toString());
@@ -177,9 +176,9 @@ public class ZipkinSpanSenderDefaultHttpImpl implements ZipkinSpanSender {
         private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
         protected final ZipkinSpanSenderDefaultHttpImpl zipkinSpanSender;
-        protected final BlockingQueue<zipkin.Span> zipkinSpanSendingQueue;
+        protected final BlockingQueue<zipkin2.Span> zipkinSpanSendingQueue;
 
-        public ZipkinSpanSenderJob(ZipkinSpanSenderDefaultHttpImpl zipkinSpanSender, BlockingQueue<zipkin.Span> zipkinSpanSendingQueue) {
+        public ZipkinSpanSenderJob(ZipkinSpanSenderDefaultHttpImpl zipkinSpanSender, BlockingQueue<zipkin2.Span> zipkinSpanSendingQueue) {
             this.zipkinSpanSender = zipkinSpanSender;
             this.zipkinSpanSendingQueue = zipkinSpanSendingQueue;
         }
@@ -190,7 +189,7 @@ public class ZipkinSpanSenderDefaultHttpImpl implements ZipkinSpanSender {
                 if (zipkinSpanSendingQueue.isEmpty())
                     return;
 
-                List<zipkin.Span> drainedSpans = new ArrayList<>(zipkinSpanSendingQueue.size());
+                List<zipkin2.Span> drainedSpans = new ArrayList<>(zipkinSpanSendingQueue.size());
                 zipkinSpanSendingQueue.drainTo(drainedSpans);
                 if (!drainedSpans.isEmpty())
                     zipkinSpanSender.sendSpans(drainedSpans);

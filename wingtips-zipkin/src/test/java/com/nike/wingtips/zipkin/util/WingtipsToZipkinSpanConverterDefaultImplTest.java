@@ -2,7 +2,6 @@ package com.nike.wingtips.zipkin.util;
 
 import com.nike.wingtips.Span;
 
-import com.nike.wingtips.TraceAndSpanIdGenerator;
 import com.tngtech.java.junit.dataprovider.DataProvider;
 import com.tngtech.java.junit.dataprovider.DataProviderRunner;
 
@@ -14,13 +13,9 @@ import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
-import zipkin.Annotation;
-import zipkin.BinaryAnnotation;
-import zipkin.Constants;
-import zipkin.Endpoint;
+import zipkin2.Endpoint;
 
 import static com.nike.wingtips.TraceAndSpanIdGenerator.generateId;
-import static com.nike.wingtips.TraceAndSpanIdGenerator.unsignedLowerHexStringToLong;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.ThrowableAssert.catchThrowable;
 
@@ -35,34 +30,21 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
     private WingtipsToZipkinSpanConverterDefaultImpl impl = new WingtipsToZipkinSpanConverterDefaultImpl();
     private final Random random = new Random(System.nanoTime());
 
-    private void verifySpanPurposeRelatedStuff(zipkin.Span zipkinSpan, Span wingtipsSpan, Endpoint zipkinEndpoint, String localComponentNamespace) {
+    private void verifySpanPurposeRelatedStuff(zipkin2.Span zipkinSpan, Span wingtipsSpan, String localComponentNamespace) {
         Span.SpanPurpose spanPurpose = wingtipsSpan.getSpanPurpose();
-        long startTimeEpochMicros = wingtipsSpan.getSpanStartTimeEpochMicros();
-        long durationMicros = TimeUnit.NANOSECONDS.toMicros(wingtipsSpan.getDurationNanos());
 
         switch(spanPurpose) {
             case SERVER:
-                assertThat(zipkinSpan.annotations).hasSize(2);
-                assertThat(zipkinSpan.binaryAnnotations).isEmpty();
-
-                assertThat(zipkinSpan.annotations.get(0)).isEqualTo(Annotation.create(startTimeEpochMicros, Constants.SERVER_RECV, zipkinEndpoint));
-                assertThat(zipkinSpan.annotations.get(1)).isEqualTo(Annotation.create(startTimeEpochMicros + durationMicros, Constants.SERVER_SEND, zipkinEndpoint));
+                assertThat(zipkinSpan.kind()).isEqualTo(zipkin2.Span.Kind.SERVER);
 
                 break;
             case CLIENT:
-                assertThat(zipkinSpan.annotations).hasSize(2);
-                assertThat(zipkinSpan.binaryAnnotations).isEmpty();
-
-                assertThat(zipkinSpan.annotations.get(0)).isEqualTo(Annotation.create(startTimeEpochMicros, Constants.CLIENT_SEND, zipkinEndpoint));
-                assertThat(zipkinSpan.annotations.get(1)).isEqualTo(Annotation.create(startTimeEpochMicros + durationMicros, Constants.CLIENT_RECV, zipkinEndpoint));
+                assertThat(zipkinSpan.kind()).isEqualTo(zipkin2.Span.Kind.CLIENT);
 
                 break;
             case LOCAL_ONLY:
             case UNKNOWN:       // intentional fall-through: local and unknown span purpose are treated the same way
-                assertThat(zipkinSpan.annotations).isEmpty();
-                assertThat(zipkinSpan.binaryAnnotations).hasSize(1);
-
-                assertThat(zipkinSpan.binaryAnnotations.get(0)).isEqualTo(BinaryAnnotation.create(Constants.LOCAL_COMPONENT, localComponentNamespace, zipkinEndpoint));
+                assertThat(zipkinSpan.tags()).containsEntry("lc", localComponentNamespace);
 
                 break;
             default:
@@ -86,22 +68,23 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
         long startTimeEpochMicros = Math.abs(random.nextLong());
         long durationNanos = Math.abs(random.nextLong());
         long durationMicros = TimeUnit.NANOSECONDS.toMicros(durationNanos);
-        Endpoint zipkinEndpoint = Endpoint.create(UUID.randomUUID().toString(), 42);
+        Endpoint zipkinEndpoint = Endpoint.newBuilder().serviceName(UUID.randomUUID().toString()).build();
         String localComponentNamespace = UUID.randomUUID().toString();
         Span wingtipsSpan = new Span(traceId, parentId, spanId, spanName, true, null, spanPurpose, startTimeEpochMicros, null, durationNanos);
 
         // when
-        zipkin.Span zipkinSpan = impl.convertWingtipsSpanToZipkinSpan(wingtipsSpan, zipkinEndpoint, localComponentNamespace);
+        zipkin2.Span zipkinSpan = impl.convertWingtipsSpanToZipkinSpan(wingtipsSpan, zipkinEndpoint, localComponentNamespace);
 
         // then
-        assertThat(zipkinSpan.id).isEqualTo(unsignedLowerHexStringToLong(wingtipsSpan.getSpanId()));
-        assertThat(zipkinSpan.name).isEqualTo(wingtipsSpan.getSpanName());
-        assertThat(zipkinSpan.parentId).isEqualTo(unsignedLowerHexStringToLong(wingtipsSpan.getParentSpanId()));
-        assertThat(zipkinSpan.timestamp).isEqualTo(wingtipsSpan.getSpanStartTimeEpochMicros());
-        assertThat(zipkinSpan.traceId).isEqualTo(unsignedLowerHexStringToLong(wingtipsSpan.getTraceId()));
-        assertThat(zipkinSpan.duration).isEqualTo(durationMicros);
+        assertThat(zipkinSpan.id()).isEqualTo(wingtipsSpan.getSpanId());
+        assertThat(zipkinSpan.name()).isEqualTo(wingtipsSpan.getSpanName());
+        assertThat(zipkinSpan.parentId()).isEqualTo(wingtipsSpan.getParentSpanId());
+        assertThat(zipkinSpan.timestamp()).isEqualTo(wingtipsSpan.getSpanStartTimeEpochMicros());
+        assertThat(zipkinSpan.traceId()).isEqualTo(wingtipsSpan.getTraceId());
+        assertThat(zipkinSpan.duration()).isEqualTo(durationMicros);
+        assertThat(zipkinSpan.localEndpoint()).isEqualTo(zipkinEndpoint);
 
-        verifySpanPurposeRelatedStuff(zipkinSpan, wingtipsSpan, zipkinEndpoint, localComponentNamespace);
+        verifySpanPurposeRelatedStuff(zipkinSpan, wingtipsSpan, localComponentNamespace);
     }
 
     @DataProvider(value = {
@@ -120,22 +103,23 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
         long startTimeEpochMicros = Math.abs(random.nextLong());
         long durationNanos = Math.abs(random.nextLong());
         long durationMicros = TimeUnit.NANOSECONDS.toMicros(durationNanos);
-        Endpoint zipkinEndpoint = Endpoint.create(UUID.randomUUID().toString(), 42);
+        Endpoint zipkinEndpoint = Endpoint.newBuilder().serviceName(UUID.randomUUID().toString()).build();
         String localComponentNamespace = UUID.randomUUID().toString();
         Span wingtipsSpan = new Span(traceId, null, spanId, spanName, true, null, spanPurpose, startTimeEpochMicros, null, durationNanos);
 
         // when
-        zipkin.Span zipkinSpan = impl.convertWingtipsSpanToZipkinSpan(wingtipsSpan, zipkinEndpoint, localComponentNamespace);
+        zipkin2.Span zipkinSpan = impl.convertWingtipsSpanToZipkinSpan(wingtipsSpan, zipkinEndpoint, localComponentNamespace);
 
         // then
-        assertThat(zipkinSpan.id).isEqualTo(unsignedLowerHexStringToLong(wingtipsSpan.getSpanId()));
-        assertThat(zipkinSpan.name).isEqualTo(wingtipsSpan.getSpanName());
-        assertThat(zipkinSpan.parentId).isNull();
-        assertThat(zipkinSpan.timestamp).isEqualTo(wingtipsSpan.getSpanStartTimeEpochMicros());
-        assertThat(zipkinSpan.traceId).isEqualTo(unsignedLowerHexStringToLong(wingtipsSpan.getTraceId()));
-        assertThat(zipkinSpan.duration).isEqualTo(durationMicros);
+        assertThat(zipkinSpan.id()).isEqualTo(wingtipsSpan.getSpanId());
+        assertThat(zipkinSpan.name()).isEqualTo(wingtipsSpan.getSpanName());
+        assertThat(zipkinSpan.parentId()).isNull();
+        assertThat(zipkinSpan.timestamp()).isEqualTo(wingtipsSpan.getSpanStartTimeEpochMicros());
+        assertThat(zipkinSpan.traceId()).isEqualTo(wingtipsSpan.getTraceId());
+        assertThat(zipkinSpan.duration()).isEqualTo(durationMicros);
+        assertThat(zipkinSpan.localEndpoint()).isEqualTo(zipkinEndpoint);
 
-        verifySpanPurposeRelatedStuff(zipkinSpan, wingtipsSpan, zipkinEndpoint, localComponentNamespace);
+        verifySpanPurposeRelatedStuff(zipkinSpan, wingtipsSpan, localComponentNamespace);
     }
 
     @Test
@@ -150,16 +134,15 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
         String spanId = low64Bits;
         long startTimeEpochMicros = Math.abs(random.nextLong());
         long durationNanos = Math.abs(random.nextLong());
-        Endpoint zipkinEndpoint = Endpoint.create(UUID.randomUUID().toString(), 42);
+        Endpoint zipkinEndpoint = Endpoint.newBuilder().serviceName(UUID.randomUUID().toString()).build();
         String localComponentNamespace = UUID.randomUUID().toString();
         Span wingtipsSpan = new Span(traceId, null, spanId, spanName, true, null, Span.SpanPurpose.CLIENT, startTimeEpochMicros, null, durationNanos);
 
         // when
-        zipkin.Span zipkinSpan = impl.convertWingtipsSpanToZipkinSpan(wingtipsSpan, zipkinEndpoint, localComponentNamespace);
+        zipkin2.Span zipkinSpan = impl.convertWingtipsSpanToZipkinSpan(wingtipsSpan, zipkinEndpoint, localComponentNamespace);
 
         // then
-        assertThat(zipkinSpan.traceIdHigh).isEqualTo(unsignedLowerHexStringToLong(high64Bits));
-        assertThat(zipkinSpan.traceId).isEqualTo(unsignedLowerHexStringToLong(low64Bits));
+        assertThat(zipkinSpan.traceId()).isEqualTo(hex128Bits);
     }
 
     @DataProvider(value = {
@@ -167,14 +150,14 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
         "123e4567-e89b-12d3-a456-426655440000  "  // UUID format (hyphens and also >32 chars)
     }, splitBy = "\\|")
     @Test
-    public void convertWingtipsSpanToZipkinSpan_throws_NumberFormatException_for_illegal_args(final String badHexString) {
+    public void convertWingtipsSpanToZipkinSpan_throws_IllegalArgumentException(final String badHexString) {
         // given
         String spanName = UUID.randomUUID().toString();
         String traceId = badHexString;
         String spanId = "48485a3953bb6124";
         long startTimeEpochMicros = Math.abs(random.nextLong());
         long durationNanos = Math.abs(random.nextLong());
-        final Endpoint zipkinEndpoint = Endpoint.create(UUID.randomUUID().toString(), 42);
+        final Endpoint zipkinEndpoint = Endpoint.newBuilder().serviceName(UUID.randomUUID().toString()).build();
         final String localComponentNamespace = UUID.randomUUID().toString();
         final Span wingtipsSpan = new Span(traceId, null, spanId, spanName, true, null, Span.SpanPurpose.CLIENT, startTimeEpochMicros, null, durationNanos);
 
@@ -187,6 +170,6 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
         });
 
         // then
-        assertThat(ex).isInstanceOf(NumberFormatException.class);
+        assertThat(ex).isInstanceOf(IllegalArgumentException.class);
     }
 }
