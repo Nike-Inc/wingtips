@@ -5,7 +5,7 @@ targetCompatibility = JavaVersion.VERSION_1_8
 
 dependencies {
     compile(
-            project(":wingtips-zipkin-spring-boot"),
+            project(":wingtips-zipkin2-spring-boot"),
             project(":wingtips-java8"),
             "org.springframework.boot:spring-boot-starter-web:$springbootVersion",
             "ch.qos.logback:logback-classic:$logbackVersion"

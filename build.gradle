@@ -41,7 +41,8 @@ allprojects {
     }
 
     repositories {
-        mavenLocal()
+        // temporary until next zipkin release
+        maven { url 'http://oss.jfrog.org/artifactory/oss-snapshot-local' }
         jcenter()
     }
 
