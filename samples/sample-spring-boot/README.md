@@ -4,9 +4,9 @@ Wingtips is a distributed tracing solution for Java 7 and greater based on the
 [Google Dapper paper](http://static.googleusercontent.com/media/research.google.com/en/us/pubs/archive/36356.pdf).
 
 This submodule contains a sample application based on Spring Boot that uses `WingtipsWithZipkinSpringBootConfiguration` 
-from [`wingtips-zipkin-spring-boot`](../../wingtips-zipkin-spring-boot) to setup both Wingtips' 
+from [`wingtips-zipkin2-spring-boot`](../../wingtips-zipkin2-spring-boot) to setup both Wingtips'
 `RequestTracingFilter` (to automatically start and complete the overall request span for incoming requests) and 
-Wingtips' Zipkin [integration](../../wingtips-zipkin) (to send completed Wingtips spans to a 
+Wingtips' Zipkin [integration](../../wingtips-zipkin2) (to send completed Wingtips spans to a
 [Zipkin](http://zipkin.io/) server), all configured from the sample's `application.properties`. As always with 
 `RequestTracingFilter`, if the incoming request contains tracing headers then they will be used as the parent span, 
 otherwise a new trace will be started. 

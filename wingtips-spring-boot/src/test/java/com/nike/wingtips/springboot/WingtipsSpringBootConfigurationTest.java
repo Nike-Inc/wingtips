@@ -4,9 +4,9 @@ import com.nike.wingtips.Tracer;
 import com.nike.wingtips.Tracer.SpanLoggingRepresentation;
 import com.nike.wingtips.servlet.RequestTracingFilter;
 import com.nike.wingtips.springboot.WingtipsSpringBootConfiguration.DoNothingServletFilter;
-import com.nike.wingtips.springboot.componenttest.componentscanonly.ComponentTestMainWithComponentScanOnly;
-import com.nike.wingtips.springboot.componenttest.manualimportandcomponentscan.ComponentTestMainWithBothManualImportAndComponentScan;
-import com.nike.wingtips.springboot.componenttest.manualimportonly.ComponentTestMainManualImportOnly;
+import com.nike.wingtips.springboot.zipkin2.componenttest.componentscanonly.ComponentTestMainWithComponentScanOnly;
+import com.nike.wingtips.springboot.zipkin2.componenttest.manualimportandcomponentscan.ComponentTestMainWithBothManualImportAndComponentScan;
+import com.nike.wingtips.springboot.zipkin2.componenttest.manualimportonly.ComponentTestMainManualImportOnly;
 
 import com.tngtech.java.junit.dataprovider.DataProvider;
 import com.tngtech.java.junit.dataprovider.DataProviderRunner;
