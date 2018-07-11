@@ -72,29 +72,21 @@ public class WingtipsZipkinPropertiesTest {
     }
 
     @DataProvider(value = {
-        "true   |   true    |   true    |   true    |   false",
-        "true   |   false   |   true    |   true    |   false",
-        "false  |   true    |   true    |   true    |   false",
-        "false  |   false   |   true    |   true    |   false",
+        "true   |   true    |   true    |   false",
+        "true   |   true    |   false   |   false",
 
-        "true   |   true    |   false   |   true    |   false",
-        "true   |   false   |   false   |   true    |   false",
-        "false  |   true    |   false   |   true    |   false",
-        "false  |   false   |   false   |   true    |   false",
+        "true   |   false   |   true    |   false",
+        "true   |   false   |   false   |   false",
+        
+        "false  |   true    |   true    |   false",
+        "false  |   true    |   false   |   false",
 
-        "true   |   true    |   true    |   false   |   false",
-        "true   |   false   |   true    |   false   |   false",
-        "false  |   true    |   true    |   false   |   false",
-        "false  |   false   |   true    |   false   |   false",
-
-        "true   |   true    |   false   |   false   |   false",
-        "true   |   false   |   false   |   false   |   false",
-        "false  |   true    |   false   |   false   |   false",
-        "false  |   false   |   false   |   false   |   true" // The one case where expectedResult is true
+        "false  |   false   |   true    |   false",
+        "false  |   false   |   false   |   true" // The one case where expectedResult is true
     }, splitBy = "\\|")
     @Test
     public void shouldApplyWingtipsToZipkinLifecycleListener_works_as_expected(
-        boolean zipkinDisabled, boolean baseUrlIsNull, boolean serviceNameIsNull, boolean localComponentNamespaceIsNull,
+        boolean zipkinDisabled, boolean baseUrlIsNull, boolean serviceNameIsNull,
         boolean expectedResult
     ) {
         // given
