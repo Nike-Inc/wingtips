@@ -8,6 +8,18 @@ This module is a plugin extension module of the core Wingtips library and contai
 
 This module is an optional plugin for the wingtips-core library. See the [wingtips-core documentation](../README.md) for more detailed information on distributed tracing in general and the Wingtips implementation in particular.
 
+## This Module is Deprecated - Please Migrate to the [wingtips-zipkin2](../wingtips-zipkin2) Dependency
+
+The `wingtips-zipkin2` module replaces this one. It has support for Zipkin v2, while also maintaining the capability
+to send span data to older Zipkin Servers that only understand the Zipkin v1 format. Please migrate to the 
+`wingtips-zipkin2` dependency, as this `wingtips-zipkin` module will be dropped in a future update.
+
+Migration should be fairly straightforward for most users - classes moved from the `com.nike.wingtips.zipkin` package
+to `com.nike.wingtips.zipkin2`, the "local component name" is no longer needed, and the 
+`WingtipsToZipkinLifecycleListener` uses native Zipkin `Reporter`s and `Sender`s to send span data to Zipkin instead of
+the custom Wingtips `ZipkinSpanSender` adapter. See the [wingtips-zipkin2 readme](../wingtips-zipkin2) for more details
+on the new module and how to use it.
+
 ## Quickstart
 
 For a basic Zipkin integration using the minimum-dependencies default implementation provided by this submodule add the following line as early in your application startup procedure as possible (ideally before any requests hit the service that would generate spans) and you'll see the Wingtips spans show up in the Zipkin UI with the proper client-send, client-receive, server-send, and server-receive annotations:

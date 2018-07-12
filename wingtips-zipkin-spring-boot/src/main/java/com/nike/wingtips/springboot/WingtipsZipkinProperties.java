@@ -48,10 +48,13 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *     wingtips.zipkin.local-component-namespace=some-local-component-name
  * </pre>
  *
+ * @deprecated Please migrate to the wingtips-zipkin2-spring-boot dependency.
+ * 
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
  */
 @ConfigurationProperties("wingtips.zipkin")
 @SuppressWarnings("WeakerAccess")
+@Deprecated
 public class WingtipsZipkinProperties {
     private boolean zipkinDisabled = false;
     private String serviceName = "unknown";

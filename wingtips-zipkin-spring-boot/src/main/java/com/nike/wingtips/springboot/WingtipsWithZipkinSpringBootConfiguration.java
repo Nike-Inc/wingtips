@@ -47,11 +47,14 @@ import org.springframework.context.annotation.Import;
  * None of those properties are required - if they are missing then {@link RequestTracingFilter} will be
  * registered, it will not look for any user ID headers, and JSON span logging format will be used.
  *
+ * @deprecated Please migrate to the wingtips-zipkin2-spring-boot dependency.
+ *
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
  */
 @Configuration
 @Import(WingtipsSpringBootConfiguration.class)
 @EnableConfigurationProperties(WingtipsZipkinProperties.class)
+@Deprecated
 public class WingtipsWithZipkinSpringBootConfiguration {
 
     @SuppressWarnings("WeakerAccess")

@@ -33,9 +33,12 @@ import zipkin.Endpoint;
  *     Wingtips unchanged.
  * </p>
  *
+ * @deprecated Please migrate to the wingtips-zipkin2 dependency.
+ * 
  * @author Nic Munroe
  */
 @SuppressWarnings("WeakerAccess")
+@Deprecated
 public class WingtipsToZipkinLifecycleListener implements SpanLifecycleListener {
 
     private final Logger zipkinConversionOrReportingErrorLogger = LoggerFactory.getLogger("ZIPKIN_SPAN_CONVERSION_OR_HANDLING_ERROR");

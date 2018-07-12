@@ -10,8 +10,11 @@ import java.io.Flushable;
  *     no-dependencies HTTP-only default implementation provided by {@link ZipkinSpanSenderDefaultHttpImpl}.
  * </p>
  *
+ * @deprecated Please migrate to the wingtips-zipkin2 dependency.
+ * 
  * @author Nic Munroe
  */
+@Deprecated
 public interface ZipkinSpanSender extends Flushable {
 
     /**

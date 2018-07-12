@@ -27,8 +27,11 @@ import zipkin.Codec;
  * A default no-dependencies implementation of {@link ZipkinSpanSender} that collects spans into batches and sends them to the Zipkin server
  * at a regular intervals over HTTP.
  *
+ * @deprecated Please migrate to the wingtips-zipkin2 dependency.
+ * 
  * @author Nic Munroe
  */
+@Deprecated
 public class ZipkinSpanSenderDefaultHttpImpl implements ZipkinSpanSender {
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());

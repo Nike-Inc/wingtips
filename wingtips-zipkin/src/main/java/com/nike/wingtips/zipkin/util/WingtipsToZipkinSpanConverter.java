@@ -7,8 +7,11 @@ import zipkin.Endpoint;
 /**
  * Simple interface for a class that knows how to convert a Wingtips {@link Span} to a {@link zipkin.Span}.
  *
+ * @deprecated Please migrate to the wingtips-zipkin2 dependency.
+ *
  * @author Nic Munroe
  */
+@Deprecated
 public interface WingtipsToZipkinSpanConverter {
 
     /**
