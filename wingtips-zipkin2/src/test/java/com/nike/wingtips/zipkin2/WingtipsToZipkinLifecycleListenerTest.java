@@ -3,12 +3,13 @@ package com.nike.wingtips.zipkin2;
 import com.nike.wingtips.Span;
 import com.nike.wingtips.zipkin2.util.WingtipsToZipkinSpanConverter;
 import com.nike.wingtips.zipkin2.util.WingtipsToZipkinSpanConverterDefaultImpl;
-import com.nike.wingtips.zipkin2.util.ZipkinSpanSender;
-import com.nike.wingtips.zipkin2.util.ZipkinSpanSenderDefaultHttpImpl;
 
-import org.assertj.core.api.ThrowableAssert;
+import com.tngtech.java.junit.dataprovider.DataProvider;
+import com.tngtech.java.junit.dataprovider.DataProviderRunner;
+
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
 import org.mockito.internal.util.reflection.Whitebox;
 import org.slf4j.Logger;
 
@@ -17,6 +18,9 @@ import java.net.URL;
 import java.util.UUID;
 
 import zipkin2.Endpoint;
+import zipkin2.reporter.AsyncReporter;
+import zipkin2.reporter.Reporter;
+import zipkin2.reporter.urlconnection.URLConnectionSender;
 
 import static com.nike.wingtips.zipkin2.WingtipsToZipkinLifecycleListener.MIN_SPAN_HANDLING_ERROR_LOG_INTERVAL_MILLIS;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -35,21 +39,23 @@ import static org.mockito.Mockito.verifyZeroInteractions;
  *
  * @author Nic Munroe
  */
+@RunWith(DataProviderRunner.class)
 public class WingtipsToZipkinLifecycleListenerTest {
 
     private WingtipsToZipkinLifecycleListener listener;
     private String serviceName;
     private WingtipsToZipkinSpanConverter spanConverterMock;
-    private ZipkinSpanSender spanSenderMock;
+    private Reporter<zipkin2.Span> spanReporterMock;
     private Span spanMock;
 
     @Before
+    @SuppressWarnings("unchecked")
     public void beforeMethod() {
         serviceName = UUID.randomUUID().toString();
         spanConverterMock = mock(WingtipsToZipkinSpanConverter.class);
-        spanSenderMock = mock(ZipkinSpanSender.class);
+        spanReporterMock = mock(Reporter.class);
 
-        listener = new WingtipsToZipkinLifecycleListener(serviceName, spanConverterMock, spanSenderMock);
+        listener = new WingtipsToZipkinLifecycleListener(serviceName, spanConverterMock, spanReporterMock);
 
         spanMock = mock(Span.class);
     }
@@ -57,19 +63,28 @@ public class WingtipsToZipkinLifecycleListenerTest {
     @Test
     public void kitchen_sink_constructor_sets_fields_as_expected() {
         // when
-        WingtipsToZipkinLifecycleListener listener = new WingtipsToZipkinLifecycleListener(serviceName, spanConverterMock, spanSenderMock);
+        WingtipsToZipkinLifecycleListener listener = new WingtipsToZipkinLifecycleListener(
+            serviceName, spanConverterMock, spanReporterMock
+        );
 
         // then
         assertThat(listener.serviceName).isEqualTo(serviceName);
         assertThat(listener.zipkinEndpoint.serviceName()).isEqualTo(serviceName);
         assertThat(listener.zipkinSpanConverter).isSameAs(spanConverterMock);
-        assertThat(listener.zipkinSpanSender).isSameAs(spanSenderMock);
+        assertThat(listener.zipkinSpanReporter).isSameAs(spanReporterMock);
     }
 
+    @DataProvider(value = {
+        "true",
+        "false"
+    })
     @Test
-    public void convenience_constructor_sets_fields_as_expected() throws MalformedURLException {
+    public void convenience_constructor_sets_fields_as_expected(boolean baseUrlTrailingSlash) throws MalformedURLException {
         // given
-        String baseUrl = "http://localhost:4242";
+        String baseUrlWithoutTrailingSlash = "http://localhost:4242";
+        String baseUrl = (baseUrlTrailingSlash)
+                         ? baseUrlWithoutTrailingSlash + "/"
+                         : baseUrlWithoutTrailingSlash;
 
         // when
         WingtipsToZipkinLifecycleListener listener = new WingtipsToZipkinLifecycleListener(serviceName, baseUrl);
@@ -78,9 +93,11 @@ public class WingtipsToZipkinLifecycleListenerTest {
         assertThat(listener.serviceName).isEqualTo(serviceName);
         assertThat(listener.zipkinEndpoint.serviceName()).isEqualTo(serviceName);
         assertThat(listener.zipkinSpanConverter).isInstanceOf(WingtipsToZipkinSpanConverterDefaultImpl.class);
-        assertThat(listener.zipkinSpanSender).isInstanceOf(ZipkinSpanSenderDefaultHttpImpl.class);
-        ZipkinSpanSenderDefaultHttpImpl spanSender = (ZipkinSpanSenderDefaultHttpImpl)listener.zipkinSpanSender;
-        assertThat(Whitebox.getInternalState(spanSender, "postZipkinSpansUrl")).isEqualTo(new URL(baseUrl + "/api/v1/spans"));
+        assertThat(listener.zipkinSpanReporter).isInstanceOf(AsyncReporter.class);
+        Object spanSender = Whitebox.getInternalState(listener.zipkinSpanReporter, "sender");
+        assertThat(spanSender).isInstanceOf(URLConnectionSender.class);
+        assertThat(Whitebox.getInternalState(spanSender, "endpoint"))
+            .isEqualTo(new URL(baseUrlWithoutTrailingSlash + "/api/v2/spans"));
     }
 
     @Test
@@ -89,7 +106,7 @@ public class WingtipsToZipkinLifecycleListenerTest {
         listener.spanStarted(spanMock);
 
         // then
-        verifyZeroInteractions(spanConverterMock, spanSenderMock, spanMock);
+        verifyZeroInteractions(spanConverterMock, spanReporterMock, spanMock);
     }
 
     @Test
@@ -98,11 +115,11 @@ public class WingtipsToZipkinLifecycleListenerTest {
         listener.spanSampled(spanMock);
 
         // then
-        verifyZeroInteractions(spanConverterMock, spanSenderMock, spanMock);
+        verifyZeroInteractions(spanConverterMock, spanReporterMock, spanMock);
     }
 
     @Test
-    public void spanCompleted_converts_to_zipkin_span_and_passes_it_to_zipkinSpanSender() {
+    public void spanCompleted_converts_to_zipkin_span_and_passes_it_to_zipkinSpanReporter() {
         // given
         zipkin2.Span zipkinSpan = zipkin2.Span.newBuilder().traceId("42").id("4242").name("foo").build();
         doReturn(zipkinSpan).when(spanConverterMock).convertWingtipsSpanToZipkinSpan(any(Span.class), any(Endpoint.class));
@@ -112,7 +129,7 @@ public class WingtipsToZipkinLifecycleListenerTest {
 
         // then
         verify(spanConverterMock).convertWingtipsSpanToZipkinSpan(spanMock, listener.zipkinEndpoint);
-        verify(spanSenderMock).handleSpan(zipkinSpan);
+        verify(spanReporterMock).report(zipkinSpan);
     }
 
     @Test
@@ -121,45 +138,35 @@ public class WingtipsToZipkinLifecycleListenerTest {
         doThrow(new RuntimeException("kaboom")).when(spanConverterMock).convertWingtipsSpanToZipkinSpan(any(Span.class), any(Endpoint.class));
 
         // when
-        Throwable ex = catchThrowable(new ThrowableAssert.ThrowingCallable() {
-            @Override
-            public void call() throws Throwable {
-                listener.spanCompleted(spanMock);
-            }
-        });
+        Throwable ex = catchThrowable(() -> listener.spanCompleted(spanMock));
 
         // then
         verify(spanConverterMock).convertWingtipsSpanToZipkinSpan(spanMock, listener.zipkinEndpoint);
-        verifyZeroInteractions(spanSenderMock);
+        verifyZeroInteractions(spanReporterMock);
         assertThat(ex).isNull();
     }
 
     @Test
-    public void spanCompleted_does_not_propagate_exceptions_generated_by_span_sender() {
+    public void spanCompleted_does_not_propagate_exceptions_generated_by_span_reporter() {
         // given
-        doThrow(new RuntimeException("kaboom")).when(spanSenderMock).handleSpan(any(zipkin2.Span.class));
+        doThrow(new RuntimeException("kaboom")).when(spanReporterMock).report(any(zipkin2.Span.class));
 
         // when
-        Throwable ex = catchThrowable(new ThrowableAssert.ThrowingCallable() {
-            @Override
-            public void call() throws Throwable {
-                listener.spanCompleted(spanMock);
-            }
-        });
+        Throwable ex = catchThrowable(() -> listener.spanCompleted(spanMock));
 
         // then
-        verify(spanSenderMock).handleSpan(any(zipkin2.Span.class));
+        verify(spanReporterMock).report(any(zipkin2.Span.class));
         assertThat(ex).isNull();
     }
 
     @Test
-    public void spanCompleted_logs_error_during_handling_if_time_since_lastSpanHandlingErrorLogTimeEpochMillis_is_greater_than_MIN_SPAN_HANDLING_ERROR_LOG_INTERVAL_MILLIS() throws InterruptedException {
+    public void spanCompleted_logs_error_during_handling_if_time_since_lastSpanHandlingErrorLogTimeEpochMillis_is_greater_than_MIN_SPAN_HANDLING_ERROR_LOG_INTERVAL_MILLIS() {
         // given
         Logger loggerMock = mock(Logger.class);
         Whitebox.setInternalState(listener, "zipkinConversionOrReportingErrorLogger", loggerMock);
         long lastLogTimeToSet = System.currentTimeMillis() - (MIN_SPAN_HANDLING_ERROR_LOG_INTERVAL_MILLIS + 10);
         Whitebox.setInternalState(listener, "lastSpanHandlingErrorLogTimeEpochMillis", lastLogTimeToSet);
-        doThrow(new RuntimeException("kaboom")).when(spanSenderMock).handleSpan(any(zipkin2.Span.class));
+        doThrow(new RuntimeException("kaboom")).when(spanReporterMock).report(any(zipkin2.Span.class));
 
         // when
         long before = System.currentTimeMillis();
@@ -173,13 +180,13 @@ public class WingtipsToZipkinLifecycleListenerTest {
     }
 
     @Test
-    public void spanCompleted_does_not_log_an_error_during_handling_if_time_since_lastSpanHandlingErrorLogTimeEpochMillis_is_less_than_MIN_SPAN_HANDLING_ERROR_LOG_INTERVAL_MILLIS() throws InterruptedException {
+    public void spanCompleted_does_not_log_an_error_during_handling_if_time_since_lastSpanHandlingErrorLogTimeEpochMillis_is_less_than_MIN_SPAN_HANDLING_ERROR_LOG_INTERVAL_MILLIS() {
         // given
         Logger loggerMock = mock(Logger.class);
         Whitebox.setInternalState(listener, "zipkinConversionOrReportingErrorLogger", loggerMock);
         long lastLogTimeToSet = System.currentTimeMillis() - (MIN_SPAN_HANDLING_ERROR_LOG_INTERVAL_MILLIS - 1000);
         Whitebox.setInternalState(listener, "lastSpanHandlingErrorLogTimeEpochMillis", lastLogTimeToSet);
-        doThrow(new RuntimeException("kaboom")).when(spanSenderMock).handleSpan(any(zipkin2.Span.class));
+        doThrow(new RuntimeException("kaboom")).when(spanReporterMock).report(any(zipkin2.Span.class));
 
         // when
         listener.spanCompleted(spanMock);

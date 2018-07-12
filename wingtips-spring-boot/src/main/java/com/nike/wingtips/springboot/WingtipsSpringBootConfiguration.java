@@ -45,7 +45,7 @@ import javax.servlet.ServletResponse;
  * JSON).
  *
  * <p>If you want Zipkin support in your Wingtips Spring Boot application, please see {@code
- * WingtipsWithZipkinSpringBootConfiguration} from the {@code wingtips-zipkin-spring-boot} Wingtips module.
+ * WingtipsWithZipkinSpringBootConfiguration} from the {@code wingtips-zipkin2-spring-boot} Wingtips module.
  *
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
  * @author Nic Munroe

@@ -1,4 +1,4 @@
-# Wingtips - zipkin-spring-boot
+# Wingtips - zipkin2-spring-boot
 
 Wingtips is a distributed tracing solution for Java based on the 
 [Google Dapper paper](http://static.googleusercontent.com/media/research.google.com/en/us/pubs/archive/36356.pdf). 
@@ -15,7 +15,7 @@ NOTES:
 integration features.
 * All of the features of the [wingtips-spring](../wingtips-spring) module are relevant to a Spring Boot 
 project as well - please see that module's readme for more info on its features.
-* More details can be found in the javadocs for the various classes found in this `wingtips-zipkin-spring-boot` module.
+* More details can be found in the javadocs for the various classes found in this `wingtips-zipkin2-spring-boot` module.
 
 ### Utilizing `WingtipsWithZipkinSpringBootConfiguration` in a Spring Boot application to configure and setup Wingtips tracing with Zipkin integration
 
@@ -28,8 +28,9 @@ public class MyAppSpringConfig {
 }
 ``` 
 
-And specify configuration from your Spring Boot app's `application.properties` (note that all properties are optional
-except `wingtips.zipkin.base-url`, which is required if you want the Zipkin integration to work):
+And specify configuration in your Spring Boot app's `application.properties` (note that all properties are optional
+except `wingtips.zipkin.base-url`, which is required if you want the Zipkin integration to work - that said, it's
+highly recommended that you also at least specify `wingtips.zipkin.service-name`):
 
 ``` ini
 # General Wingtips config
@@ -45,7 +46,7 @@ wingtips.zipkin.service-name=some-service-name
 
 ## Feature details
 
-This `wingtips-zipkin-spring-boot` module contains the following features/classes:
+This `wingtips-zipkin2-spring-boot` module contains the following features/classes:
 
 * **`WingtipsWithZipkinSpringBootConfiguration`** - A Spring `@Configuration` bean that uses 
 `@EnableConfigurationProperties` to pull in `WingtipsZipkinProperties` (described below) and uses those properties to 
@@ -73,6 +74,7 @@ for a concrete example. The following properties are supported:
     server for testing (can be done with a single docker command).
     - **`wingtips.zipkin.service-name`** - The name of this service, used when sending Wingtips spans to Zipkin. See 
     the [wingtips-zipkin2 readme](../wingtips-zipkin2) for details on how this service name is used. If you don't set
-    this property then `"unknown"` will be used.
+    this property then `"unknown"` will be used. It's highly recommended that you specify this property even though
+    it's technically optional.
 
 For general Wingtips information please see the [base project README.md](../README.md).

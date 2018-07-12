@@ -1,9 +1,16 @@
 evaluationDependsOn(':')
 
+compileTestJava {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
 dependencies {
     compile(
             project(":wingtips-core"),
-            "io.zipkin.zipkin2:zipkin:$zipkin2Version"
+            "io.zipkin.zipkin2:zipkin:$zipkin2Version",
+            "io.zipkin.reporter2:zipkin-reporter:$zipkin2ReporterVersion",
+            "io.zipkin.reporter2:zipkin-sender-urlconnection:$zipkin2ReporterVersion"
     )
     testCompile(
             "junit:junit-dep:$junitVersion",

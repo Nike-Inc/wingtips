@@ -1,13 +1,14 @@
 package com.nike.wingtips.zipkin2.util;
 
 import com.nike.wingtips.Span;
+import com.nike.wingtips.Span.SpanPurpose;
 
 import com.tngtech.java.junit.dataprovider.DataProvider;
 import com.tngtech.java.junit.dataprovider.DataProviderRunner;
 
-import org.assertj.core.api.ThrowableAssert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.internal.util.reflection.Whitebox;
 
 import java.util.Random;
 import java.util.UUID;
@@ -31,7 +32,7 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
     private final Random random = new Random(System.nanoTime());
 
     private void verifySpanPurposeRelatedStuff(zipkin2.Span zipkinSpan, Span wingtipsSpan) {
-        Span.SpanPurpose spanPurpose = wingtipsSpan.getSpanPurpose();
+        SpanPurpose spanPurpose = wingtipsSpan.getSpanPurpose();
 
         switch(spanPurpose) {
             case SERVER:
@@ -59,7 +60,7 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
         "UNKNOWN"
     }, splitBy = "\\|")
     @Test
-    public void convertWingtipsSpanToZipkinSpan_works_as_expected_for_all_non_null_info(Span.SpanPurpose spanPurpose) {
+    public void convertWingtipsSpanToZipkinSpan_works_as_expected_for_all_non_null_info(SpanPurpose spanPurpose) {
         // given
         String spanName = UUID.randomUUID().toString();
         String traceId = generateId();
@@ -93,7 +94,7 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
         "UNKNOWN"
     }, splitBy = "\\|")
     @Test
-    public void convertWingtipsSpanToZipkinSpan_works_as_expected_for_all_nullable_info(Span.SpanPurpose spanPurpose) {
+    public void convertWingtipsSpanToZipkinSpan_works_as_expected_for_all_nullable_info(SpanPurpose spanPurpose) {
         // given
         // Not a lot that can really be null - just parent span ID
         String spanName = UUID.randomUUID().toString();
@@ -121,19 +122,25 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
     }
 
     @Test
+    @SuppressWarnings("UnnecessaryLocalVariable")
     public void convertWingtipsSpanToZipkinSpan_works_as_expected_for_128_bit_trace_id() {
         // given
         String high64Bits = "463ac35c9f6413ad";
         String low64Bits = "48485a3953bb6124";
         String hex128Bits = high64Bits + low64Bits;
 
-        String spanName = UUID.randomUUID().toString();
-        String traceId = hex128Bits;
+        String traceId128Bits = hex128Bits;
         String spanId = low64Bits;
+        String spanName = UUID.randomUUID().toString();
         long startTimeEpochMicros = Math.abs(random.nextLong());
         long durationNanos = Math.abs(random.nextLong());
         Endpoint zipkinEndpoint = Endpoint.newBuilder().serviceName(UUID.randomUUID().toString()).build();
-        Span wingtipsSpan = new Span(traceId, null, spanId, spanName, true, null, Span.SpanPurpose.CLIENT, startTimeEpochMicros, null, durationNanos);
+        Span wingtipsSpan = Span.newBuilder(spanName, SpanPurpose.CLIENT)
+                                .withTraceId(traceId128Bits)
+                                .withSpanId(spanId)
+                                .withSpanStartTimeEpochMicros(startTimeEpochMicros)
+                                .withDurationNanos(durationNanos)
+                                .build();
 
         // when
         zipkin2.Span zipkinSpan = impl.convertWingtipsSpanToZipkinSpan(wingtipsSpan, zipkinEndpoint);
@@ -147,25 +154,71 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
         "123e4567-e89b-12d3-a456-426655440000  "  // UUID format (hyphens and also >32 chars)
     }, splitBy = "\\|")
     @Test
-    public void convertWingtipsSpanToZipkinSpan_throws_IllegalArgumentException(final String badHexString) {
+    @SuppressWarnings("UnnecessaryLocalVariable")
+    public void convertWingtipsSpanToZipkinSpan_throws_IllegalArgumentException_when_passed_wingtipsSpan_with_bad_traceId_format(final String badHexString) {
         // given
-        String spanName = UUID.randomUUID().toString();
-        String traceId = badHexString;
+        String badTraceId = badHexString;
         String spanId = "48485a3953bb6124";
+        String spanName = UUID.randomUUID().toString();
         long startTimeEpochMicros = Math.abs(random.nextLong());
         long durationNanos = Math.abs(random.nextLong());
         final Endpoint zipkinEndpoint = Endpoint.newBuilder().serviceName(UUID.randomUUID().toString()).build();
-        final Span wingtipsSpan = new Span(traceId, null, spanId, spanName, true, null, Span.SpanPurpose.CLIENT, startTimeEpochMicros, null, durationNanos);
+        final Span wingtipsSpan = Span.newBuilder(spanName, SpanPurpose.CLIENT)
+                                      .withTraceId(badTraceId)
+                                      .withSpanId(spanId)
+                                      .withSpanStartTimeEpochMicros(startTimeEpochMicros)
+                                      .withDurationNanos(durationNanos)
+                                      .build();
 
         // when
-        Throwable ex = catchThrowable(new ThrowableAssert.ThrowingCallable() {
-            @Override
-            public void call() throws Throwable {
-                impl.convertWingtipsSpanToZipkinSpan(wingtipsSpan, zipkinEndpoint);
-            }
-        });
+        Throwable ex = catchThrowable(() -> impl.convertWingtipsSpanToZipkinSpan(wingtipsSpan, zipkinEndpoint));
 
         // then
         assertThat(ex).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @SuppressWarnings("unused")
+    private enum WingtipsSpanPurposeToZipkinKindScenario {
+        SERVER(SpanPurpose.SERVER, zipkin2.Span.Kind.SERVER),
+        CLIENT(SpanPurpose.CLIENT, zipkin2.Span.Kind.CLIENT),
+        LOCAL_ONLY(SpanPurpose.LOCAL_ONLY, null),
+        UNKNOWN(SpanPurpose.UNKNOWN, null),
+        NULL(null, null);
+
+        public final SpanPurpose wingtipsSpanPurpose;
+        public final zipkin2.Span.Kind expectedZipkinKind;
+
+        WingtipsSpanPurposeToZipkinKindScenario(SpanPurpose wingtipsSpanPurpose,
+                                                zipkin2.Span.Kind expectedZipkinKind) {
+            this.wingtipsSpanPurpose = wingtipsSpanPurpose;
+            this.expectedZipkinKind = expectedZipkinKind;
+        }
+    }
+
+    @DataProvider(value = {
+        "SERVER",
+        "CLIENT",
+        "LOCAL_ONLY",
+        "UNKNOWN",
+        "NULL"
+    })
+    @Test
+    public void determineZipkinKind_returns_expected_Zipkin_Kind_for_wingtips_SpanPurpose(
+        WingtipsSpanPurposeToZipkinKindScenario scenario
+    ) {
+        // given
+        Span wingtipsSpan = Span.newBuilder("foo", scenario.wingtipsSpanPurpose).build();
+        // It's technically impossible under normal circumstances to have a null SpanPurpose on a wingtips span
+        //      since it will be auto-converted to UNKNOWN, but that's the only way we can trigger the default/unhandled
+        //      case in the method, so we'll use reflection to force it.
+        if (scenario.wingtipsSpanPurpose == null) {
+            Whitebox.setInternalState(wingtipsSpan, "spanPurpose", null);
+        }
+
+        // when
+        zipkin2.Span.Kind result = impl.determineZipkinKind(wingtipsSpan);
+
+        // then
+        assertThat(result).isEqualTo(scenario.expectedZipkinKind);
     }
 }

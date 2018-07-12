@@ -8,7 +8,6 @@ import com.nike.wingtips.springboot.zipkin2.componenttest.componentscanonly.Comp
 import com.nike.wingtips.springboot.zipkin2.componenttest.manualimportandcomponentscan.ComponentTestMainWithBothManualImportAndComponentScan;
 import com.nike.wingtips.springboot.zipkin2.componenttest.manualimportonly.ComponentTestMainManualImportOnly;
 import com.nike.wingtips.zipkin2.WingtipsToZipkinLifecycleListener;
-import com.nike.wingtips.zipkin2.util.ZipkinSpanSenderDefaultHttpImpl;
 
 import com.tngtech.java.junit.dataprovider.DataProvider;
 import com.tngtech.java.junit.dataprovider.DataProviderRunner;
@@ -23,10 +22,15 @@ import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.net.MalformedURLException;
 import java.net.ServerSocket;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+
+import zipkin2.reporter.AsyncReporter;
+import zipkin2.reporter.urlconnection.URLConnectionSender;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.doReturn;
@@ -59,6 +63,7 @@ public class WingtipsWithZipkinSpringBootConfigurationTest {
         }
     }
 
+    @SuppressWarnings("SameParameterValue")
     private WingtipsZipkinProperties generateProps(boolean disabled,
                                                    String baseUrl,
                                                    String serviceName) {
@@ -70,7 +75,7 @@ public class WingtipsWithZipkinSpringBootConfigurationTest {
     }
 
     @Test
-    public void constructor_registers_WingtipsToZipkinLifecycleListener() {
+    public void constructor_registers_WingtipsToZipkinLifecycleListener() throws MalformedURLException {
         // given
         String baseUrl = "http://localhost:4242/" + UUID.randomUUID().toString();
         String serviceName = UUID.randomUUID().toString();
@@ -84,10 +89,12 @@ public class WingtipsWithZipkinSpringBootConfigurationTest {
         assertThat(listeners).hasSize(1);
         assertThat(listeners.get(0)).isInstanceOf(WingtipsToZipkinLifecycleListener.class);
         WingtipsToZipkinLifecycleListener listener = (WingtipsToZipkinLifecycleListener) listeners.get(0);
-        Object zipkinSpanSender = Whitebox.getInternalState(listener, "zipkinSpanSender");
-        assertThat(zipkinSpanSender).isInstanceOf(ZipkinSpanSenderDefaultHttpImpl.class);
-        assertThat(Whitebox.getInternalState(zipkinSpanSender, "postZipkinSpansUrl").toString())
-            .isEqualTo(baseUrl + "/api/v1/spans");
+        Object zipkinSpanReporter = Whitebox.getInternalState(listener, "zipkinSpanReporter");
+        assertThat(zipkinSpanReporter).isInstanceOf(AsyncReporter.class);
+        Object spanSender = Whitebox.getInternalState(zipkinSpanReporter, "sender");
+        assertThat(spanSender).isInstanceOf(URLConnectionSender.class);
+        assertThat(Whitebox.getInternalState(spanSender, "endpoint"))
+            .isEqualTo(new URL(baseUrl + "/api/v2/spans"));
         assertThat(Whitebox.getInternalState(listener, "serviceName")).isEqualTo(serviceName);
     }
 
@@ -106,6 +113,7 @@ public class WingtipsWithZipkinSpringBootConfigurationTest {
         verifyNoMoreInteractions(props);
     }
 
+    @SuppressWarnings("unused")
     private enum ComponentTestSetup {
         MANUAL_IMPORT_ONLY(ComponentTestMainManualImportOnly.class, false),
         COMPONENT_SCAN_ONLY(ComponentTestMainWithComponentScanOnly.class, true),

@@ -8,7 +8,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * A {@link ConfigurationProperties} companion for {@link WingtipsWithZipkinSpringBootConfiguration} that allows you to
  * specify the configuration of {@link WingtipsToZipkinLifecycleListener} via your Spring Boot application's properties
  * files. The following properties are supported (NOTE: {@code wingtips.zipkin.base-url} is required - all others are
- * optional and can be left out):
+ * optional and can be left out, however it's highly recommended that you set {@code wingtips.zipkin.service-name} as
+ * well):
  * <ul>
  *     <li>
  *         wingtips.zipkin.zipkin-disabled - Disables registering {@link WingtipsToZipkinLifecycleListener} with
@@ -22,9 +23,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *     </li>
  *     <li>
  *         wingtips.zipkin.service-name - The name of this service, used when sending Wingtips spans to Zipkin. See
- *         the {@link WingtipsToZipkinLifecycleListener#WingtipsToZipkinLifecycleListener(String, String, String)}
- *         constructor javadocs or the
- *         <a href="https://github.com/Nike-Inc/wingtips/tree/master/wingtips-zipkin">wingtips-zipkin readme</a>
+ *         the {@link WingtipsToZipkinLifecycleListener)} constructor javadocs or the
+ *         <a href="https://github.com/Nike-Inc/wingtips/tree/master/wingtips-zipkin2">wingtips-zipkin2 readme</a>
  *         for details on how this service name is used. If you don't set this property then {@code "unknown"} will be
  *         used.
  *     </li>

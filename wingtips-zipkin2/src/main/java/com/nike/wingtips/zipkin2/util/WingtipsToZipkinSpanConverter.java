@@ -13,8 +13,8 @@ public interface WingtipsToZipkinSpanConverter {
 
     /**
      * @param wingtipsSpan The Wingtips span to convert.
-     * @param zipkinEndpoint The Zipkin {@link Endpoint} associated with the current service. This is often a singleton that gets reused
-     *                       throughout the life of the service. Used when creating Zipkin client/server/local annotations.
+     * @param zipkinEndpoint The Zipkin {@link Endpoint} associated with the current service. This is often a singleton
+     * that gets reused throughout the life of the service. It tells Zipkin which service generated the span.
      * @return The given Wingtips {@link Span} after it has been converted to a {@link zipkin2.Span}.
      */
     zipkin2.Span convertWingtipsSpanToZipkinSpan(Span wingtipsSpan, Endpoint zipkinEndpoint);

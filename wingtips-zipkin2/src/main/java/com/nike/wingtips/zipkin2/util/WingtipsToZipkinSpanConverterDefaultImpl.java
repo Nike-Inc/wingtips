@@ -1,6 +1,7 @@
 package com.nike.wingtips.zipkin2.util;
 
 import com.nike.wingtips.Span;
+import com.nike.wingtips.Span.SpanPurpose;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,8 +11,8 @@ import java.util.concurrent.TimeUnit;
 import zipkin2.Endpoint;
 
 /**
- * Default implementation of {@link WingtipsToZipkinSpanConverter} that knows how to create the appropriate client/server/local annotations
- * for the {@link zipkin2.Span} based on the Wingtips {@link Span}'s {@link Span#getSpanPurpose()}.
+ * Default implementation of {@link WingtipsToZipkinSpanConverter} that knows how to convert a Wingtips span to a
+ * Zipkin span.
  *
  * @author Nic Munroe
  */
@@ -21,41 +22,42 @@ public class WingtipsToZipkinSpanConverterDefaultImpl implements WingtipsToZipki
 
     @Override
     public zipkin2.Span convertWingtipsSpanToZipkinSpan(Span wingtipsSpan, Endpoint zipkinEndpoint) {
-        String traceId = wingtipsSpan.getTraceId();
-        long startEpochMicros = wingtipsSpan.getSpanStartTimeEpochMicros();
         long durationMicros = TimeUnit.NANOSECONDS.toMicros(wingtipsSpan.getDurationNanos());
 
-        return createNewZipkinSpanBuilderWithSpanPurposeAnnotations(wingtipsSpan, startEpochMicros, durationMicros, zipkinEndpoint)
+        return zipkin2.Span
+            .newBuilder()
             .id(wingtipsSpan.getSpanId())
             .name(wingtipsSpan.getSpanName())
             .parentId(wingtipsSpan.getParentSpanId())
-            .traceId(traceId)
+            .traceId(wingtipsSpan.getTraceId())
+            .timestamp(wingtipsSpan.getSpanStartTimeEpochMicros())
+            .duration(durationMicros)
+            .localEndpoint(zipkinEndpoint)
+            .kind(determineZipkinKind(wingtipsSpan))
             .build();
     }
 
-    protected zipkin2.Span.Builder createNewZipkinSpanBuilderWithSpanPurposeAnnotations(
-        Span wingtipsSpan, long startEpochMicros, long durationMicros, Endpoint zipkinEndpoint
-    ) {
-        zipkin2.Span.Builder zsb = zipkin2.Span.newBuilder()
-            .timestamp(startEpochMicros)
-            .duration(durationMicros)
-            .localEndpoint(zipkinEndpoint);
+    @SuppressWarnings("WeakerAccess")
+    protected zipkin2.Span.Kind determineZipkinKind(Span wingtipsSpan) {
+        SpanPurpose wtsp = wingtipsSpan.getSpanPurpose();
 
-        switch(wingtipsSpan.getSpanPurpose()) {
-            case SERVER:
-                zsb.kind(zipkin2.Span.Kind.SERVER);
-                break;
-            case CLIENT:
-                zsb.kind(zipkin2.Span.Kind.CLIENT);
-                break;
-            case LOCAL_ONLY:
-            case UNKNOWN:
-                // intentional fall-through: local and unknown span purpose are treated the same way
-                break;
-            default:
-                logger.warn("Unhandled SpanPurpose type: " + wingtipsSpan.getSpanPurpose().name());
+        // Clunky if checks necessary to avoid code coverage gaps with a switch statement
+        //      due to unreachable default case. :(
+        if (SpanPurpose.SERVER == wtsp) {
+            return zipkin2.Span.Kind.SERVER;
         }
-
-        return zsb;
+        else if (SpanPurpose.CLIENT == wtsp) {
+            return zipkin2.Span.Kind.CLIENT;
+        }
+        else if (SpanPurpose.LOCAL_ONLY == wtsp || SpanPurpose.UNKNOWN == wtsp) {
+            // No Zipkin Kind associated with these SpanPurposes.
+            return null;
+        }
+        else {
+            // This case should technically be impossible, but in case it happens we'll log a warning and default to
+            //      no Zipkin kind.
+            logger.warn("Unhandled SpanPurpose type: {}", String.valueOf(wtsp));
+            return null;
+        }
     }
 }

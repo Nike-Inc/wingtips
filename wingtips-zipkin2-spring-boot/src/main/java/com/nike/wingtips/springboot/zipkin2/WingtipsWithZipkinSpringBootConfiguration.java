@@ -35,7 +35,7 @@ import org.springframework.context.annotation.Import;
  * </pre>
  * Only {@code wingtips.zipkin.base-url} is required - if the other properties are missing then the {@link
  * WingtipsToZipkinLifecycleListener} will still be registered with Wingtips with {@code "unknown"} used for the
- * service name and local component namespace.
+ * service name. It's still highly recommended that you set service-name even though it's not strictly required.
  *
  * <p>The properties that control {@link WingtipsSpringBootConfiguration} are defined in {@link
  * WingtipsSpringBootProperties}. See the javadocs for those classes for details, but for convenience here's an example

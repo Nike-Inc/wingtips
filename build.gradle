@@ -66,6 +66,7 @@ ext {
     servletApiVersion = '3.0.1'
     zipkinVersion = '1.16.2'
     zipkin2Version = '2.10.1'
+    zipkin2ReporterVersion = '2.7.6'
     springVersion = '4.3.7.RELEASE'
     springbootVersion = '1.5.2.RELEASE'
     apacheHttpClientVersion = '4.4.1'
@@ -84,7 +85,7 @@ ext {
     jettyVersion = '9.3.21.v20170918'
 
     // JACOCO PROPERTIES
-    jacocoToolVersion = '0.7.6.201602180812'
+    jacocoToolVersion = '0.8.1'
     // Anything in this jacocoExclusions list will be excluded from coverage reports.
     jacocoExclusions = []
     jacocoCoverageThresholdSetup = {
