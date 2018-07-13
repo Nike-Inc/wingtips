@@ -7,7 +7,9 @@ compileTestJava {
 
 dependencies {
     compile(
-            project(":wingtips-core"),
+            project(":wingtips-core")
+    )
+    compileOnly(
             "org.springframework:spring-web:$springVersion"
     )
     testCompile(
@@ -15,6 +17,7 @@ dependencies {
             "org.mockito:mockito-core:$mockitoVersion",
             "org.assertj:assertj-core:$assertJVersion",
             "com.tngtech.java:junit-dataprovider:$junitDataproviderVersion",
-            "ch.qos.logback:logback-classic:$logbackVersion"
+            "ch.qos.logback:logback-classic:$logbackVersion",
+            "org.springframework:spring-web:$springVersion"
     )
 }

@@ -85,3 +85,16 @@ create a Wingtips-enabled `AsyncRestTemplate`. If you have a `AsyncRestTemplate`
 
 Also, anything that executes a request will work, including `asyncRestTemplate.get*(...)`, `asyncRestTemplate.post*(...)`, 
 `asyncRestTemplate.put(...)`, etc. We use `asyncRestTemplate.exchange(...)` above just as an example.
+
+## NOTE - `org.springframework:spring-web` dependency required at runtime
+
+This module does not export any transitive Spring dependencies to prevent version conflicts with whatever Spring 
+environment you're running in. 
+
+This should not affect most users since this library is likely to be used in a Spring environment where the `spring-web`
+dependency is already on the classpath at runtime, however if you receive class-not-found errors related to Spring 
+classes found in `spring-web` then you'll need to pull the `org.springframework:spring-web` dependency into your 
+project. Library authors who wish to build on functionality in this module might need to do this.
+
+This module was built using version `4.3.7.RELEASE` of `spring-web`, but many other versions of Spring should work fine,
+both older and newer. 

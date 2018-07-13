@@ -120,3 +120,16 @@ in the request headers using the logic described by the [B3/Zipkin spec](https:/
 For further details on these classes please see their javadocs.
 
 For general Wingtips information please see the [base project README.md](../README.md).
+
+## NOTE - `org.apache.httpcomponents:httpclient` dependency required at runtime
+
+This module does not export any transitive Apache HttpClient dependencies to prevent version conflicts with whatever 
+environment your project is running in. 
+
+This should not affect most users since this library is likely to be used in an environment where the `httpclient`
+dependency is already on the classpath at runtime, however if you receive class-not-found errors related to 
+classes found in `httpclient` then you'll need to pull the `org.apache.httpcomponents:httpclient` dependency into your 
+project. Library authors who wish to build on functionality in this module might need to do this.
+
+This module was built using version `4.4.1` of `httpclient`, but other versions of Apache HttpClient should work fine,
+both older and newer.

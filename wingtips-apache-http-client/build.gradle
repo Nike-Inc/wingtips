@@ -8,7 +8,9 @@ compileTestJava {
 dependencies {
 
     compile(
-            project(":wingtips-core"),
+            project(":wingtips-core")
+    )
+    compileOnly(
             "org.apache.httpcomponents:httpclient:$apacheHttpClientVersion"
     )
     testCompile(
