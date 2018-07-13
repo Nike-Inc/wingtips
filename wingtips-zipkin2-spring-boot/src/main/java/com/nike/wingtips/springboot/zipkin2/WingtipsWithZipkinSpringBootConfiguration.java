@@ -5,11 +5,14 @@ import com.nike.wingtips.servlet.RequestTracingFilter;
 import com.nike.wingtips.springboot.WingtipsSpringBootConfiguration;
 import com.nike.wingtips.springboot.WingtipsSpringBootProperties;
 import com.nike.wingtips.zipkin2.WingtipsToZipkinLifecycleListener;
+import com.nike.wingtips.zipkin2.util.WingtipsToZipkinSpanConverterDefaultImpl;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
+
+import zipkin2.reporter.Reporter;
 
 /**
  * Wingtips with Zipkin Spring Boot configuration - this is a logical extension of {@link
@@ -51,17 +54,21 @@ import org.springframework.context.annotation.Import;
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
  */
 @Configuration
-@Import(WingtipsSpringBootConfiguration.class)
+@Import({WingtipsSpringBootConfiguration.class, WingtipsWithZipkinSpringBootConfiguration.DefaultOverrides.class})
 @EnableConfigurationProperties(WingtipsZipkinProperties.class)
 public class WingtipsWithZipkinSpringBootConfiguration {
 
     @SuppressWarnings("WeakerAccess")
-    protected WingtipsZipkinProperties wingtipsZipkinProperties;
+    protected final WingtipsZipkinProperties wingtipsZipkinProperties;
+
+    protected final Reporter<zipkin2.Span> zipkinReporterOverride;
 
     @Autowired
     @SuppressWarnings("WeakerAccess")
-    public WingtipsWithZipkinSpringBootConfiguration(WingtipsZipkinProperties wingtipsZipkinProperties) {
+    public WingtipsWithZipkinSpringBootConfiguration(WingtipsZipkinProperties wingtipsZipkinProperties,
+                                                     DefaultOverrides defaultOverrides) {
         this.wingtipsZipkinProperties = wingtipsZipkinProperties;
+        this.zipkinReporterOverride = (defaultOverrides == null) ? null : defaultOverrides.zipkinReporter;
         init();
     }
 
@@ -71,13 +78,41 @@ public class WingtipsWithZipkinSpringBootConfiguration {
      */
     private void init() {
         if (wingtipsZipkinProperties.shouldApplyWingtipsToZipkinLifecycleListener()) {
-            Tracer.getInstance().addSpanLifecycleListener(
-                new WingtipsToZipkinLifecycleListener(
+            WingtipsToZipkinLifecycleListener listenerToRegister;
+
+            if (zipkinReporterOverride != null) {
+                listenerToRegister = new WingtipsToZipkinLifecycleListener(
+                    wingtipsZipkinProperties.getServiceName(),
+                    new WingtipsToZipkinSpanConverterDefaultImpl(),
+                    zipkinReporterOverride
+                );
+            }
+            else {
+                listenerToRegister = new WingtipsToZipkinLifecycleListener(
                     wingtipsZipkinProperties.getServiceName(),
                     wingtipsZipkinProperties.getBaseUrl()
-                )
-            );
+                );
+            }
+
+            Tracer.getInstance().addSpanLifecycleListener(listenerToRegister);
         }
+    }
+
+    @SuppressWarnings("WeakerAccess")
+    public static class DefaultOverrides {
+        /**
+         * The project-specific override {@link Reporter} that should be used. If a {@link Reporter}
+         * is not found in the project's Spring app context then this will be initially injected as null and the default
+         * {@link Reporter} will be generated via the basic {@link
+         * WingtipsToZipkinLifecycleListener#WingtipsToZipkinLifecycleListener(String, String)} constructor.
+         *
+         * <p>This field injection with {@link Autowired} and {@code required = false} is necessary to allow individual
+         * projects the option to override the default without causing an exception in the case that the project does
+         * not specify an override.
+         */
+        @Autowired(required = false)
+        @SuppressWarnings("WeakerAccess")
+        protected Reporter<zipkin2.Span> zipkinReporter;
     }
 
 }

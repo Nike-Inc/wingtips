@@ -43,6 +43,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @SuppressWarnings("WeakerAccess")
 public class WingtipsZipkinProperties {
     private boolean zipkinDisabled = false;
+    // TODO: Look for a non-empty `spring.application.name` property value before defaulting to `unknown`. See https://github.com/Nike-Inc/wingtips/pull/70#pullrequestreview-136998397
     private String serviceName = "unknown";
     private String baseUrl;
 

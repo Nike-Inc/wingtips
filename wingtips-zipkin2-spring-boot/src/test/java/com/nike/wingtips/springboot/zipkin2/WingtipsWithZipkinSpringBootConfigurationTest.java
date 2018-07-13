@@ -4,7 +4,9 @@ import com.nike.wingtips.Tracer;
 import com.nike.wingtips.lifecyclelistener.SpanLifecycleListener;
 import com.nike.wingtips.springboot.WingtipsSpringBootConfiguration;
 import com.nike.wingtips.springboot.WingtipsSpringBootProperties;
+import com.nike.wingtips.springboot.zipkin2.WingtipsWithZipkinSpringBootConfiguration.DefaultOverrides;
 import com.nike.wingtips.springboot.zipkin2.componenttest.componentscanonly.ComponentTestMainWithComponentScanOnly;
+import com.nike.wingtips.springboot.zipkin2.componenttest.componenttestoverridedefaultreporter.ComponentTestMainWithReporterOverride;
 import com.nike.wingtips.springboot.zipkin2.componenttest.manualimportandcomponentscan.ComponentTestMainWithBothManualImportAndComponentScan;
 import com.nike.wingtips.springboot.zipkin2.componenttest.manualimportonly.ComponentTestMainManualImportOnly;
 import com.nike.wingtips.zipkin2.WingtipsToZipkinLifecycleListener;
@@ -29,7 +31,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import zipkin2.Endpoint;
+import zipkin2.Span;
 import zipkin2.reporter.AsyncReporter;
+import zipkin2.reporter.Reporter;
 import zipkin2.reporter.urlconnection.URLConnectionSender;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -74,28 +79,65 @@ public class WingtipsWithZipkinSpringBootConfigurationTest {
         return props;
     }
 
+    private enum DefaultOverridesScenario {
+        NULL_DEFAULT_OVERRIDES(null),
+        NO_OVERRIDES(new DefaultOverrides()),
+        WITH_REPORTER_OVERRIDE(defaultOverridesWithMockReporter());
+
+        public final DefaultOverrides defaultOverrides;
+
+        DefaultOverridesScenario(
+            DefaultOverrides defaultOverrides) {
+            this.defaultOverrides = defaultOverrides;
+        }
+
+        private static DefaultOverrides defaultOverridesWithMockReporter() {
+            DefaultOverrides defaultOverrides = new DefaultOverrides();
+            defaultOverrides.zipkinReporter = mock(Reporter.class);
+            return defaultOverrides;
+        }
+    }
+
+    @DataProvider(value = {
+        "NULL_DEFAULT_OVERRIDES",
+        "NO_OVERRIDES",
+        "WITH_REPORTER_OVERRIDE"
+    })
     @Test
-    public void constructor_registers_WingtipsToZipkinLifecycleListener() throws MalformedURLException {
+    public void constructor_registers_WingtipsToZipkinLifecycleListener_with_expected_values(
+        DefaultOverridesScenario scenario
+    ) throws MalformedURLException {
         // given
         String baseUrl = "http://localhost:4242/" + UUID.randomUUID().toString();
         String serviceName = UUID.randomUUID().toString();
         WingtipsZipkinProperties props = generateProps(false, baseUrl, serviceName);
 
         // when
-        new WingtipsWithZipkinSpringBootConfiguration(props);
+        new WingtipsWithZipkinSpringBootConfiguration(props, scenario.defaultOverrides);
 
         // then
         List<SpanLifecycleListener> listeners = Tracer.getInstance().getSpanLifecycleListeners();
         assertThat(listeners).hasSize(1);
         assertThat(listeners.get(0)).isInstanceOf(WingtipsToZipkinLifecycleListener.class);
         WingtipsToZipkinLifecycleListener listener = (WingtipsToZipkinLifecycleListener) listeners.get(0);
-        Object zipkinSpanReporter = Whitebox.getInternalState(listener, "zipkinSpanReporter");
-        assertThat(zipkinSpanReporter).isInstanceOf(AsyncReporter.class);
-        Object spanSender = Whitebox.getInternalState(zipkinSpanReporter, "sender");
-        assertThat(spanSender).isInstanceOf(URLConnectionSender.class);
-        assertThat(Whitebox.getInternalState(spanSender, "endpoint"))
-            .isEqualTo(new URL(baseUrl + "/api/v2/spans"));
+
         assertThat(Whitebox.getInternalState(listener, "serviceName")).isEqualTo(serviceName);
+        assertThat(Whitebox.getInternalState(listener, "zipkinEndpoint"))
+            .isEqualTo(Endpoint.newBuilder().serviceName(serviceName).build());
+        assertThat(Whitebox.getInternalState(listener, "zipkinSpanConverter")).isNotNull();
+
+        Object zipkinSpanReporter = Whitebox.getInternalState(listener, "zipkinSpanReporter");
+
+        if (scenario.defaultOverrides == null || scenario.defaultOverrides.zipkinReporter == null) {
+            assertThat(zipkinSpanReporter).isInstanceOf(AsyncReporter.class);
+            Object spanSender = Whitebox.getInternalState(zipkinSpanReporter, "sender");
+            assertThat(spanSender).isInstanceOf(URLConnectionSender.class);
+            assertThat(Whitebox.getInternalState(spanSender, "endpoint"))
+                .isEqualTo(new URL(baseUrl + "/api/v2/spans"));
+        }
+        else {
+            assertThat(zipkinSpanReporter).isSameAs(scenario.defaultOverrides.zipkinReporter);
+        }
     }
 
     @Test
@@ -105,7 +147,7 @@ public class WingtipsWithZipkinSpringBootConfigurationTest {
         doReturn(false).when(props).shouldApplyWingtipsToZipkinLifecycleListener();
 
         // when
-        new WingtipsWithZipkinSpringBootConfiguration(props);
+        new WingtipsWithZipkinSpringBootConfiguration(props, null);
 
         // then
         assertThat(Tracer.getInstance().getSpanLifecycleListeners()).isEmpty();
@@ -115,16 +157,22 @@ public class WingtipsWithZipkinSpringBootConfigurationTest {
 
     @SuppressWarnings("unused")
     private enum ComponentTestSetup {
-        MANUAL_IMPORT_ONLY(ComponentTestMainManualImportOnly.class, false),
-        COMPONENT_SCAN_ONLY(ComponentTestMainWithComponentScanOnly.class, true),
-        BOTH_MANUAL_AND_COMPONENT_SCAN(ComponentTestMainWithBothManualImportAndComponentScan.class, true);
+        MANUAL_IMPORT_ONLY(ComponentTestMainManualImportOnly.class, false, null),
+        COMPONENT_SCAN_ONLY(ComponentTestMainWithComponentScanOnly.class, true, null),
+        BOTH_MANUAL_AND_COMPONENT_SCAN(ComponentTestMainWithBothManualImportAndComponentScan.class, true, null),
+        WITH_ZIPKIN_REPORTER_OVERRIDE(ComponentTestMainWithReporterOverride.class, false,
+                                      ComponentTestMainWithReporterOverride.CUSTOM_REPORTER_INSTANCE);
 
         final boolean expectComponentScannedObjects;
         final Class<?> mainClass;
+        final Reporter<zipkin2.Span> expectedReporterOverride;
 
-        ComponentTestSetup(Class<?> mainClass, boolean expectComponentScannedObjects) {
+        ComponentTestSetup(Class<?> mainClass,
+                           boolean expectComponentScannedObjects,
+                           Reporter<Span> expectedReporterOverride) {
             this.mainClass = mainClass;
             this.expectComponentScannedObjects = expectComponentScannedObjects;
+            this.expectedReporterOverride = expectedReporterOverride;
         }
     }
 
@@ -132,10 +180,12 @@ public class WingtipsWithZipkinSpringBootConfigurationTest {
     //      and WingtipsSpringBootProperties when it is component scanned, imported manually, or both. Specifically
     //      we should not get multiple bean definition errors even when WingtipsSpringBootConfiguration is *both*
     //      component scanned *and* imported manually.
+    // We also test that app-specific overrides of certain things are honored/used (e.g. Zipkin Reporter).
     @DataProvider(value = {
         "MANUAL_IMPORT_ONLY",
         "COMPONENT_SCAN_ONLY",
-        "BOTH_MANUAL_AND_COMPONENT_SCAN"
+        "BOTH_MANUAL_AND_COMPONENT_SCAN",
+        "WITH_ZIPKIN_REPORTER_OVERRIDE"
     })
     @Test
     public void component_test(ComponentTestSetup componentTestSetup) {
@@ -156,6 +206,8 @@ public class WingtipsWithZipkinSpringBootConfigurationTest {
             String[] someComponentScannedClassBeanNames =
                 serverAppContext.getBeanNamesForType(SomeComponentScannedClass.class);
 
+            List<SpanLifecycleListener> lifecycleListeners = Tracer.getInstance().getSpanLifecycleListeners();
+
             // then
             // Sanity check that we component scanned (or not) as appropriate.
             if (componentTestSetup.expectComponentScannedObjects) {
@@ -175,6 +227,17 @@ public class WingtipsWithZipkinSpringBootConfigurationTest {
 
             assertThat(zipkinConfig).isNotNull();
             assertThat(zipkinProps).isNotNull();
+
+            // Verify that a WingtipsToZipkinLifecycleListener was registered with Tracer.
+            assertThat(lifecycleListeners).hasSize(1);
+            SpanLifecycleListener listener = lifecycleListeners.get(0);
+            assertThat(listener).isInstanceOf(WingtipsToZipkinLifecycleListener.class);
+
+            // Verify the Zipkin Reporter override if expected.
+            if (componentTestSetup.expectedReporterOverride != null) {
+                assertThat(Whitebox.getInternalState(listener, "zipkinSpanReporter"))
+                    .isSameAs(ComponentTestMainWithReporterOverride.CUSTOM_REPORTER_INSTANCE);
+            }
         }
         finally {
             SpringApplication.exit(serverAppContext);

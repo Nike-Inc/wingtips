@@ -97,6 +97,8 @@ public class WingtipsToZipkinLifecycleListener implements SpanLifecycleListener 
      */
     public WingtipsToZipkinLifecycleListener(String serviceName, WingtipsToZipkinSpanConverter zipkinSpanConverter, Reporter<zipkin2.Span> zipkinSpanReporter) {
         this.serviceName = serviceName;
+        // TODO: Maybe try and get IP address for the Zipkin Endpoint? See https://github.com/Nike-Inc/wingtips/pull/70#pullrequestreview-136998397
+        //      for the suggestion, and I think this is the impl: https://github.com/openzipkin/brave/blob/af055a61330a10afa9b6fa4f05f7d33a3b3a7296/brave/src/main/java/brave/internal/Platform.java#L60-L83
         this.zipkinEndpoint = Endpoint.newBuilder().serviceName(serviceName).build();
         this.zipkinSpanConverter = zipkinSpanConverter;
         this.zipkinSpanReporter = zipkinSpanReporter;

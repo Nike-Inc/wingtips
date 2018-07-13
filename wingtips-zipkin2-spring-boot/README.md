@@ -44,6 +44,26 @@ wingtips.zipkin.base-url=http://localhost:9411
 wingtips.zipkin.service-name=some-service-name
 ```
 
+### Overriding the default Zipkin `Reporter`
+
+By default, the `WingtipsToZipkinLifecycleListener` that gets registered (when you use 
+`WingtipsWithZipkinSpringBootConfiguration`) is setup with a Zipkin `AsyncReporter` that uses a basic 
+`URLConnectionSender` to send span data to Zipkin over HTTP. You can easily override this `Reporter` by exposing
+a `Reporter` bean somewhere in your Spring app config:
+
+``` java
+@Bean
+public Reporter<zipkin2.Span> zipkinReporterOverride() {
+    // Generate whatever Zipkin Reporter you want Wingtips to use for sending span data to Zipkin.
+    Reporter<zipkin2.Span> myReporter = ...; 
+    return myReporter;
+}
+```
+
+If `WingtipsWithZipkinSpringBootConfiguration` detects a non-null Zipkin `Reporter` bean, then that `Reporter` will be 
+used. If no `Reporter` override is present, then the default `AsyncReporter` with `URLConnectionSender` will be created
+and used.  
+
 ## Feature details
 
 This `wingtips-zipkin2-spring-boot` module contains the following features/classes:
