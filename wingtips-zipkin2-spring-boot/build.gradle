@@ -8,11 +8,11 @@ ext {
 dependencies {
     compile(
             project(":wingtips-zipkin2"),
-            project(":wingtips-spring-boot"),
-            "org.springframework.boot:spring-boot-autoconfigure:$springbootVersion"
+            project(":wingtips-spring-boot")
     )
     compileOnly(
-            "javax.servlet:javax.servlet-api:$servletApiVersion"
+            "javax.servlet:javax.servlet-api:$servletApiVersion",
+            "org.springframework.boot:spring-boot-autoconfigure:$springbootVersion"
     )
     testCompile(
             "junit:junit-dep:$junitVersion",

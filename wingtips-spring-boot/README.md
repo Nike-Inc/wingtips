@@ -66,3 +66,18 @@ for a concrete example. The following properties are supported (all of them opti
     format will not be changed (defaults to `JSON`).     
 
 For general Wingtips information please see the [base project README.md](../README.md).
+
+## NOTE - `org.springframework:spring-web` and `org.springframework.boot:spring-boot-autoconfigure` dependencies required at runtime
+
+This module does not export any transitive Spring or Spring Boot dependencies to prevent version conflicts with 
+whatever Spring Boot environment you're running in. 
+
+This should not affect most users since this library is likely to be used in a Spring Boot environment where the 
+`spring-web` and `spring-boot-autoconfigure` dependencies are already on the classpath at runtime, however if you 
+receive class-not-found errors related to classes found in `spring-web` or `spring-boot-autoconfigure` then 
+you'll need to pull the `org.springframework:spring-web` and/or `org.springframework.boot:spring-boot-autoconfigure` 
+dependencies into your project. Library authors who wish to build on functionality in this module might need to do 
+this.
+
+This module was built using version `4.3.7.RELEASE` of `spring-web`, and version `1.5.2.RELEASE` of 
+`spring-boot-autoconfigure`, but many other versions of Spring and Spring Boot should work fine, both older and newer.
