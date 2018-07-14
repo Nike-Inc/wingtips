@@ -8,6 +8,7 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 
 #### 0.x Releases
 
+- `0.15.x` Releases - [0.15.0](#0150) 
 - `0.14.x` Releases - [0.14.2](#0142), [0.14.1](#0141), [0.14.0](#0140)
 - `0.13.x` Releases - [0.13.0](#0130)
 - `0.12.x` Releases - [0.12.1](#0121), [0.12.0](#0120)
@@ -15,6 +16,42 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 - `0.10.x` Releases - [0.10.0](#0100)
 - `0.9.x` Releases - [0.9.0.1](#0901), [0.9.0](#090)
 
+## [0.15.0](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.15.0)
+
+Released on 2018-07-14.
+
+### Added
+
+- Added [`wingtips-zipkin2`](wingtips-zipkin2) and [`wingtips-zipkin2-spring-boot`](wingtips-zipkin2-spring-boot) 
+modules. These serve the same purpose as `wingtips-zipkin` and `wingtips-zipkin-spring-boot` but support the Zipkin 2 
+API and span format. You can still send span data to Zipkin 1 API / span format servers with these new modules, so 
+they are full replacements and the old modules are now deprecated.
+    - Fixed by [Adrian Cole][contrib_adriancole] and [Nic Munroe][contrib_nicmunroe] in pull requests 
+    [#69](https://github.com/Nike-Inc/wingtips/pull/69) and [#70](https://github.com/Nike-Inc/wingtips/pull/70).
+    For issue [#68](https://github.com/Nike-Inc/wingtips/issues/68). 
+
+### Changed
+
+- Changed the Wingtips Spring, Spring Boot, and Apache HttpClient related modules to no longer export Spring, 
+Spring Boot, or Apache HttpClient dependencies. These Wingtips modules aren't likely to be used in an environment
+where those dependencies are missing, and this change avoids the Wingtips modules causing version conflicts with
+whatever Spring, Spring Boot, or Apache HttpClient version your project is already using. The readmes for these
+Wingtips modules have more details in case you were somehow relying on the transitive dependencies.
+    - Changed by [Nic Munroe][contrib_nicmunroe] in pull request [#71](https://github.com/Nike-Inc/wingtips/pull/71).
+
+### Deprecated
+
+- Deprecated the [`wingtips-zipkin`](wingtips-zipkin) and [`wingtips-zipkin-spring-boot`](wingtips-zipkin-spring-boot) 
+modules in favor of the new [`wingtips-zipkin2`](wingtips-zipkin2) and 
+[`wingtips-zipkin2-spring-boot`](wingtips-zipkin2-spring-boot) modules. See the old modules' readmes for deprecation 
+and migration details and the new modules' readmes for usage info.
+    - Deprecated by [Nic Munroe][contrib_nicmunroe] in pull request [#70](https://github.com/Nike-Inc/wingtips/pull/70).
+
+### Project Build
+
+- Upgraded to Gradle `4.8`.
+    - Done by [Adrian Cole][contrib_adriancole] in pull request [#67](https://github.com/Nike-Inc/wingtips/pull/67).
+    
 ## [0.14.2](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.14.2)
 
 Released on 2018-03-22.
