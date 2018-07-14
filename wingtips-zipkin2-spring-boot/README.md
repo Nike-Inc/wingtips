@@ -1,4 +1,4 @@
-# Wingtips - zipkin-spring-boot
+# Wingtips - zipkin2-spring-boot
 
 Wingtips is a distributed tracing solution for Java based on the 
 [Google Dapper paper](http://static.googleusercontent.com/media/research.google.com/en/us/pubs/archive/36356.pdf). 
@@ -6,29 +6,16 @@ Wingtips is a distributed tracing solution for Java based on the
 This module is a plugin extension module of the core Wingtips library and contains support for distributed tracing in a 
 [Spring Boot](https://spring.io/guides/gs/spring-boot/) environment with [Zipkin](http://zipkin.io/) integration.
 
-## This Module is Deprecated - Please Migrate to the [wingtips-zipkin2-spring-boot](../wingtips-zipkin2-spring-boot) Dependency
-
-The `wingtips-zipkin2-spring-boot` module replaces this one. It has support for Zipkin v2, while also maintaining the 
-capability to send span data to older Zipkin Servers that only understand the Zipkin v1 format. Please migrate to the 
-`wingtips-zipkin2-spring-boot` dependency, as this `wingtips-zipkin-spring-boot` module will be dropped in a future 
-update.
-
-Migration should be fairly straightforward for most users - classes moved from the `com.nike.wingtips.springboot` 
-package to `com.nike.wingtips.springboot.zipkin2`, and the "local component name" (and therefore the 
-`wingtips.zipkin.local-component-namespace` property) is no longer needed or used. See the 
-[wingtips-zipkin2-spring-boot readme](../wingtips-zipkin2-spring-boot) for full details on the new module, as well as
-[wingtips-zipkin2](../wingtips-zipkin2) for the underlying Zipkin 2 support.
-
 ## Usage Examples
 
 NOTES: 
 
 * The [Wingtips Spring Boot sample project](../samples/sample-spring-boot) shows these features in action.
-* The [wingtips-zipkin](../wingtips-zipkin) module readme contains more details on the core Wingtips-with-Zipkin 
+* The [wingtips-zipkin2](../wingtips-zipkin2) module readme contains more details on the core Wingtips-with-Zipkin
 integration features.
 * All of the features of the [wingtips-spring](../wingtips-spring) module are relevant to a Spring Boot 
 project as well - please see that module's readme for more info on its features.
-* More details can be found in the javadocs for the various classes found in this `wingtips-zipkin-spring-boot` module.
+* More details can be found in the javadocs for the various classes found in this `wingtips-zipkin2-spring-boot` module.
 
 ### Utilizing `WingtipsWithZipkinSpringBootConfiguration` in a Spring Boot application to configure and setup Wingtips tracing with Zipkin integration
 
@@ -41,8 +28,9 @@ public class MyAppSpringConfig {
 }
 ``` 
 
-And specify configuration from your Spring Boot app's `application.properties` (note that all properties are optional
-except `wingtips.zipkin.base-url`, which is required if you want the Zipkin integration to work):
+And specify configuration in your Spring Boot app's `application.properties` (note that all properties are optional
+except `wingtips.zipkin.base-url`, which is required if you want the Zipkin integration to work - that said, it's
+highly recommended that you also at least specify `wingtips.zipkin.service-name`):
 
 ``` ini
 # General Wingtips config
@@ -54,12 +42,31 @@ wingtips.span-logging-format=KEY_VALUE
 wingtips.zipkin.zipkin-disabled=false
 wingtips.zipkin.base-url=http://localhost:9411
 wingtips.zipkin.service-name=some-service-name
-wingtips.zipkin.local-component-namespace=some-local-component-name
 ```
+
+### Overriding the default Zipkin `Reporter`
+
+By default, the `WingtipsToZipkinLifecycleListener` that gets registered (when you use 
+`WingtipsWithZipkinSpringBootConfiguration`) is setup with a Zipkin `AsyncReporter` that uses a basic 
+`URLConnectionSender` to send span data to Zipkin over HTTP. You can easily override this `Reporter` by exposing
+a `Reporter` bean somewhere in your Spring app config:
+
+``` java
+@Bean
+public Reporter<zipkin2.Span> zipkinReporterOverride() {
+    // Generate whatever Zipkin Reporter you want Wingtips to use for sending span data to Zipkin.
+    Reporter<zipkin2.Span> myReporter = ...; 
+    return myReporter;
+}
+```
+
+If `WingtipsWithZipkinSpringBootConfiguration` detects a non-null Zipkin `Reporter` bean, then that `Reporter` will be 
+used. If no `Reporter` override is present, then the default `AsyncReporter` with `URLConnectionSender` will be created
+and used.  
 
 ## Feature details
 
-This `wingtips-zipkin-spring-boot` module contains the following features/classes:
+This `wingtips-zipkin2-spring-boot` module contains the following features/classes:
 
 * **`WingtipsWithZipkinSpringBootConfiguration`** - A Spring `@Configuration` bean that uses 
 `@EnableConfigurationProperties` to pull in `WingtipsZipkinProperties` (described below) and uses those properties to 
@@ -86,11 +93,8 @@ for a concrete example. The following properties are supported:
     the [Zipkin quickstart](http://zipkin.io/pages/quickstart) page for info on how to easily setup a local Zipkin 
     server for testing (can be done with a single docker command).
     - **`wingtips.zipkin.service-name`** - The name of this service, used when sending Wingtips spans to Zipkin. See 
-    the [wingtips-zipkin readme](../wingtips-zipkin) for details on how this service name is used. If you don't set 
-    this property then `"unknown"` will be used.
-    - **`wingtips.zipkin.local-component-namespace`** - The Zipkin local component namespace for local-only spans, 
-    used when sending `com.nike.wingtips.Span.SpanPurpose.LOCAL_ONLY` Wingtips spans to Zipkin. See the 
-    [wingtips-zipkin readme](../wingtips-zipkin) for details on how this local component namespace is used. If you 
-    don't set this property then `"unknown"` will be used.
+    the [wingtips-zipkin2 readme](../wingtips-zipkin2) for details on how this service name is used. If you don't set
+    this property then `"unknown"` will be used. It's highly recommended that you specify this property even though
+    it's technically optional.
 
 For general Wingtips information please see the [base project README.md](../README.md).

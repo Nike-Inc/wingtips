@@ -4,10 +4,12 @@ rootProject.name = 'wingtips'
 include "wingtips-core",
         "wingtips-servlet-api",
         "wingtips-zipkin",
+        "wingtips-zipkin2",
         "wingtips-java8",
         "wingtips-spring",
         "wingtips-spring-boot",
         "wingtips-zipkin-spring-boot",
+        "wingtips-zipkin2-spring-boot",
         "wingtips-apache-http-client",
         // Test-only modules (not published)
         "testonly:testonly-old-servlet",

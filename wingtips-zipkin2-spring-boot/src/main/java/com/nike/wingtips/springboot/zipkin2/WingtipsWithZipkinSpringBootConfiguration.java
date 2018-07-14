@@ -1,13 +1,18 @@
-package com.nike.wingtips.springboot;
+package com.nike.wingtips.springboot.zipkin2;
 
 import com.nike.wingtips.Tracer;
 import com.nike.wingtips.servlet.RequestTracingFilter;
-import com.nike.wingtips.zipkin.WingtipsToZipkinLifecycleListener;
+import com.nike.wingtips.springboot.WingtipsSpringBootConfiguration;
+import com.nike.wingtips.springboot.WingtipsSpringBootProperties;
+import com.nike.wingtips.zipkin2.WingtipsToZipkinLifecycleListener;
+import com.nike.wingtips.zipkin2.util.WingtipsToZipkinSpanConverterDefaultImpl;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
+
+import zipkin2.reporter.Reporter;
 
 /**
  * Wingtips with Zipkin Spring Boot configuration - this is a logical extension of {@link
@@ -30,11 +35,10 @@ import org.springframework.context.annotation.Import;
  *     wingtips.zipkin.zipkin-disabled=false
  *     wingtips.zipkin.base-url=http://localhost:9411
  *     wingtips.zipkin.service-name=some-service-name
- *     wingtips.zipkin.local-component-namespace=some-local-component-name
  * </pre>
  * Only {@code wingtips.zipkin.base-url} is required - if the other properties are missing then the {@link
  * WingtipsToZipkinLifecycleListener} will still be registered with Wingtips with {@code "unknown"} used for the
- * service name and local component namespace.
+ * service name. It's still highly recommended that you set service-name even though it's not strictly required.
  *
  * <p>The properties that control {@link WingtipsSpringBootConfiguration} are defined in {@link
  * WingtipsSpringBootProperties}. See the javadocs for those classes for details, but for convenience here's an example
@@ -47,23 +51,24 @@ import org.springframework.context.annotation.Import;
  * None of those properties are required - if they are missing then {@link RequestTracingFilter} will be
  * registered, it will not look for any user ID headers, and JSON span logging format will be used.
  *
- * @deprecated Please migrate to the wingtips-zipkin2-spring-boot dependency.
- *
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
  */
 @Configuration
-@Import(WingtipsSpringBootConfiguration.class)
+@Import({WingtipsSpringBootConfiguration.class, WingtipsWithZipkinSpringBootConfiguration.DefaultOverrides.class})
 @EnableConfigurationProperties(WingtipsZipkinProperties.class)
-@Deprecated
 public class WingtipsWithZipkinSpringBootConfiguration {
 
     @SuppressWarnings("WeakerAccess")
-    protected WingtipsZipkinProperties wingtipsZipkinProperties;
+    protected final WingtipsZipkinProperties wingtipsZipkinProperties;
+
+    protected final Reporter<zipkin2.Span> zipkinReporterOverride;
 
     @Autowired
     @SuppressWarnings("WeakerAccess")
-    public WingtipsWithZipkinSpringBootConfiguration(WingtipsZipkinProperties wingtipsZipkinProperties) {
+    public WingtipsWithZipkinSpringBootConfiguration(WingtipsZipkinProperties wingtipsZipkinProperties,
+                                                     DefaultOverrides defaultOverrides) {
         this.wingtipsZipkinProperties = wingtipsZipkinProperties;
+        this.zipkinReporterOverride = (defaultOverrides == null) ? null : defaultOverrides.zipkinReporter;
         init();
     }
 
@@ -73,14 +78,41 @@ public class WingtipsWithZipkinSpringBootConfiguration {
      */
     private void init() {
         if (wingtipsZipkinProperties.shouldApplyWingtipsToZipkinLifecycleListener()) {
-            Tracer.getInstance().addSpanLifecycleListener(
-                new WingtipsToZipkinLifecycleListener(
+            WingtipsToZipkinLifecycleListener listenerToRegister;
+
+            if (zipkinReporterOverride != null) {
+                listenerToRegister = new WingtipsToZipkinLifecycleListener(
                     wingtipsZipkinProperties.getServiceName(),
-                    wingtipsZipkinProperties.getLocalComponentNamespace(),
+                    new WingtipsToZipkinSpanConverterDefaultImpl(),
+                    zipkinReporterOverride
+                );
+            }
+            else {
+                listenerToRegister = new WingtipsToZipkinLifecycleListener(
+                    wingtipsZipkinProperties.getServiceName(),
                     wingtipsZipkinProperties.getBaseUrl()
-                )
-            );
+                );
+            }
+
+            Tracer.getInstance().addSpanLifecycleListener(listenerToRegister);
         }
+    }
+
+    @SuppressWarnings("WeakerAccess")
+    public static class DefaultOverrides {
+        /**
+         * The project-specific override {@link Reporter} that should be used. If a {@link Reporter}
+         * is not found in the project's Spring app context then this will be initially injected as null and the default
+         * {@link Reporter} will be generated via the basic {@link
+         * WingtipsToZipkinLifecycleListener#WingtipsToZipkinLifecycleListener(String, String)} constructor.
+         *
+         * <p>This field injection with {@link Autowired} and {@code required = false} is necessary to allow individual
+         * projects the option to override the default without causing an exception in the case that the project does
+         * not specify an override.
+         */
+        @Autowired(required = false)
+        @SuppressWarnings("WeakerAccess")
+        protected Reporter<zipkin2.Span> zipkinReporter;
     }
 
 }

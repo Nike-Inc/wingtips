@@ -1,7 +1,6 @@
-package com.nike.wingtips.springboot;
+package com.nike.wingtips.springboot.zipkin2;
 
-import com.nike.wingtips.Span.SpanPurpose;
-import com.nike.wingtips.zipkin.WingtipsToZipkinLifecycleListener;
+import com.nike.wingtips.zipkin2.WingtipsToZipkinLifecycleListener;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
@@ -9,7 +8,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * A {@link ConfigurationProperties} companion for {@link WingtipsWithZipkinSpringBootConfiguration} that allows you to
  * specify the configuration of {@link WingtipsToZipkinLifecycleListener} via your Spring Boot application's properties
  * files. The following properties are supported (NOTE: {@code wingtips.zipkin.base-url} is required - all others are
- * optional and can be left out):
+ * optional and can be left out, however it's highly recommended that you set {@code wingtips.zipkin.service-name} as
+ * well):
  * <ul>
  *     <li>
  *         wingtips.zipkin.zipkin-disabled - Disables registering {@link WingtipsToZipkinLifecycleListener} with
@@ -23,20 +23,10 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *     </li>
  *     <li>
  *         wingtips.zipkin.service-name - The name of this service, used when sending Wingtips spans to Zipkin. See
- *         the {@link WingtipsToZipkinLifecycleListener#WingtipsToZipkinLifecycleListener(String, String, String)}
- *         constructor javadocs or the
- *         <a href="https://github.com/Nike-Inc/wingtips/tree/master/wingtips-zipkin">wingtips-zipkin readme</a>
+ *         the {@link WingtipsToZipkinLifecycleListener)} constructor javadocs or the
+ *         <a href="https://github.com/Nike-Inc/wingtips/tree/master/wingtips-zipkin2">wingtips-zipkin2 readme</a>
  *         for details on how this service name is used. If you don't set this property then {@code "unknown"} will be
  *         used.
- *     </li>
- *     <li>
- *         wingtips.zipkin.local-component-namespace - The Zipkin local component namespace for local-only spans, used
- *         when sending {@link SpanPurpose#LOCAL_ONLY} Wingtips spans to Zipkin. See
- *         the {@link WingtipsToZipkinLifecycleListener#WingtipsToZipkinLifecycleListener(String, String, String)}
- *         constructor javadocs or the
- *         <a href="https://github.com/Nike-Inc/wingtips/tree/master/wingtips-zipkin">wingtips-zipkin readme</a> for
- *         details on how this local component namespace is used. If you don't set this property then {@code "unknown"}
- *         will be used.
  *     </li>
  * </ul>
  *
@@ -45,24 +35,20 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *     wingtips.zipkin.zipkin-disabled=false
  *     wingtips.zipkin.base-url=http://localhost:9411
  *     wingtips.zipkin.service-name=some-service-name
- *     wingtips.zipkin.local-component-namespace=some-local-component-name
  * </pre>
  *
- * @deprecated Please migrate to the wingtips-zipkin2-spring-boot dependency.
- * 
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
  */
 @ConfigurationProperties("wingtips.zipkin")
 @SuppressWarnings("WeakerAccess")
-@Deprecated
 public class WingtipsZipkinProperties {
     private boolean zipkinDisabled = false;
+    // TODO: Look for a non-empty `spring.application.name` property value before defaulting to `unknown`. See https://github.com/Nike-Inc/wingtips/pull/70#pullrequestreview-136998397
     private String serviceName = "unknown";
-    private String localComponentNamespace = "unknown";
     private String baseUrl;
 
     public boolean shouldApplyWingtipsToZipkinLifecycleListener() {
-        return (!zipkinDisabled && serviceName != null && localComponentNamespace != null && baseUrl != null);
+        return (!zipkinDisabled && serviceName != null && baseUrl != null);
     }
 
     public boolean isZipkinDisabled() {
@@ -79,14 +65,6 @@ public class WingtipsZipkinProperties {
 
     public void setServiceName(String serviceName) {
         this.serviceName = serviceName;
-    }
-
-    public String getLocalComponentNamespace() {
-        return localComponentNamespace;
-    }
-
-    public void setLocalComponentNamespace(String localComponentNamespace) {
-        this.localComponentNamespace = localComponentNamespace;
     }
 
     public String getBaseUrl() {

@@ -1,6 +1,6 @@
 package com.nike.wingtips.springbootsample;
 
-import com.nike.wingtips.springboot.WingtipsWithZipkinSpringBootConfiguration;
+import com.nike.wingtips.springboot.zipkin2.WingtipsWithZipkinSpringBootConfiguration;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;

@@ -17,8 +17,11 @@ import zipkin.Endpoint;
  * Default implementation of {@link WingtipsToZipkinSpanConverter} that knows how to create the appropriate client/server/local annotations
  * for the {@link zipkin.Span} based on the Wingtips {@link Span}'s {@link Span#getSpanPurpose()}.
  *
+ * @deprecated Please migrate to the wingtips-zipkin2 dependency.
+ * 
  * @author Nic Munroe
  */
+@Deprecated
 public class WingtipsToZipkinSpanConverterDefaultImpl implements WingtipsToZipkinSpanConverter {
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
