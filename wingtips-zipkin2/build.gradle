@@ -10,7 +10,8 @@ dependencies {
             project(":wingtips-core"),
             "io.zipkin.zipkin2:zipkin:$zipkin2Version",
             "io.zipkin.reporter2:zipkin-reporter:$zipkin2ReporterVersion",
-            "io.zipkin.reporter2:zipkin-sender-urlconnection:$zipkin2ReporterVersion"
+            "io.zipkin.reporter2:zipkin-sender-urlconnection:$zipkin2ReporterVersion",
+            "commons-codec:commons-codec:$apacheCommonsCodecVersion"
     )
     testCompile(
             "junit:junit-dep:$junitVersion",
