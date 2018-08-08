@@ -6,6 +6,7 @@ import com.nike.wingtips.Span.SpanPurpose;
 import com.tngtech.java.junit.dataprovider.DataProvider;
 import com.tngtech.java.junit.dataprovider.DataProviderRunner;
 
+import org.assertj.core.api.Condition;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.internal.util.reflection.Whitebox;
@@ -150,12 +151,40 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
     }
 
     @DataProvider(value = {
-        "                                      ", // empty trace ID
-        "123e4567-e89b-12d3-a456-426655440000  "  // UUID format (hyphens and also >32 chars)
+            "                                      ",
+            ""
     }, splitBy = "\\|")
     @Test
     @SuppressWarnings("UnnecessaryLocalVariable")
-    public void convertWingtipsSpanToZipkinSpan_throws_IllegalArgumentException_when_passed_wingtipsSpan_with_bad_traceId_format(final String badHexString) {
+    public void convertWingtipsSpanToZipkinSpan_throws_IllegalArgumentException_when_passed_wingtipsSpan_with_empty_traceId_format(final String emptyString) {
+        // given
+        String emptyTraceId = emptyString;
+        String spanId = "48485a3953bb6124";
+        String spanName = UUID.randomUUID().toString();
+        long startTimeEpochMicros = Math.abs(random.nextLong());
+        long durationNanos = Math.abs(random.nextLong());
+        final Endpoint zipkinEndpoint = Endpoint.newBuilder().serviceName(UUID.randomUUID().toString()).build();
+        final Span wingtipsSpan = Span.newBuilder(spanName, SpanPurpose.CLIENT)
+                .withTraceId(emptyTraceId)
+                .withSpanId(spanId)
+                .withSpanStartTimeEpochMicros(startTimeEpochMicros)
+                .withDurationNanos(durationNanos)
+                .build();
+
+        // when
+        Throwable ex = catchThrowable(() -> impl.convertWingtipsSpanToZipkinSpan(wingtipsSpan, zipkinEndpoint));
+
+        // then
+        assertThat(ex).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @DataProvider(value = {
+            "123e4567-e89b-12d3-a456-426655440000  ",  // UUID format (hyphens and also >32 chars)
+            "48485w3953Zz6124"  // not lower-case hex
+    }, splitBy = "\\|")
+    @Test
+    @SuppressWarnings("UnnecessaryLocalVariable")
+    public void convertWingtipsSpanToZipkinSpan_works_as_expected_for_invalid_traceId_format(final String badHexString) {
         // given
         String badTraceId = badHexString;
         String spanId = "48485a3953bb6124";
@@ -164,17 +193,23 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
         long durationNanos = Math.abs(random.nextLong());
         final Endpoint zipkinEndpoint = Endpoint.newBuilder().serviceName(UUID.randomUUID().toString()).build();
         final Span wingtipsSpan = Span.newBuilder(spanName, SpanPurpose.CLIENT)
-                                      .withTraceId(badTraceId)
-                                      .withSpanId(spanId)
-                                      .withSpanStartTimeEpochMicros(startTimeEpochMicros)
-                                      .withDurationNanos(durationNanos)
-                                      .build();
+                .withTraceId(badTraceId)
+                .withSpanId(spanId)
+                .withSpanStartTimeEpochMicros(startTimeEpochMicros)
+                .withDurationNanos(durationNanos)
+                .build();
 
         // when
-        Throwable ex = catchThrowable(() -> impl.convertWingtipsSpanToZipkinSpan(wingtipsSpan, zipkinEndpoint));
+        zipkin2.Span zipkinSpan = impl.convertWingtipsSpanToZipkinSpan(wingtipsSpan, zipkinEndpoint);
 
         // then
-        assertThat(ex).isInstanceOf(IllegalArgumentException.class);
+        assertThat(zipkinSpan.traceId()).matches("^[a-f0-9]+$");    // lower hex
+        assertThat(zipkinSpan.traceId()).is(new Condition<String>() {
+            @Override
+            public boolean matches(final String traceId) {
+                return traceId.length() <= 16 || traceId.length() == 32;
+            }
+        });
     }
 
     @SuppressWarnings("unused")
