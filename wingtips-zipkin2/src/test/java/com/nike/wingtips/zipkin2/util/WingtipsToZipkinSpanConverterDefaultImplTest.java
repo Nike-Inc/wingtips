@@ -6,7 +6,6 @@ import com.nike.wingtips.Span.SpanPurpose;
 import com.tngtech.java.junit.dataprovider.DataProvider;
 import com.tngtech.java.junit.dataprovider.DataProviderRunner;
 
-import org.assertj.core.api.Condition;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.internal.util.reflection.Whitebox;
@@ -179,12 +178,13 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
     }
 
     @DataProvider(value = {
-            "123e4567-e89b-12d3-a456-426655440000  ",  // UUID format (hyphens and also >32 chars)
-            "48485w3953Zz6124"  // not lower-case hex
+            "123e4567-e89b-12d3-a456-426655440000   |  0203fa897acf2b02d980fd281becea77",   // UUID format (hyphens and also >32 chars)
+            "48485w3953Zz6124                       |  0dc0b8f947f1423b662b1c80e13e4d87",   // contains non lower-case hex chars
+            "16577257140790687                      |  003ae4ed733a259f",   // raw long, greater than 16 chars
     }, splitBy = "\\|")
     @Test
     @SuppressWarnings("UnnecessaryLocalVariable")
-    public void convertWingtipsSpanToZipkinSpan_works_as_expected_for_invalid_traceId_format(final String badHexString) {
+    public void convertWingtipsSpanToZipkinSpan_works_as_expected_for_invalid_traceId_format(final String badHexString, final String expectedTraceId) {
         // given
         String badTraceId = badHexString;
         String spanId = "48485a3953bb6124";
@@ -203,13 +203,60 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
         zipkin2.Span zipkinSpan = impl.convertWingtipsSpanToZipkinSpan(wingtipsSpan, zipkinEndpoint);
 
         // then
-        assertThat(zipkinSpan.traceId()).matches("^[a-f0-9]+$");    // lower hex
-        assertThat(zipkinSpan.traceId()).is(new Condition<String>() {
-            @Override
-            public boolean matches(final String traceId) {
-                return traceId.length() <= 16 || traceId.length() == 32;
-            }
-        });
+        assertThat(zipkinSpan.traceId()).isEqualTo(expectedTraceId);
+        assertThat(zipkinSpan.tags().get("invalid.trace_id")).isEqualTo(badHexString);
+    }
+
+    @Test
+    @SuppressWarnings("UnnecessaryLocalVariable")
+    public void convertWingtipsSpanToZipkinSpan_works_as_expected_for_invalid_spanId_format() {
+        // given
+        String traceId = "48485a3953bb6124";
+        String badSpanId = "123e4567-e89b-12d3-a456-426655440000";
+        String spanName = UUID.randomUUID().toString();
+        long startTimeEpochMicros = Math.abs(random.nextLong());
+        long durationNanos = Math.abs(random.nextLong());
+        final Endpoint zipkinEndpoint = Endpoint.newBuilder().serviceName(UUID.randomUUID().toString()).build();
+        final Span wingtipsSpan = Span.newBuilder(spanName, SpanPurpose.CLIENT)
+                .withTraceId(traceId)
+                .withSpanId(badSpanId)
+                .withSpanStartTimeEpochMicros(startTimeEpochMicros)
+                .withDurationNanos(durationNanos)
+                .build();
+
+        // when
+        zipkin2.Span zipkinSpan = impl.convertWingtipsSpanToZipkinSpan(wingtipsSpan, zipkinEndpoint);
+
+        // then
+        assertThat(zipkinSpan.id()).isEqualTo("0203fa897acf2b02");
+        assertThat(zipkinSpan.tags().get("invalid.span_id")).isEqualTo(badSpanId);
+    }
+
+    @Test
+    @SuppressWarnings("UnnecessaryLocalVariable")
+    public void convertWingtipsSpanToZipkinSpan_works_as_expected_for_invalid_parentId_format() {
+        // given
+        String traceId = "48485a3953bb6124";
+        String spanId = "003ae4ed733a259f";
+        String badParentSpanId = "123e4567-e89b-12d3-a456-426655440000";
+        String spanName = UUID.randomUUID().toString();
+        long startTimeEpochMicros = Math.abs(random.nextLong());
+        long durationNanos = Math.abs(random.nextLong());
+        final Endpoint zipkinEndpoint = Endpoint.newBuilder().serviceName(UUID.randomUUID().toString()).build();
+        final Span wingtipsSpan = Span.newBuilder(spanName, SpanPurpose.CLIENT)
+                .withTraceId(traceId)
+                .withSpanId(spanId)
+                .withParentSpanId(badParentSpanId)
+                .withSpanStartTimeEpochMicros(startTimeEpochMicros)
+                .withDurationNanos(durationNanos)
+                .build();
+
+        // when
+        zipkin2.Span zipkinSpan = impl.convertWingtipsSpanToZipkinSpan(wingtipsSpan, zipkinEndpoint);
+
+        // then
+        assertThat(zipkinSpan.id()).isEqualTo("003ae4ed733a259f");
+        assertThat(zipkinSpan.tags().get("invalid.parent_id")).isEqualTo(badParentSpanId);
     }
 
     @SuppressWarnings("unused")
