@@ -2,8 +2,8 @@ package com.nike.wingtips.zipkin2.util;
 
 import com.nike.wingtips.Span;
 import com.nike.wingtips.Span.SpanPurpose;
-
 import com.nike.wingtips.TraceAndSpanIdGenerator;
+
 import org.apache.commons.codec.digest.DigestUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,12 +29,16 @@ public class WingtipsToZipkinSpanConverterDefaultImpl implements WingtipsToZipki
     public zipkin2.Span convertWingtipsSpanToZipkinSpan(Span wingtipsSpan, Endpoint zipkinEndpoint) {
         long durationMicros = TimeUnit.NANOSECONDS.toMicros(wingtipsSpan.getDurationNanos());
 
-        zipkin2.Span.Builder builder = zipkin2.Span
+        String spanId = sanitizeIdIfNecessary(wingtipsSpan.getSpanId(), false);
+        String traceId = sanitizeIdIfNecessary(wingtipsSpan.getTraceId(), true);
+        String parentId = sanitizeIdIfNecessary(wingtipsSpan.getParentSpanId(), false);
+
+        final zipkin2.Span.Builder spanBuilder = zipkin2.Span
             .newBuilder()
-            .id(sanitizeIdIfNecessary(wingtipsSpan.getSpanId(), false))
+            .id(spanId)
             .name(wingtipsSpan.getSpanName())
-            .parentId(sanitizeIdIfNecessary(wingtipsSpan.getParentSpanId(), false))
-            .traceId(sanitizeIdIfNecessary(wingtipsSpan.getTraceId(), true))
+            .parentId(parentId)
+            .traceId(traceId)
             .timestamp(wingtipsSpan.getSpanStartTimeEpochMicros())
             .duration(durationMicros)
             .localEndpoint(zipkinEndpoint)
@@ -42,10 +46,20 @@ public class WingtipsToZipkinSpanConverterDefaultImpl implements WingtipsToZipki
         
         // Iterate over existing tags and add them one-by-one, no current interface to set a collection of tags
         for (Map.Entry<String, String> tagEntry : wingtipsSpan.getTags().entrySet()) {
-            builder.putTag(tagEntry.getKey(), tagEntry.getValue());
+            spanBuilder.putTag(tagEntry.getKey(), tagEntry.getValue());
         }
             
-        return builder.build();
+        if (!spanId.equals(wingtipsSpan.getSpanId())) {
+            spanBuilder.putTag("invalid.span_id", wingtipsSpan.getSpanId());
+        }
+        if (!traceId.equals(wingtipsSpan.getTraceId())) {
+            spanBuilder.putTag("invalid.trace_id", wingtipsSpan.getTraceId());
+        }
+        if (parentId != null && !parentId.equals(wingtipsSpan.getParentSpanId())) {
+            spanBuilder.putTag("invalid.parent_id", wingtipsSpan.getParentSpanId());
+        }
+
+        return spanBuilder.build();
     }
 
     @SuppressWarnings("WeakerAccess")
@@ -72,7 +86,7 @@ public class WingtipsToZipkinSpanConverterDefaultImpl implements WingtipsToZipki
         }
     }
 
-    protected String sanitizeIdIfNecessary(final String originalId, final boolean allow128Bit) {
+    private String sanitizeIdIfNecessary(final String originalId, final boolean allow128Bit) {
         if (originalId == null) {
             return originalId;
         }
@@ -82,9 +96,11 @@ public class WingtipsToZipkinSpanConverterDefaultImpl implements WingtipsToZipki
         }
 
         // If the origId can be parsed as a long, then its sanitized ID is the lower-hex representation of that long.
-        final Long originalIdAsRawLong = attemptToConvertToLong(originalId);
+        Long originalIdAsRawLong = attemptToConvertToLong(originalId);
         if (originalIdAsRawLong != null) {
-            return TraceAndSpanIdGenerator.longToUnsignedLowerHexString(originalIdAsRawLong);
+            String sanitizedId = TraceAndSpanIdGenerator.longToUnsignedLowerHexString(originalIdAsRawLong);
+            logger.info("Detected invalid ID format. orig_id={}, sanitized_id={}", originalId, sanitizedId);
+            return sanitizedId;
         }
 
         //  Do a SHA256 hash of the original ID to get a valid sanitized lower-hex ID that can be
@@ -92,8 +108,10 @@ public class WingtipsToZipkinSpanConverterDefaultImpl implements WingtipsToZipki
         //      of a SHA digest like this is specifically allowed by the SHA algorithm - see Section 7
         //      ("TRUNCATION OF A MESSAGE DIGEST") here:
         //      https://csrc.nist.gov/csrc/media/publications/fips/180/4/final/documents/fips180-4-draft-aug2014.pdf
-        final int allowedNumChars = allow128Bit ? 32 : 16;
-        return DigestUtils.sha256Hex(originalId).toLowerCase().substring(0, allowedNumChars - 1);
+        int allowedNumChars = allow128Bit ? 32 : 16;
+        String sanitizedId = DigestUtils.sha256Hex(originalId).toLowerCase().substring(0, allowedNumChars - 1);
+        logger.info("Detected invalid ID format. orig_id={}, sanitized_id={}", originalId, sanitizedId);
+        return sanitizedId;
     }
 
     private boolean isLowerHex(final String id) {
