@@ -6,6 +6,7 @@ import com.nike.wingtips.Span.SpanPurpose;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import zipkin2.Endpoint;
@@ -24,7 +25,7 @@ public class WingtipsToZipkinSpanConverterDefaultImpl implements WingtipsToZipki
     public zipkin2.Span convertWingtipsSpanToZipkinSpan(Span wingtipsSpan, Endpoint zipkinEndpoint) {
         long durationMicros = TimeUnit.NANOSECONDS.toMicros(wingtipsSpan.getDurationNanos());
 
-        return zipkin2.Span
+        zipkin2.Span.Builder builder = zipkin2.Span
             .newBuilder()
             .id(wingtipsSpan.getSpanId())
             .name(wingtipsSpan.getSpanName())
@@ -33,8 +34,14 @@ public class WingtipsToZipkinSpanConverterDefaultImpl implements WingtipsToZipki
             .timestamp(wingtipsSpan.getSpanStartTimeEpochMicros())
             .duration(durationMicros)
             .localEndpoint(zipkinEndpoint)
-            .kind(determineZipkinKind(wingtipsSpan))
-            .build();
+            .kind(determineZipkinKind(wingtipsSpan));
+        
+        // Iterate over existing tags and add them one-by-one, no current interface to set a collection of tags
+        for (Map.Entry<String, String> tagEntry : wingtipsSpan.getTags().entrySet()) {
+        		builder.putTag(tagEntry.getKey(), tagEntry.getValue());
+        }
+            
+        return builder.build();
     }
 
     @SuppressWarnings("WeakerAccess")

@@ -53,6 +53,7 @@ of using Wingtips that are simple, compact, and straightforward.
 * [Usage in Reactive Asynchronous Nonblocking Scenarios](#async_usage)
 * [Using Distributed Tracing to Help with Debugging Issues/Errors/Problems](#using_dtracing_for_errors)
 * [Custom Annotations](#custom_annotations)
+* [Tags](#tags)
 * [Integrating With Other Distributed Tracing Tools](#integrating_with_other_dtrace_tools)
 * [Sample Applications](#samples)
 * [License](#license)
@@ -417,6 +418,16 @@ That said, it can be extremely helpful in many cases for debugging or error inve
 The Google Dapper paper describes how the Dapper tools allow them to associate arbitrary timestamped notes called "annotations" with any span. Wingtips does not currently support annotations, but the most important use case for annotations - knowing when a client sent a request vs when the server received it (and vice versa on the response) - is simulated in Wingtips by surrounding a client request with a sub-span and making sure the called service creates an overall request span for itself as well. This technique is described in the "[using sub-spans to surround downstream calls](#sub_spans_for_downstream_calls)" section. Even if Wingtips supported Dapper-style annotations this technique would likely still be required unless you instrumented your HTTP and/or RPC caller libraries at a very low level - a task that made sense for Google with their relatively homogenous ecosystem and developer resources, but not necessarily realistic for wider audiences.
 
 Arbitrary application-specific annotations could be a useful addition however, so this feature may be added in the future. Until then you can output log messages tagged with tracing and timestamp information to approximate the functionality.
+
+<a name="tags"></a>
+## Tags
+Tags allow for key-value pairs to be associated with a span as metadata, often useful for filtering or grouping trace information.  For example, say you've instrumented retry logic. It may be desireable to be able to distinguish between a span/trace that contains retries and those that didn't.  Or you may want to tag your spans based on an attribute of the request, like user type or an authenticated flag. 
+
+```
+Tracer.getInstance().getCurrentSpan().putTag("UserType", user.getType());
+```
+
+They value of the tag is mutable and both key and value are stored as strings.  Calling `putTag(...)` will replace any existing values for the key, or add the new key value pair if one doesn't exist. 
 
 <a name="integrating_with_other_dtrace_tools"></a>
 ## Integrating With Other Distributed Tracing Tools
