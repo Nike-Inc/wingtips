@@ -124,11 +124,15 @@ public class WingtipsToZipkinLifecycleListener implements SpanLifecycleListener 
     public WingtipsToZipkinLifecycleListener(String serviceName, String postZipkinSpansBaseUrl) {
         this(serviceName,
              new WingtipsToZipkinSpanConverterDefaultImpl(),
-             AsyncReporter.create(
-                 URLConnectionSender.create(
-                     postZipkinSpansBaseUrl + (postZipkinSpansBaseUrl.endsWith("/") ? "" : "/") + "api/v2/spans"
-                 )
-             )
+             generateDefaultReporter(postZipkinSpansBaseUrl)
+        );
+    }
+
+    public static Reporter<zipkin2.Span> generateDefaultReporter(String postZipkinSpansBaseUrl) {
+        return AsyncReporter.create(
+            URLConnectionSender.create(
+                postZipkinSpansBaseUrl + (postZipkinSpansBaseUrl.endsWith("/") ? "" : "/") + "api/v2/spans"
+            )
         );
     }
 

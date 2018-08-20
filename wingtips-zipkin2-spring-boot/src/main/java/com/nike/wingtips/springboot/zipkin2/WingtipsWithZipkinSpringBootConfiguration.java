@@ -5,6 +5,7 @@ import com.nike.wingtips.servlet.RequestTracingFilter;
 import com.nike.wingtips.springboot.WingtipsSpringBootConfiguration;
 import com.nike.wingtips.springboot.WingtipsSpringBootProperties;
 import com.nike.wingtips.zipkin2.WingtipsToZipkinLifecycleListener;
+import com.nike.wingtips.zipkin2.util.WingtipsToZipkinSpanConverter;
 import com.nike.wingtips.zipkin2.util.WingtipsToZipkinSpanConverterDefaultImpl;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -63,12 +64,15 @@ public class WingtipsWithZipkinSpringBootConfiguration {
 
     protected final Reporter<zipkin2.Span> zipkinReporterOverride;
 
+    protected final WingtipsToZipkinSpanConverter zipkinSpanConverterOverride;
+
     @Autowired
     @SuppressWarnings("WeakerAccess")
     public WingtipsWithZipkinSpringBootConfiguration(WingtipsZipkinProperties wingtipsZipkinProperties,
                                                      DefaultOverrides defaultOverrides) {
         this.wingtipsZipkinProperties = wingtipsZipkinProperties;
         this.zipkinReporterOverride = (defaultOverrides == null) ? null : defaultOverrides.zipkinReporter;
+        this.zipkinSpanConverterOverride = (defaultOverrides == null) ? null : defaultOverrides.zipkinSpanConverter;
         init();
     }
 
@@ -78,21 +82,19 @@ public class WingtipsWithZipkinSpringBootConfiguration {
      */
     private void init() {
         if (wingtipsZipkinProperties.shouldApplyWingtipsToZipkinLifecycleListener()) {
-            WingtipsToZipkinLifecycleListener listenerToRegister;
+            Reporter<zipkin2.Span> zipkinSpanReporter = (zipkinReporterOverride != null)
+                ? zipkinReporterOverride
+                : WingtipsToZipkinLifecycleListener.generateDefaultReporter(wingtipsZipkinProperties.getBaseUrl());
 
-            if (zipkinReporterOverride != null) {
-                listenerToRegister = new WingtipsToZipkinLifecycleListener(
-                    wingtipsZipkinProperties.getServiceName(),
-                    new WingtipsToZipkinSpanConverterDefaultImpl(),
-                    zipkinReporterOverride
-                );
-            }
-            else {
-                listenerToRegister = new WingtipsToZipkinLifecycleListener(
-                    wingtipsZipkinProperties.getServiceName(),
-                    wingtipsZipkinProperties.getBaseUrl()
-                );
-            }
+            WingtipsToZipkinSpanConverter zipkinSpanConverter = (zipkinSpanConverterOverride != null)
+                ? zipkinSpanConverterOverride
+                : new WingtipsToZipkinSpanConverterDefaultImpl();
+
+            WingtipsToZipkinLifecycleListener listenerToRegister = new WingtipsToZipkinLifecycleListener(
+                wingtipsZipkinProperties.getServiceName(),
+                zipkinSpanConverter,
+                zipkinSpanReporter
+            );
 
             Tracer.getInstance().addSpanLifecycleListener(listenerToRegister);
         }
@@ -113,6 +115,20 @@ public class WingtipsWithZipkinSpringBootConfiguration {
         @Autowired(required = false)
         @SuppressWarnings("WeakerAccess")
         protected Reporter<zipkin2.Span> zipkinReporter;
+
+        /**
+         * The project-specific override {@link WingtipsToZipkinSpanConverter} that should be used. If a {@link WingtipsToZipkinSpanConverter}
+         * is not found in the project's Spring app context then this will be initially injected as null and the default
+         * {@link WingtipsToZipkinSpanConverter} will be generated via the basic {@link
+         * WingtipsToZipkinLifecycleListener#WingtipsToZipkinLifecycleListener(String, String)} constructor.
+         *
+         * <p>This field injection with {@link Autowired} and {@code required = false} is necessary to allow individual
+         * projects the option to override the default without causing an exception in the case that the project does
+         * not specify an override.
+         */
+        @Autowired(required = false)
+        @SuppressWarnings("WeakerAccess")
+        protected WingtipsToZipkinSpanConverter zipkinSpanConverter;
     }
 
 }
