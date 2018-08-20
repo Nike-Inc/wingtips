@@ -6,13 +6,15 @@ import com.nike.wingtips.springboot.WingtipsSpringBootConfiguration;
 import com.nike.wingtips.springboot.WingtipsSpringBootProperties;
 import com.nike.wingtips.springboot.zipkin2.WingtipsWithZipkinSpringBootConfiguration.DefaultOverrides;
 import com.nike.wingtips.springboot.zipkin2.componenttest.componentscanonly.ComponentTestMainWithComponentScanOnly;
+import com.nike.wingtips.springboot.zipkin2.componenttest.componenttestoverridebothreporterandconverter.ComponentTestMainWithReporterAndConverterOverrides;
+import com.nike.wingtips.springboot.zipkin2.componenttest.componenttestoverridedefaultconverter.ComponentTestMainWithConverterOverride;
 import com.nike.wingtips.springboot.zipkin2.componenttest.componenttestoverridedefaultreporter.ComponentTestMainWithReporterOverride;
 import com.nike.wingtips.springboot.zipkin2.componenttest.manualimportandcomponentscan.ComponentTestMainWithBothManualImportAndComponentScan;
 import com.nike.wingtips.springboot.zipkin2.componenttest.manualimportonly.ComponentTestMainManualImportOnly;
 import com.nike.wingtips.zipkin2.WingtipsToZipkinLifecycleListener;
-
 import com.nike.wingtips.zipkin2.util.WingtipsToZipkinSpanConverter;
 import com.nike.wingtips.zipkin2.util.WingtipsToZipkinSpanConverterDefaultImpl;
+
 import com.tngtech.java.junit.dataprovider.DataProvider;
 import com.tngtech.java.junit.dataprovider.DataProviderRunner;
 
@@ -148,12 +150,16 @@ public class WingtipsWithZipkinSpringBootConfigurationTest {
         Object zipkinSpanReporter = Whitebox.getInternalState(listener, "zipkinSpanReporter");
         Object zipkinSpanConverter = Whitebox.getInternalState(listener, "zipkinSpanConverter");
 
-        if (scenario.defaultOverrides != null && scenario.defaultOverrides.zipkinReporter != null) {
-            assertThat(zipkinSpanReporter).isSameAs(scenario.defaultOverrides.zipkinReporter);
+        if (scenario.defaultOverrides != null) {
+            if (scenario.defaultOverrides.zipkinReporter != null) {
+                assertThat(zipkinSpanReporter).isSameAs(scenario.defaultOverrides.zipkinReporter);
+            }
+
+            if (scenario.defaultOverrides.zipkinSpanConverter != null) {
+                assertThat(zipkinSpanConverter).isSameAs(scenario.defaultOverrides.zipkinSpanConverter);
+            }
         }
-        if (scenario.defaultOverrides != null && scenario.defaultOverrides.zipkinSpanConverter != null) {
-            assertThat(zipkinSpanConverter).isSameAs(scenario.defaultOverrides.zipkinSpanConverter);
-        }
+
         if (scenario.defaultOverrides == null || scenario.defaultOverrides.zipkinReporter == null) {
             assertThat(zipkinSpanReporter).isInstanceOf(AsyncReporter.class);
             Object spanSender = Whitebox.getInternalState(zipkinSpanReporter, "sender");
@@ -161,6 +167,7 @@ public class WingtipsWithZipkinSpringBootConfigurationTest {
             assertThat(Whitebox.getInternalState(spanSender, "endpoint"))
                 .isEqualTo(new URL(baseUrl + "/api/v2/spans"));
         }
+        
         if (scenario.defaultOverrides == null || scenario.defaultOverrides.zipkinSpanConverter == null) {
             assertThat(zipkinSpanConverter).isInstanceOf(WingtipsToZipkinSpanConverterDefaultImpl.class);
         }
@@ -183,22 +190,41 @@ public class WingtipsWithZipkinSpringBootConfigurationTest {
 
     @SuppressWarnings("unused")
     private enum ComponentTestSetup {
-        MANUAL_IMPORT_ONLY(ComponentTestMainManualImportOnly.class, false, null),
-        COMPONENT_SCAN_ONLY(ComponentTestMainWithComponentScanOnly.class, true, null),
-        BOTH_MANUAL_AND_COMPONENT_SCAN(ComponentTestMainWithBothManualImportAndComponentScan.class, true, null),
-        WITH_ZIPKIN_REPORTER_OVERRIDE(ComponentTestMainWithReporterOverride.class, false,
-                                      ComponentTestMainWithReporterOverride.CUSTOM_REPORTER_INSTANCE);
+        MANUAL_IMPORT_ONLY(ComponentTestMainManualImportOnly.class, false, null, null),
+        COMPONENT_SCAN_ONLY(ComponentTestMainWithComponentScanOnly.class, true, null, null),
+        BOTH_MANUAL_AND_COMPONENT_SCAN(ComponentTestMainWithBothManualImportAndComponentScan.class, true, null, null),
+        WITH_ZIPKIN_REPORTER_OVERRIDE(
+            ComponentTestMainWithReporterOverride.class,
+            false,
+            ComponentTestMainWithReporterOverride.CUSTOM_REPORTER_INSTANCE,
+            null
+        ),
+        WITH_CONVERTER_OVERRIDE(
+            ComponentTestMainWithConverterOverride.class,
+            false,
+            null,
+            ComponentTestMainWithConverterOverride.CUSTOM_CONVERTER_INSTANCE
+        ),
+        WITH_BOTH_REPORTER_AND_CONVERTER_OVERRIDES(
+            ComponentTestMainWithReporterAndConverterOverrides.class,
+            false,
+            ComponentTestMainWithReporterOverride.CUSTOM_REPORTER_INSTANCE,
+            ComponentTestMainWithConverterOverride.CUSTOM_CONVERTER_INSTANCE
+        );
 
         final boolean expectComponentScannedObjects;
         final Class<?> mainClass;
         final Reporter<zipkin2.Span> expectedReporterOverride;
+        final WingtipsToZipkinSpanConverter expectedConverterOverride;
 
         ComponentTestSetup(Class<?> mainClass,
                            boolean expectComponentScannedObjects,
-                           Reporter<Span> expectedReporterOverride) {
+                           Reporter<Span> expectedReporterOverride,
+                           WingtipsToZipkinSpanConverter expectedConverterOverride) {
             this.mainClass = mainClass;
             this.expectComponentScannedObjects = expectComponentScannedObjects;
             this.expectedReporterOverride = expectedReporterOverride;
+            this.expectedConverterOverride = expectedConverterOverride;
         }
     }
 
@@ -211,7 +237,9 @@ public class WingtipsWithZipkinSpringBootConfigurationTest {
         "MANUAL_IMPORT_ONLY",
         "COMPONENT_SCAN_ONLY",
         "BOTH_MANUAL_AND_COMPONENT_SCAN",
-        "WITH_ZIPKIN_REPORTER_OVERRIDE"
+        "WITH_ZIPKIN_REPORTER_OVERRIDE",
+        "WITH_CONVERTER_OVERRIDE",
+        "WITH_BOTH_REPORTER_AND_CONVERTER_OVERRIDES"
     })
     @Test
     public void component_test(ComponentTestSetup componentTestSetup) {
@@ -263,6 +291,12 @@ public class WingtipsWithZipkinSpringBootConfigurationTest {
             if (componentTestSetup.expectedReporterOverride != null) {
                 assertThat(Whitebox.getInternalState(listener, "zipkinSpanReporter"))
                     .isSameAs(ComponentTestMainWithReporterOverride.CUSTOM_REPORTER_INSTANCE);
+            }
+
+            // Verify the Wingtips-to-Zipkin converter override if expected.
+            if (componentTestSetup.expectedConverterOverride != null) {
+                assertThat(Whitebox.getInternalState(listener, "zipkinSpanConverter"))
+                    .isSameAs(ComponentTestMainWithConverterOverride.CUSTOM_CONVERTER_INSTANCE);
             }
         }
         finally {

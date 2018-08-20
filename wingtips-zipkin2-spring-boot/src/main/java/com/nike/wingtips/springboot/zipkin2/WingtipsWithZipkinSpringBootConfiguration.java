@@ -84,7 +84,7 @@ public class WingtipsWithZipkinSpringBootConfiguration {
         if (wingtipsZipkinProperties.shouldApplyWingtipsToZipkinLifecycleListener()) {
             Reporter<zipkin2.Span> zipkinSpanReporter = (zipkinReporterOverride != null)
                 ? zipkinReporterOverride
-                : WingtipsToZipkinLifecycleListener.generateDefaultReporter(wingtipsZipkinProperties.getBaseUrl());
+                : WingtipsToZipkinLifecycleListener.generateBasicZipkinReporter(wingtipsZipkinProperties.getBaseUrl());
 
             WingtipsToZipkinSpanConverter zipkinSpanConverter = (zipkinSpanConverterOverride != null)
                 ? zipkinSpanConverterOverride
@@ -117,10 +117,9 @@ public class WingtipsWithZipkinSpringBootConfiguration {
         protected Reporter<zipkin2.Span> zipkinReporter;
 
         /**
-         * The project-specific override {@link WingtipsToZipkinSpanConverter} that should be used. If a {@link WingtipsToZipkinSpanConverter}
-         * is not found in the project's Spring app context then this will be initially injected as null and the default
-         * {@link WingtipsToZipkinSpanConverter} will be generated via the basic {@link
-         * WingtipsToZipkinLifecycleListener#WingtipsToZipkinLifecycleListener(String, String)} constructor.
+         * The project-specific override {@link WingtipsToZipkinSpanConverter} that should be used. If a {@link
+         * WingtipsToZipkinSpanConverter} is not found in the project's Spring app context then this will be initially
+         * injected as null and a default {@link WingtipsToZipkinSpanConverterDefaultImpl} will be used.
          *
          * <p>This field injection with {@link Autowired} and {@code required = false} is necessary to allow individual
          * projects the option to override the default without causing an exception in the case that the project does

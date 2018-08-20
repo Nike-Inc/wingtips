@@ -64,6 +64,25 @@ If `WingtipsWithZipkinSpringBootConfiguration` detects a non-null Zipkin `Report
 used. If no `Reporter` override is present, then the default `AsyncReporter` with `URLConnectionSender` will be created
 and used.  
 
+### Overriding the default `WingtipsToZipkinSpanConverter`
+
+By default, the `WingtipsToZipkinSpanConverter` that gets registered (when you use 
+`WingtipsWithZipkinSpringBootConfiguration`) is a `WingtipsToZipkinSpanConverterDefaultImpl`. You can easily override 
+this by exposing a `WingtipsToZipkinSpanConverter` bean somewhere in your Spring app config:
+
+``` java
+@Bean
+public WingtipsToZipkinSpanConverter wingtipsToZipkinSpanConverterOverride() {
+    // Generate whatever WingtipsToZipkinSpanConverter you want for converting Wingtips spans to Zipkin spans.
+    WingtipsToZipkinSpanConverter myConverter = ...; 
+    return myConverter;
+}
+```
+
+If `WingtipsWithZipkinSpringBootConfiguration` detects a non-null `WingtipsToZipkinSpanConverter` bean, then that 
+`WingtipsToZipkinSpanConverter` will be used. If no `WingtipsToZipkinSpanConverter` override is present, then the 
+default `WingtipsToZipkinSpanConverterDefaultImpl` will be created and used.  
+
 ## Feature details
 
 This `wingtips-zipkin2-spring-boot` module contains the following features/classes:
