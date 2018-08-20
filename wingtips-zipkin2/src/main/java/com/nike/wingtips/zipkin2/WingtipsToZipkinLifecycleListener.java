@@ -124,11 +124,17 @@ public class WingtipsToZipkinLifecycleListener implements SpanLifecycleListener 
     public WingtipsToZipkinLifecycleListener(String serviceName, String postZipkinSpansBaseUrl) {
         this(serviceName,
              new WingtipsToZipkinSpanConverterDefaultImpl(),
-             generateDefaultReporter(postZipkinSpansBaseUrl)
+             generateBasicZipkinReporter(postZipkinSpansBaseUrl)
         );
     }
 
-    public static Reporter<zipkin2.Span> generateDefaultReporter(String postZipkinSpansBaseUrl) {
+    /**
+     * @param postZipkinSpansBaseUrl The Zipkin base URL. This is everything except the endpoint path, i.e.
+     * {@code http://foo.bar:9411}.
+     * @return A new {@link AsyncReporter} that uses a basic {@link URLConnectionSender} for sending spans via HTTP to
+     * the standard Zipkin {@code POST /api/v2/spans} endpoint.
+     */
+    public static Reporter<zipkin2.Span> generateBasicZipkinReporter(String postZipkinSpansBaseUrl) {
         return AsyncReporter.create(
             URLConnectionSender.create(
                 postZipkinSpansBaseUrl + (postZipkinSpansBaseUrl.endsWith("/") ? "" : "/") + "api/v2/spans"
