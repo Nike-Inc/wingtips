@@ -11,6 +11,8 @@ import com.nike.wingtips.springboot.zipkin2.componenttest.manualimportandcompone
 import com.nike.wingtips.springboot.zipkin2.componenttest.manualimportonly.ComponentTestMainManualImportOnly;
 import com.nike.wingtips.zipkin2.WingtipsToZipkinLifecycleListener;
 
+import com.nike.wingtips.zipkin2.util.WingtipsToZipkinSpanConverter;
+import com.nike.wingtips.zipkin2.util.WingtipsToZipkinSpanConverterDefaultImpl;
 import com.tngtech.java.junit.dataprovider.DataProvider;
 import com.tngtech.java.junit.dataprovider.DataProviderRunner;
 
@@ -82,7 +84,9 @@ public class WingtipsWithZipkinSpringBootConfigurationTest {
     private enum DefaultOverridesScenario {
         NULL_DEFAULT_OVERRIDES(null),
         NO_OVERRIDES(new DefaultOverrides()),
-        WITH_REPORTER_OVERRIDE(defaultOverridesWithMockReporter());
+        WITH_REPORTER_OVERRIDE(defaultOverridesWithMockReporter()),
+        WITH_CONVERTER_OVERRIDE(defaultOverridesWithMockConverter()),
+        WITH_REPORTER_AND_CONVERTER_OVERRIDE(defaultOverridesWithMocks());
 
         public final DefaultOverrides defaultOverrides;
 
@@ -96,12 +100,27 @@ public class WingtipsWithZipkinSpringBootConfigurationTest {
             defaultOverrides.zipkinReporter = mock(Reporter.class);
             return defaultOverrides;
         }
+
+        private static DefaultOverrides defaultOverridesWithMockConverter() {
+            DefaultOverrides defaultOverrides = new DefaultOverrides();
+            defaultOverrides.zipkinSpanConverter = mock(WingtipsToZipkinSpanConverter.class);
+            return defaultOverrides;
+        }
+
+        private static DefaultOverrides defaultOverridesWithMocks() {
+            DefaultOverrides defaultOverrides = new DefaultOverrides();
+            defaultOverrides.zipkinReporter = mock(Reporter.class);
+            defaultOverrides.zipkinSpanConverter = mock(WingtipsToZipkinSpanConverter.class);
+            return defaultOverrides;
+        }
     }
 
     @DataProvider(value = {
         "NULL_DEFAULT_OVERRIDES",
         "NO_OVERRIDES",
-        "WITH_REPORTER_OVERRIDE"
+        "WITH_REPORTER_OVERRIDE",
+        "WITH_CONVERTER_OVERRIDE",
+        "WITH_REPORTER_AND_CONVERTER_OVERRIDE"
     })
     @Test
     public void constructor_registers_WingtipsToZipkinLifecycleListener_with_expected_values(
@@ -127,7 +146,14 @@ public class WingtipsWithZipkinSpringBootConfigurationTest {
         assertThat(Whitebox.getInternalState(listener, "zipkinSpanConverter")).isNotNull();
 
         Object zipkinSpanReporter = Whitebox.getInternalState(listener, "zipkinSpanReporter");
+        Object zipkinSpanConverter = Whitebox.getInternalState(listener, "zipkinSpanConverter");
 
+        if (scenario.defaultOverrides != null && scenario.defaultOverrides.zipkinReporter != null) {
+            assertThat(zipkinSpanReporter).isSameAs(scenario.defaultOverrides.zipkinReporter);
+        }
+        if (scenario.defaultOverrides != null && scenario.defaultOverrides.zipkinSpanConverter != null) {
+            assertThat(zipkinSpanConverter).isSameAs(scenario.defaultOverrides.zipkinSpanConverter);
+        }
         if (scenario.defaultOverrides == null || scenario.defaultOverrides.zipkinReporter == null) {
             assertThat(zipkinSpanReporter).isInstanceOf(AsyncReporter.class);
             Object spanSender = Whitebox.getInternalState(zipkinSpanReporter, "sender");
@@ -135,8 +161,8 @@ public class WingtipsWithZipkinSpringBootConfigurationTest {
             assertThat(Whitebox.getInternalState(spanSender, "endpoint"))
                 .isEqualTo(new URL(baseUrl + "/api/v2/spans"));
         }
-        else {
-            assertThat(zipkinSpanReporter).isSameAs(scenario.defaultOverrides.zipkinReporter);
+        if (scenario.defaultOverrides == null || scenario.defaultOverrides.zipkinSpanConverter == null) {
+            assertThat(zipkinSpanConverter).isInstanceOf(WingtipsToZipkinSpanConverterDefaultImpl.class);
         }
     }
 
