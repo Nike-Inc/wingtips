@@ -1,8 +1,14 @@
 package com.nike.wingtips.zipkin2.util;
 
-import static com.nike.wingtips.TraceAndSpanIdGenerator.generateId;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.ThrowableAssert.catchThrowable;
+import com.nike.wingtips.Span;
+import com.nike.wingtips.Span.SpanPurpose;
+
+import com.tngtech.java.junit.dataprovider.DataProvider;
+import com.tngtech.java.junit.dataprovider.DataProviderRunner;
+
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.internal.util.reflection.Whitebox;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -10,16 +16,11 @@ import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.mockito.internal.util.reflection.Whitebox;
-
-import com.nike.wingtips.Span;
-import com.nike.wingtips.Span.SpanPurpose;
-import com.tngtech.java.junit.dataprovider.DataProvider;
-import com.tngtech.java.junit.dataprovider.DataProviderRunner;
-
 import zipkin2.Endpoint;
+
+import static com.nike.wingtips.TraceAndSpanIdGenerator.generateId;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.ThrowableAssert.catchThrowable;
 
 /**
  * Tests the functionality of {@link WingtipsToZipkinSpanConverterDefaultImpl}.
@@ -91,15 +92,15 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
     }
 
     protected Map<String,String> createSingleTagMap() {
-    		Map<String,String> singleValue = new HashMap<String,String>(1);
-    		singleValue.put("tagName", "tagValue");
-    		return singleValue;
+        Map<String,String> singleValue = new HashMap<String,String>(1);
+        singleValue.put("tagName", "tagValue");
+        return singleValue;
     }
     
     protected Map<String,String> createMultipleTagMap() {
-    		Map<String,String> multipleValues = createSingleTagMap();
-    		multipleValues.put("secondTag", "secondValue");
-    		return multipleValues;
+        Map<String,String> multipleValues = createSingleTagMap();
+        multipleValues.put("secondTag", "secondValue");
+        return multipleValues;
     }
     
     @DataProvider(value = {

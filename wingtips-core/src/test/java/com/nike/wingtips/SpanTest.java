@@ -1,17 +1,14 @@
 package com.nike.wingtips;
 
-import static java.util.Collections.singletonList;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Fail.fail;
+import com.nike.internal.util.MapBuilder;
+import com.nike.wingtips.Span.SpanPurpose;
+import com.nike.wingtips.util.TracerManagedSpanStatus;
+import com.nike.wingtips.util.parser.SpanParser;
 
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.Deque;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.TimeUnit;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.tngtech.java.junit.dataprovider.DataProvider;
+import com.tngtech.java.junit.dataprovider.DataProviderRunner;
 
 import org.assertj.core.data.Offset;
 import org.junit.After;
@@ -21,13 +18,20 @@ import org.junit.runner.RunWith;
 import org.mockito.internal.util.reflection.Whitebox;
 import org.slf4j.MDC;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.nike.wingtips.Span.SpanPurpose;
-import com.nike.wingtips.util.SpanParser;
-import com.nike.wingtips.util.TracerManagedSpanStatus;
-import com.tngtech.java.junit.dataprovider.DataProvider;
-import com.tngtech.java.junit.dataprovider.DataProviderRunner;
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Deque;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+
+import static com.nike.wingtips.TestSpanCompleter.completeSpan;
+import static com.nike.wingtips.util.parser.SpanParserTest.deserializeKeyValueSpanString;
+import static java.util.Collections.singletonList;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Fail.fail;
 
 /**
  * Tests the functionality of {@link Span}
@@ -49,7 +53,11 @@ public class SpanTest {
         System.nanoTime());
     private long durationNanosForFullyCompletedSpan = 424242;
     private SpanPurpose spanPurposeForFullyCompletedSpan = SpanPurpose.SERVER;
-    private Map<String,String> tags = new HashMap<String,String>();
+    private Map<String,String> tags = Collections.unmodifiableMap(
+        MapBuilder.builder("fooTagKey", UUID.randomUUID().toString())
+                  .put("barTagKey", UUID.randomUUID().toString())
+                  .build()
+    );
 
     private ObjectMapper objectMapper = new ObjectMapper();
 
@@ -68,22 +76,23 @@ public class SpanTest {
         Tracer.getInstance().unregisterFromThread();
     }
 
-   
-
     private Span createFilledOutSpan(boolean completed) {
         Long durationNanos = (completed) ? durationNanosForFullyCompletedSpan : null;
         return new Span(traceId, parentSpanId, spanId, spanName, sampleableForFullyCompleteSpan, userId,
-                        spanPurposeForFullyCompletedSpan, startTimeEpochMicrosForFullyCompleteSpan, startTimeNanosForFullyCompleteSpan, durationNanos, null);
+                        spanPurposeForFullyCompletedSpan, startTimeEpochMicrosForFullyCompleteSpan,
+                        startTimeNanosForFullyCompleteSpan, durationNanos, tags
+        );
     }
 
-    
-
-    private void verifySpanDeepEquals(Span span1, Span span2, boolean allowStartTimeNanosFudgeFactor) {
+    public static void verifySpanDeepEquals(Span span1, Span span2, boolean allowStartTimeNanosFudgeFactor) {
         assertThat(span1.getSpanStartTimeEpochMicros()).isEqualTo(span2.getSpanStartTimeEpochMicros());
-        if (allowStartTimeNanosFudgeFactor)
-            assertThat(span1.getSpanStartTimeNanos()).isCloseTo(span2.getSpanStartTimeNanos(), Offset.offset(TimeUnit.MILLISECONDS.toNanos(1)));
-        else
+        if (allowStartTimeNanosFudgeFactor) {
+            assertThat(span1.getSpanStartTimeNanos())
+                .isCloseTo(span2.getSpanStartTimeNanos(), Offset.offset(TimeUnit.MILLISECONDS.toNanos(1)));
+        }
+        else {
             assertThat(span1.getSpanStartTimeNanos()).isEqualTo(span2.getSpanStartTimeNanos());
+        }
         assertThat(span1.isCompleted()).isEqualTo(span2.isCompleted());
         assertThat(span1.getTraceId()).isEqualTo(span2.getTraceId());
         assertThat(span1.getSpanId()).isEqualTo(span2.getSpanId());
@@ -122,7 +131,7 @@ public class SpanTest {
     public void public_constructor_works_as_expected_for_incomplete_span() {
         // when
         Span span = new Span(traceId, parentSpanId, spanId, spanName, sampleableForFullyCompleteSpan, userId, spanPurposeForFullyCompletedSpan,
-                             startTimeEpochMicrosForFullyCompleteSpan, startTimeNanosForFullyCompleteSpan, null, null);
+                             startTimeEpochMicrosForFullyCompleteSpan, startTimeNanosForFullyCompleteSpan, null, tags);
 
         // then
         assertThat(span.getTraceId()).isEqualTo(traceId);
@@ -544,6 +553,18 @@ public class SpanTest {
         }
     }
 
+    @Test
+    public void equals_returns_false_and_hashCode_different_if_tags_are_different() {
+        // given
+        Span fullSpan1 = createFilledOutSpan(true);
+        Span fullSpan2 = createFilledOutSpan(true);
+        fullSpan1.putTag("key-" + UUID.randomUUID().toString(), UUID.randomUUID().toString());
+
+        // expect
+        assertThat(fullSpan1.equals(fullSpan2)).isFalse();
+        assertThat(fullSpan1.hashCode()).isNotEqualTo(fullSpan2.hashCode());
+    }
+
     @DataProvider(value = {
         "SERVER",
         "CLIENT",
@@ -598,10 +619,7 @@ public class SpanTest {
 
     @Test
     public void newBuilder_honors_values_for_all_fields_if_set() {
-    	
-    		//add a tag
-    		tags.put("oneKey", "oneValue");
-    		
+
         // given
         Span.Builder builder = Span
                 .newBuilder("override_me", SpanPurpose.UNKNOWN)
@@ -922,6 +940,161 @@ public class SpanTest {
         // then
         assertThat(tmssManual).isEqualTo(TracerManagedSpanStatus.UNMANAGED_SPAN);
         assertThat(tmssCompleted).isEqualTo(TracerManagedSpanStatus.UNMANAGED_SPAN);
+    }
+
+    @Test
+    public void toJson_should_use_cached_json() {
+        // given
+        Span validSpan = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
+        String uuidString = UUID.randomUUID().toString();
+        Whitebox.setInternalState(validSpan, "cachedJsonRepresentation", uuidString);
+
+        // when
+        String toJsonResult = validSpan.toJSON();
+
+        // then
+        assertThat(toJsonResult).isEqualTo(uuidString);
+    }
+
+    @Test
+    public void complete_should_reset_cached_json() throws IOException {
+        // given
+        Span validSpan = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
+        String uuidString = UUID.randomUUID().toString();
+        Whitebox.setInternalState(validSpan, "cachedJsonRepresentation", uuidString);
+
+        // when
+        String beforeCompleteJson = validSpan.toJSON();
+        completeSpan(validSpan);
+
+        // then
+        String afterCompleteJson = validSpan.toJSON();
+        assertThat(afterCompleteJson).isNotEqualTo(beforeCompleteJson);
+        assertThat(afterCompleteJson).isNotEqualTo(uuidString);
+        Map<String, Object> spanValuesFromJackson = objectMapper.readValue(afterCompleteJson, new TypeReference<Map<String, Object>>() { });
+        verifySpanEqualsDeserializedValues(validSpan, spanValuesFromJackson);
+    }
+
+    @Test
+    public void toKeyValueString_should_use_cached_key_value_string() {
+        // given
+        Span validSpan = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
+        String uuidString = UUID.randomUUID().toString();
+        Whitebox.setInternalState(validSpan, "cachedKeyValueRepresentation", uuidString);
+
+        // when
+        String toKeyValueStringResult = validSpan.toKeyValueString();
+
+        // then
+        assertThat(toKeyValueStringResult).isEqualTo(uuidString);
+    }
+
+    @Test
+    public void complete_should_reset_cached_key_value_string() {
+        // given
+        Span validSpan = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
+        String uuidString = UUID.randomUUID().toString();
+        Whitebox.setInternalState(validSpan, "cachedKeyValueRepresentation", uuidString);
+
+        // when
+        String beforeCompleteKeyValueString = validSpan.toKeyValueString();
+        completeSpan(validSpan);
+
+        // then
+        String afterCompleteKeyValueString = validSpan.toKeyValueString();
+        assertThat(afterCompleteKeyValueString).isNotEqualTo(beforeCompleteKeyValueString);
+        assertThat(afterCompleteKeyValueString).isNotEqualTo(uuidString);
+        Map<String, Object> deserializedValues = deserializeKeyValueSpanString(afterCompleteKeyValueString);
+        verifySpanEqualsDeserializedValues(validSpan, deserializedValues);
+    }
+
+    @Test
+    public void putTag_works_as_expected() {
+        // given
+        Span span = Span.newBuilder("foo", SpanPurpose.CLIENT).build();
+        assertThat(span.getTags()).isEmpty();
+        String tagKey = "key-" + UUID.randomUUID().toString();
+        String tagValue = "value-" + UUID.randomUUID().toString();
+        String otherValue = "othervalue-" + UUID.randomUUID().toString();
+
+        // when
+        span.putTag(tagKey, tagValue);
+
+        // then
+        assertThat(span.getTags()).hasSize(1);
+        assertThat(span.getTags().get(tagKey)).isEqualTo(tagValue);
+
+        // and when
+        span.putTag(tagKey, otherValue);
+
+        // then
+        assertThat(span.getTags()).hasSize(1);
+        assertThat(span.getTags().get(tagKey)).isEqualTo(otherValue);
+    }
+
+    @Test
+    public void fromKeyValueString_delegates_to_span_parser() {
+        // given
+        Span span = Span.newBuilder("foo", SpanPurpose.CLIENT)
+                        .withTag("blahtag", UUID.randomUUID().toString())
+                        .build();
+        String keyValueStr = span.toKeyValueString();
+
+        // when
+        Span result = span.fromKeyValueString(keyValueStr);
+
+        // then
+        verifySpanDeepEquals(result, span, true);
+    }
+
+    @Test
+    public void fromJSON_delegates_to_span_parser() {
+        // given
+        Span span = Span.newBuilder("foo", SpanPurpose.CLIENT)
+                        .withTag("blahtag", UUID.randomUUID().toString())
+                        .build();
+        String json = span.toJSON();
+
+        // when
+        Span result = span.fromJSON(json);
+
+        // then
+        verifySpanDeepEquals(result, span, true);
+    }
+
+    /**
+     * @return The string "null" if obj is null (in order to match how Span.toJson() functions), otherwise
+     * String.valueOf(obj).
+     */
+    public static String nullSafeStringValueOf(Object obj) {
+        if (obj == null) {
+            return "null";
+        }
+
+        return String.valueOf(obj);
+    }
+
+    public static void verifySpanEqualsDeserializedValues(Span span, Map<String, ?> deserializedValues) {
+        assertThat(nullSafeStringValueOf(span.getSpanStartTimeEpochMicros())).isEqualTo(deserializedValues.get(SpanParser.START_TIME_EPOCH_MICROS_FIELD));
+        assertThat(span.isCompleted()).isEqualTo(deserializedValues.containsKey(SpanParser.DURATION_NANOS_FIELD));
+        assertThat(nullSafeStringValueOf(span.getTraceId())).isEqualTo(deserializedValues.get(SpanParser.TRACE_ID_FIELD));
+        assertThat(nullSafeStringValueOf(span.getSpanId())).isEqualTo(deserializedValues.get(SpanParser.SPAN_ID_FIELD));
+        assertThat(nullSafeStringValueOf(span.getParentSpanId())).isEqualTo(deserializedValues.get(SpanParser.PARENT_SPAN_ID_FIELD));
+        assertThat(nullSafeStringValueOf(span.getSpanName())).isEqualTo(deserializedValues.get(SpanParser.SPAN_NAME_FIELD));
+        assertThat(nullSafeStringValueOf(span.isSampleable())).isEqualTo(deserializedValues.get(SpanParser.SAMPLEABLE_FIELD));
+        assertThat(nullSafeStringValueOf(span.getUserId())).isEqualTo(deserializedValues.get(SpanParser.USER_ID_FIELD));
+        assertThat(nullSafeStringValueOf(span.getDurationNanos())).isEqualTo(nullSafeStringValueOf(deserializedValues.get(SpanParser.DURATION_NANOS_FIELD)));
+        assertThat(nullSafeStringValueOf(span.getSpanPurpose())).isEqualTo(nullSafeStringValueOf(deserializedValues.get(SpanParser.SPAN_PURPOSE_FIELD)));
+
+        Map<String, String> tags = span.getTags();
+        Map<String, Object> deserializedTags = (Map<String, Object>) deserializedValues.get(SpanParser.TAGS_FIELD);
+
+        if (tags.isEmpty()) {
+            assertThat(deserializedTags).isNullOrEmpty();
+        }
+        else {
+            assertThat(deserializedTags).isEqualTo(tags);
+        }
     }
 }
 

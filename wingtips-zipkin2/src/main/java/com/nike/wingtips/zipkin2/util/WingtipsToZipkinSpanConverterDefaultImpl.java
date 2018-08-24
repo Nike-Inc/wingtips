@@ -38,7 +38,7 @@ public class WingtipsToZipkinSpanConverterDefaultImpl implements WingtipsToZipki
         
         // Iterate over existing tags and add them one-by-one, no current interface to set a collection of tags
         for (Map.Entry<String, String> tagEntry : wingtipsSpan.getTags().entrySet()) {
-        		builder.putTag(tagEntry.getKey(), tagEntry.getValue());
+            builder.putTag(tagEntry.getKey(), tagEntry.getValue());
         }
             
         return builder.build();

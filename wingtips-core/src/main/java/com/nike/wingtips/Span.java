@@ -1,17 +1,17 @@
 package com.nike.wingtips;
 
+import com.nike.wingtips.util.TracerManagedSpanStatus;
+import com.nike.wingtips.util.parser.SpanParser;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.Closeable;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.nike.wingtips.util.SpanParser;
-import com.nike.wingtips.util.TracerManagedSpanStatus;
 
 /**
  * Represents some logical "unit of work" that is part of the larger distributed trace. A given request's trace tree is made up of all the spans with the same {@link #traceId}
@@ -50,8 +50,6 @@ import com.nike.wingtips.util.TracerManagedSpanStatus;
 @SuppressWarnings("WeakerAccess")
 public class Span implements Closeable {
 
-    private static final Logger logger = LoggerFactory.getLogger(Span.class);
-
     private final String traceId;
     private final String spanId;
     private final String parentSpanId;
@@ -61,12 +59,11 @@ public class Span implements Closeable {
     private final SpanPurpose spanPurpose;
     private final long spanStartTimeEpochMicros;
     private final long spanStartTimeNanos;
-    
-    private Long durationNanos;
-    private Map<String,String> tags = new LinkedHashMap<String,String>(0);
-    
-    private String cachedJsonRepresentation;
+    private final Map<String,String> tags = new LinkedHashMap<>(0);
 
+    private Long durationNanos;
+
+    private String cachedJsonRepresentation;
     private String cachedKeyValueRepresentation;
 
     /**
@@ -146,8 +143,9 @@ public class Span implements Closeable {
 
         this.spanPurpose = spanPurpose;
         
-        if(tags != null)
-        		this.tags.putAll(tags);
+        if(tags != null) {
+            this.tags.putAll(tags);
+        }
     }
 
     // For deserialization only - this will create an invalid span object and is only here to support deserializers that need a default constructor but set the fields directly (e.g. Jackson)
@@ -217,8 +215,8 @@ public class Span implements Closeable {
         builder.spanStartTimeEpochMicros = copy.spanStartTimeEpochMicros;
         builder.spanStartTimeNanos = copy.spanStartTimeNanos;
         builder.durationNanos = copy.durationNanos;
-        builder.tags = new HashMap<String,String>(copy.tags.size());
-	    builder.tags.putAll(copy.tags);
+        builder.tags = new HashMap<>(copy.tags.size());
+        builder.tags.putAll(copy.tags);
         return builder;
     }
 
@@ -347,22 +345,26 @@ public class Span implements Closeable {
     }
     
     /**
-     * @return this spans collection of tags
+     * @return This Span's collection of key/value tags - will never be null.
      */
     public Map<String,String> getTags() {
-    		return tags;
+        return tags;
     }
 
     /**
      * Tags are expressed as key/value pairs. A call to this method will add the key/value pair if it exists
-     * or replaces the current {@code value} if one exists for the respective {@code key}
-     * 
-     * @see https://github.com/opentracing/opentracing-java/blob/master/opentracing-api/src/main/java/io/opentracing/tag/Tags.java
-     * @param key The tag {@code key}
-     * @param value The tag {@code value} to be set
+     * or replaces the current {@code value} if one exists for the respective {@code key}.
+     *
+     * <p>NOTE: If you're integrating with a system that understands Zipkin tags, see {@link
+     * com.nike.wingtips.tags.KnownZipkinTags} for common tag key/value pairs that have special meaning that you might
+     * want to take advantage of. Similarly, if you're integrating with a system that understands OpenTracing tags,
+     * see {@link com.nike.wingtips.tags.KnownOpenTracingTags}.
+     *
+     * @param key The tag {@code key}.
+     * @param value The tag {@code value} to be set.
      */
     public void putTag(String key, String value) {
-    		tags.put(key, value);
+        tags.put(key, value);
     }
     
     /**
@@ -374,48 +376,46 @@ public class Span implements Closeable {
     }
 
     /**
-     * @return A comma-delimited {@code key=value} string based on this {@link Span} instance.
-     *         NOTE: The {@link #DURATION_NANOS_FIELD} field will be added only if {@link #isCompleted()} is true. This lets you call this method at any time
-     *         and only the relevant data will be output in the returned String (e.g. in case you want to log info about the span before it has been completed).
+     * @return A comma-delimited {@code key="value"} string based on this {@link Span} instance.
+     *
+     * <p>NOTE: The {@link SpanParser#DURATION_NANOS_FIELD} field will be added only if {@link #isCompleted()} is true.
+     * This lets you call this method at any time and only the relevant data will be output in the returned String
+     * (e.g. in case you want to log info about the span before it has been completed).
+     *
+     * <p>ALSO NOTE: This delegates the logic to {@link SpanParser#convertSpanToKeyValueFormat(Span)}, however this
+     * method will cache the result so it won't be recalculated on repeat method calls, and for that reason this method
+     * should always be preferred over calling {@link SpanParser#convertSpanToKeyValueFormat(Span)}. If something
+     * changes in the span that would cause the cached value to be stale, then the cache will be thrown away and
+     * recalculated.
      */
     public String toKeyValueString() {
-        if (cachedKeyValueRepresentation == null)
+        if (cachedKeyValueRepresentation == null) {
             cachedKeyValueRepresentation = SpanParser.convertSpanToKeyValueFormat(this);
+        }
 
         return cachedKeyValueRepresentation;
     }
 
     /**
-     * @return The {@link Span} represented by the given key/value string, or null if a proper span could not be deserialized from the given string.
-     *          <b>WARNING:</b> This method assumes the string you're trying to deserialize originally came from
-     *          {@link #toKeyValueString()}. This assumption allows it to be as fast as possible, not worry about syntactically-correct-but-annoying-to-deal-with whitespace,
-     *          not have to use a third party utility, etc.
-     */
-    public static Span fromKeyValueString(String keyValueStr) {
-    		return SpanParser.fromKeyValueString(keyValueStr);
-    }
-    
-    /**
      * @return A JSON string based on this {@link Span} instance.
-     *         NOTE: The {@link #DURATION_NANOS_FIELD} field will be added only if {@link #isCompleted()} is true. This lets you call this method at any time
-     *         and only the relevant data will be output in the returned JSON (e.g. in case you want to log info about the span before it has been completed).
+     *
+     * <p>NOTE: The {@link SpanParser#DURATION_NANOS_FIELD} field will be added only if {@link #isCompleted()} is true.
+     * This lets you call this method at any time and only the relevant data will be output in the returned JSON
+     * (e.g. in case you want to log info about the span before it has been completed).
+     *
+     * <p>ALSO NOTE: This delegates the logic to {@link SpanParser#convertSpanToJSON(Span)}, however this
+     * method will cache the result so it won't be recalculated on repeat method calls, and for that reason this method
+     * should always be preferred over calling {@link SpanParser#convertSpanToJSON(Span)}. If something
+     * changes in the span that would cause the cached value to be stale, then the cache will be thrown away and
+     * recalculated.
      */
     public String toJSON() {
         // Profiling shows this JSON creation to generate a lot of garbage in certain situations, so we should cache the result.
-        if (cachedJsonRepresentation == null)
+        if (cachedJsonRepresentation == null) {
             cachedJsonRepresentation = SpanParser.convertSpanToJSON(this);
+        }
 
         return cachedJsonRepresentation;
-    }
-
-    /**
-     * @return The {@link Span} represented by the given JSON string, or null if a proper span could not be deserialized from the given string.
-     *          <b>WARNING:</b> This method assumes the JSON you're trying to deserialize originally came from {@link #toJSON()}.
-     *          This assumption allows it to be as fast as possible, not have to check for malformed JSON, not worry about syntactically-correct-but-annoying-to-deal-with whitespace,
-     *          not have to use a third party utility like Jackson, etc.
-     */
-    public static Span fromJSON(String json) {
-    		return SpanParser.fromJSON(json);
     }
 
     /**
@@ -482,8 +482,55 @@ public class Span implements Closeable {
 
     @Override
     public int hashCode() {
-        return Objects.hash(traceId, spanId, parentSpanId, spanName, sampleable, userId, spanPurpose, spanStartTimeEpochMicros, durationNanos);
+        return Objects.hash(
+            traceId, spanId, parentSpanId, spanName, sampleable, userId, spanPurpose, spanStartTimeEpochMicros,
+            durationNanos, tags
+        );
     }
+
+    /**
+     * @deprecated Switch to referencing {@link SpanParser#fromKeyValueString(String)} directly.
+     */
+    @Deprecated
+    public static Span fromKeyValueString(String keyValueStr) {
+        return SpanParser.fromKeyValueString(keyValueStr);
+    }
+
+    /**
+     * @deprecated Switch to referencing {@link SpanParser#fromJSON(String)} directly.
+     */
+    @Deprecated
+    public static Span fromJSON(String json) {
+        return SpanParser.fromJSON(json);
+    }
+
+    /** @deprecated Reference {@link SpanParser#TRACE_ID_FIELD} directly instead. */
+    @Deprecated
+    public static final String TRACE_ID_FIELD = SpanParser.TRACE_ID_FIELD;
+    /** @deprecated Reference {@link SpanParser#PARENT_SPAN_ID_FIELD} directly instead. */
+    @Deprecated
+    public static final String PARENT_SPAN_ID_FIELD = SpanParser.PARENT_SPAN_ID_FIELD;
+    /** @deprecated Reference {@link SpanParser#SPAN_ID_FIELD} directly instead. */
+    @Deprecated
+    public static final String SPAN_ID_FIELD = SpanParser.SPAN_ID_FIELD;
+    /** @deprecated Reference {@link SpanParser#SPAN_NAME_FIELD} directly instead. */
+    @Deprecated
+    public static final String SPAN_NAME_FIELD = SpanParser.SPAN_NAME_FIELD;
+    /** @deprecated Reference {@link SpanParser#SAMPLEABLE_FIELD} directly instead. */
+    @Deprecated
+    public static final String SAMPLEABLE_FIELD = SpanParser.SAMPLEABLE_FIELD;
+    /** @deprecated Reference {@link SpanParser#USER_ID_FIELD} directly instead. */
+    @Deprecated
+    public static final String USER_ID_FIELD = SpanParser.USER_ID_FIELD;
+    /** @deprecated Reference {@link SpanParser#SPAN_PURPOSE_FIELD} directly instead. */
+    @Deprecated
+    public static final String SPAN_PURPOSE_FIELD = SpanParser.SPAN_PURPOSE_FIELD;
+    /** @deprecated Reference {@link SpanParser#START_TIME_EPOCH_MICROS_FIELD} directly instead. */
+    @Deprecated
+    public static final String START_TIME_EPOCH_MICROS_FIELD = SpanParser.START_TIME_EPOCH_MICROS_FIELD;
+    /** @deprecated Reference {@link SpanParser#DURATION_NANOS_FIELD} directly instead. */
+    @Deprecated
+    public static final String DURATION_NANOS_FIELD = SpanParser.DURATION_NANOS_FIELD;
 
     /**
      * Builder for creating {@link Span} objects.
@@ -508,7 +555,7 @@ public class Span implements Closeable {
         private Long spanStartTimeNanos;
         private Long durationNanos;
         private SpanPurpose spanPurpose;
-        private Map<String,String> tags = new HashMap<String,String>();
+        private Map<String,String> tags = new HashMap<>();
 
         private Builder(String spanName, SpanPurpose spanPurpose) {
             this.spanName = spanName;
@@ -671,27 +718,29 @@ public class Span implements Closeable {
         }
         
         /**
-         * Sets the value of a tag for the respective key.  This will replace an existing tag value for the respective key.   
+         * Sets the value of a tag for the respective key. This will replace an existing tag value for the respective key.
+         *
          * @param key the {@code key} of the tag
          * @param value the {@code value} of the tag
          * @return a reference to this Builder
          */
         public Builder withTag(String key, String value) {
-        		tags.put(key, value);
-        		return this;
+            tags.put(key, value);
+            return this;
         }
         
         /**
-         * Adds all the tags from the supplied {@code Map} to the existing set of tags
-         * @param tags The tags to be added to the current span
-         * @return
+         * Puts all the tags from the supplied {@code Map} to the existing set of tags.
+         *
+         * @param tags The tags to be put
+         * @return a reference to this Builder
          * @throws NullPointerException if the specified map is null, or if
          *         this map does not permit null keys or values, and the
          *         specified map contains null keys or values
          */
         public Builder withTags(Map<String,String> tags) {
-        		this.tags.putAll(tags);
-        		return this;
+            this.tags.putAll(tags);
+            return this;
         }
         
         /**

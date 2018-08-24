@@ -1,13 +1,13 @@
 package com.nike.wingtips.zipkin.util;
 
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
+import com.nike.wingtips.Span;
+import com.nike.wingtips.TraceAndSpanIdGenerator;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.nike.wingtips.Span;
-import com.nike.wingtips.TraceAndSpanIdGenerator;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import zipkin.Annotation;
 import zipkin.BinaryAnnotation;
@@ -48,10 +48,10 @@ public class WingtipsToZipkinSpanConverterDefaultImpl implements WingtipsToZipki
     }
 
     protected void addAllTagsToBuilderAsBinaryAnnotations(zipkin.Span.Builder builder, Map<String,String> tagsToAdd) {
-    		for (Map.Entry<String, String> tagEntry : tagsToAdd.entrySet()) {
-	    		BinaryAnnotation tagAnnotation = BinaryAnnotation.create(tagEntry.getKey(), tagEntry.getValue(), null);
-	    		builder.addBinaryAnnotation(tagAnnotation);
-	    }
+        for (Map.Entry<String, String> tagEntry : tagsToAdd.entrySet()) {
+            BinaryAnnotation tagAnnotation = BinaryAnnotation.create(tagEntry.getKey(), tagEntry.getValue(), null);
+            builder.addBinaryAnnotation(tagAnnotation);
+        }
     }
     
     protected zipkin.Span.Builder createNewZipkinSpanBuilderWithSpanPurposeAnnotations(
