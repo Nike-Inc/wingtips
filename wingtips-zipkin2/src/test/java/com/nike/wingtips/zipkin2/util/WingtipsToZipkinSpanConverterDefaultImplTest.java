@@ -1,24 +1,25 @@
 package com.nike.wingtips.zipkin2.util;
 
-import com.nike.wingtips.Span;
-import com.nike.wingtips.Span.SpanPurpose;
+import static com.nike.wingtips.TraceAndSpanIdGenerator.generateId;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.ThrowableAssert.catchThrowable;
 
-import com.tngtech.java.junit.dataprovider.DataProvider;
-import com.tngtech.java.junit.dataprovider.DataProviderRunner;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Random;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.internal.util.reflection.Whitebox;
 
-import java.util.Random;
-import java.util.UUID;
-import java.util.concurrent.TimeUnit;
+import com.nike.wingtips.Span;
+import com.nike.wingtips.Span.SpanPurpose;
+import com.tngtech.java.junit.dataprovider.DataProvider;
+import com.tngtech.java.junit.dataprovider.DataProviderRunner;
 
 import zipkin2.Endpoint;
-
-import static com.nike.wingtips.TraceAndSpanIdGenerator.generateId;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.ThrowableAssert.catchThrowable;
 
 /**
  * Tests the functionality of {@link WingtipsToZipkinSpanConverterDefaultImpl}.
@@ -70,7 +71,8 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
         long durationNanos = Math.abs(random.nextLong());
         long durationMicros = TimeUnit.NANOSECONDS.toMicros(durationNanos);
         Endpoint zipkinEndpoint = Endpoint.newBuilder().serviceName(UUID.randomUUID().toString()).build();
-        Span wingtipsSpan = new Span(traceId, parentId, spanId, spanName, true, null, spanPurpose, startTimeEpochMicros, null, durationNanos);
+        Map<String, String> tags = createSingleTagMap();
+        Span wingtipsSpan = new Span(traceId, parentId, spanId, spanName, true, null, spanPurpose, startTimeEpochMicros, null, durationNanos, tags);
 
         // when
         zipkin2.Span zipkinSpan = impl.convertWingtipsSpanToZipkinSpan(wingtipsSpan, zipkinEndpoint);
@@ -83,10 +85,23 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
         assertThat(zipkinSpan.traceId()).isEqualTo(wingtipsSpan.getTraceId());
         assertThat(zipkinSpan.duration()).isEqualTo(durationMicros);
         assertThat(zipkinSpan.localEndpoint()).isEqualTo(zipkinEndpoint);
+        assertThat(zipkinSpan.tags()).isEqualTo(wingtipsSpan.getTags());
 
         verifySpanPurposeRelatedStuff(zipkinSpan, wingtipsSpan);
     }
 
+    protected Map<String,String> createSingleTagMap() {
+    		Map<String,String> singleValue = new HashMap<String,String>(1);
+    		singleValue.put("tagName", "tagValue");
+    		return singleValue;
+    }
+    
+    protected Map<String,String> createMultipleTagMap() {
+    		Map<String,String> multipleValues = createSingleTagMap();
+    		multipleValues.put("secondTag", "secondValue");
+    		return multipleValues;
+    }
+    
     @DataProvider(value = {
         "SERVER",
         "CLIENT",
@@ -104,7 +119,7 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
         long durationNanos = Math.abs(random.nextLong());
         long durationMicros = TimeUnit.NANOSECONDS.toMicros(durationNanos);
         Endpoint zipkinEndpoint = Endpoint.newBuilder().serviceName(UUID.randomUUID().toString()).build();
-        Span wingtipsSpan = new Span(traceId, null, spanId, spanName, true, null, spanPurpose, startTimeEpochMicros, null, durationNanos);
+        Span wingtipsSpan = new Span(traceId, null, spanId, spanName, true, null, spanPurpose, startTimeEpochMicros, null, durationNanos, null);
 
         // when
         zipkin2.Span zipkinSpan = impl.convertWingtipsSpanToZipkinSpan(wingtipsSpan, zipkinEndpoint);
@@ -117,6 +132,7 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
         assertThat(zipkinSpan.traceId()).isEqualTo(wingtipsSpan.getTraceId());
         assertThat(zipkinSpan.duration()).isEqualTo(durationMicros);
         assertThat(zipkinSpan.localEndpoint()).isEqualTo(zipkinEndpoint);
+        assertThat(zipkinSpan.tags()).isEqualTo(wingtipsSpan.getTags());
 
         verifySpanPurposeRelatedStuff(zipkinSpan, wingtipsSpan);
     }
@@ -147,6 +163,36 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
 
         // then
         assertThat(zipkinSpan.traceId()).isEqualTo(hex128Bits);
+    }
+    
+    @Test
+    @SuppressWarnings("UnnecessaryLocalVariable")
+    public void convertWingtipsSpanToZipkinSpan_works_as_expected_for_multiple_tags() {
+        // given
+        String high64Bits = "463ac35c9f6413ad";
+        String low64Bits = "48485a3953bb6124";
+        String hex128Bits = high64Bits + low64Bits;
+
+        String traceId128Bits = hex128Bits;
+        String spanId = low64Bits;
+        String spanName = UUID.randomUUID().toString();
+        long startTimeEpochMicros = Math.abs(random.nextLong());
+        long durationNanos = Math.abs(random.nextLong());
+        
+        Endpoint zipkinEndpoint = Endpoint.newBuilder().serviceName(UUID.randomUUID().toString()).build();
+        Span wingtipsSpan = Span.newBuilder(spanName, SpanPurpose.CLIENT)
+                                .withTraceId(traceId128Bits)
+                                .withSpanId(spanId)
+                                .withSpanStartTimeEpochMicros(startTimeEpochMicros)
+                                .withDurationNanos(durationNanos)
+                                .withTags(createMultipleTagMap())
+                                .build();
+
+        // when
+        zipkin2.Span zipkinSpan = impl.convertWingtipsSpanToZipkinSpan(wingtipsSpan, zipkinEndpoint);
+
+        // then
+        assertThat(zipkinSpan.tags()).isEqualTo(createMultipleTagMap());
     }
 
     @DataProvider(value = {

@@ -1,12 +1,13 @@
 package com.nike.wingtips.zipkin.util;
 
-import com.nike.wingtips.Span;
-import com.nike.wingtips.TraceAndSpanIdGenerator;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.concurrent.TimeUnit;
+import com.nike.wingtips.Span;
+import com.nike.wingtips.TraceAndSpanIdGenerator;
 
 import zipkin.Annotation;
 import zipkin.BinaryAnnotation;
@@ -32,17 +33,27 @@ public class WingtipsToZipkinSpanConverterDefaultImpl implements WingtipsToZipki
         long startEpochMicros = wingtipsSpan.getSpanStartTimeEpochMicros();
         long durationMicros = TimeUnit.NANOSECONDS.toMicros(wingtipsSpan.getDurationNanos());
 
-        return createNewZipkinSpanBuilderWithSpanPurposeAnnotations(wingtipsSpan, startEpochMicros, durationMicros, zipkinEndpoint, localComponentNamespace)
+        zipkin.Span.Builder builder = createNewZipkinSpanBuilderWithSpanPurposeAnnotations(wingtipsSpan, startEpochMicros, durationMicros, zipkinEndpoint, localComponentNamespace)
             .id(nullSafeLong(wingtipsSpan.getSpanId()))
             .name(wingtipsSpan.getSpanName())
             .parentId(nullSafeLong(wingtipsSpan.getParentSpanId()))
             .timestamp(startEpochMicros)
             .traceIdHigh(traceId.length() == 32 ? nullSafeLong(traceId, 0) : 0)
             .traceId(nullSafeLong(traceId))
-            .duration(durationMicros)
-            .build();
+            .duration(durationMicros);
+        
+        addAllTagsToBuilderAsBinaryAnnotations(builder, wingtipsSpan.getTags());
+        
+        return builder.build();
     }
 
+    protected void addAllTagsToBuilderAsBinaryAnnotations(zipkin.Span.Builder builder, Map<String,String> tagsToAdd) {
+    		for (Map.Entry<String, String> tagEntry : tagsToAdd.entrySet()) {
+	    		BinaryAnnotation tagAnnotation = BinaryAnnotation.create(tagEntry.getKey(), tagEntry.getValue(), null);
+	    		builder.addBinaryAnnotation(tagAnnotation);
+	    }
+    }
+    
     protected zipkin.Span.Builder createNewZipkinSpanBuilderWithSpanPurposeAnnotations(
         Span wingtipsSpan, long startEpochMicros, long durationMicros, Endpoint zipkinEndpoint, String localComponentNamespace
     ) {

@@ -1,15 +1,17 @@
 package com.nike.wingtips;
 
-import com.nike.wingtips.util.TracerManagedSpanStatus;
+import java.io.Closeable;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.Closeable;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
-import java.util.concurrent.TimeUnit;
+import com.nike.wingtips.util.SpanParser;
+import com.nike.wingtips.util.TracerManagedSpanStatus;
 
 /**
  * Represents some logical "unit of work" that is part of the larger distributed trace. A given request's trace tree is made up of all the spans with the same {@link #traceId}
@@ -50,25 +52,6 @@ public class Span implements Closeable {
 
     private static final Logger logger = LoggerFactory.getLogger(Span.class);
 
-    /** The name of the trace ID field when serializing/deserializing to/from JSON (see {@link #toJSON()} and {@link #fromJSON(String)}). Corresponds to {@link #getTraceId()}. */
-    public static final String TRACE_ID_FIELD = "traceId";
-    /** The name of the parent span ID field when serializing/deserializing to/from JSON (see {@link #toJSON()} and {@link #fromJSON(String)}). Corresponds to {@link #getParentSpanId()}. */
-    public static final String PARENT_SPAN_ID_FIELD = "parentSpanId";
-    /** The name of the span ID field when serializing/deserializing to/from JSON (see {@link #toJSON()} and {@link #fromJSON(String)}). Corresponds to {@link #getSpanId()}. */
-    public static final String SPAN_ID_FIELD = "spanId";
-    /** The name of the span name field when serializing/deserializing to/from JSON (see {@link #toJSON()} and {@link #fromJSON(String)}). Corresponds to {@link #getSpanName()}. */
-    public static final String SPAN_NAME_FIELD = "spanName";
-    /** The name of the sampleable field when serializing/deserializing to/from JSON (see {@link #toJSON()} and {@link #fromJSON(String)}). Corresponds to {@link #isSampleable()}. */
-    public static final String SAMPLEABLE_FIELD = "sampleable";
-    /** The name of the user ID field when serializing/deserializing to/from JSON (see {@link #toJSON()} and {@link #fromJSON(String)}). Corresponds to {@link #getUserId()}. */
-    public static final String USER_ID_FIELD = "userId";
-    /** The name of the span purpose field when serializing to JSON (see {@link #toJSON()}. Corresponds to {@link #getSpanPurpose()}. */
-    public static final String SPAN_PURPOSE_FIELD = "spanPurpose";
-    /** The name of the start-time-in-epoch-micros field when serializing/deserializing to/from JSON (see {@link #toJSON()} and {@link #fromJSON(String)}). Corresponds to {@link #getSpanStartTimeNanos()}. */
-    public static final String START_TIME_EPOCH_MICROS_FIELD = "startTimeEpochMicros";
-    /** The name of the duration-in-nanoseconds field when serializing to JSON (see {@link #toJSON()}. Corresponds to {@link #getDurationNanos()}. */
-    public static final String DURATION_NANOS_FIELD = "durationNanos";
-
     private final String traceId;
     private final String spanId;
     private final String parentSpanId;
@@ -78,9 +61,10 @@ public class Span implements Closeable {
     private final SpanPurpose spanPurpose;
     private final long spanStartTimeEpochMicros;
     private final long spanStartTimeNanos;
-
+    
     private Long durationNanos;
-
+    private Map<String,String> tags = new LinkedHashMap<String,String>(0);
+    
     private String cachedJsonRepresentation;
 
     private String cachedKeyValueRepresentation;
@@ -127,7 +111,8 @@ public class Span implements Closeable {
      * timing will be completely broken since {@link System#nanoTime()} is not comparable across JVMs.
      */
     public Span(String traceId, String parentSpanId, String spanId, String spanName, boolean sampleable, String userId,
-                SpanPurpose spanPurpose, long spanStartTimeEpochMicros, Long spanStartTimeNanos, Long durationNanos
+                SpanPurpose spanPurpose, long spanStartTimeEpochMicros, Long spanStartTimeNanos, Long durationNanos,
+                Map<String,String> tags
     ) {
         if (traceId == null)
             throw new IllegalArgumentException("traceId cannot be null");
@@ -160,11 +145,14 @@ public class Span implements Closeable {
             spanPurpose = SpanPurpose.UNKNOWN;
 
         this.spanPurpose = spanPurpose;
+        
+        if(tags != null)
+        		this.tags.putAll(tags);
     }
 
     // For deserialization only - this will create an invalid span object and is only here to support deserializers that need a default constructor but set the fields directly (e.g. Jackson)
     protected Span() {
-        this("PLACEHOLDER", null, "PLACEHOLDER", "PLACEHOLDER", false, null, SpanPurpose.UNKNOWN, -1, -1L, -1L);
+        this("PLACEHOLDER", null, "PLACEHOLDER", "PLACEHOLDER", false, null, SpanPurpose.UNKNOWN, -1, -1L, -1L, null);
     }
 
     /**
@@ -199,6 +187,7 @@ public class Span implements Closeable {
                    .withSpanStartTimeNanos(System.nanoTime())
                    .withDurationNanos(null)
                    .withSpanPurpose(spanPurpose)
+                   .withTags(this.tags)
                    .build();
     }
 
@@ -228,6 +217,8 @@ public class Span implements Closeable {
         builder.spanStartTimeEpochMicros = copy.spanStartTimeEpochMicros;
         builder.spanStartTimeNanos = copy.spanStartTimeNanos;
         builder.durationNanos = copy.durationNanos;
+        builder.tags = new HashMap<String,String>(copy.tags.size());
+	    builder.tags.putAll(copy.tags);
         return builder;
     }
 
@@ -354,7 +345,26 @@ public class Span implements Closeable {
     public TracerManagedSpanStatus getCurrentTracerManagedSpanStatus() {
         return Tracer.getInstance().getCurrentManagedStatusForSpan(this);
     }
+    
+    /**
+     * @return this spans collection of tags
+     */
+    public Map<String,String> getTags() {
+    		return tags;
+    }
 
+    /**
+     * Tags are expressed as key/value pairs. A call to this method will add the key/value pair if it exists
+     * or replaces the current {@code value} if one exists for the respective {@code key}
+     * 
+     * @see https://github.com/opentracing/opentracing-java/blob/master/opentracing-api/src/main/java/io/opentracing/tag/Tags.java
+     * @param key The tag {@code key}
+     * @param value The tag {@code value} to be set
+     */
+    public void putTag(String key, String value) {
+    		tags.put(key, value);
+    }
+    
     /**
      * @return The JSON representation of this span. See {@link #toJSON()}.
      */
@@ -370,30 +380,9 @@ public class Span implements Closeable {
      */
     public String toKeyValueString() {
         if (cachedKeyValueRepresentation == null)
-            cachedKeyValueRepresentation = calculateKeyValueString();
+            cachedKeyValueRepresentation = SpanParser.convertSpanToKeyValueFormat(this);
 
         return cachedKeyValueRepresentation;
-    }
-
-    /**
-     * Calculates and returns the key=value representation of this span instance.
-     */
-    protected String calculateKeyValueString() {
-        StringBuilder builder = new StringBuilder();
-
-        builder.append(TRACE_ID_FIELD).append("=").append(traceId);
-        builder.append(",").append(PARENT_SPAN_ID_FIELD).append("=").append(parentSpanId);
-        builder.append(",").append(SPAN_ID_FIELD).append("=").append(spanId);
-        builder.append(",").append(SPAN_NAME_FIELD).append("=").append(spanName);
-        builder.append(",").append(SAMPLEABLE_FIELD).append("=").append(sampleable);
-        builder.append(",").append(USER_ID_FIELD).append("=").append(userId);
-        builder.append(",").append(SPAN_PURPOSE_FIELD).append("=").append(spanPurpose.name());
-        builder.append(",").append(START_TIME_EPOCH_MICROS_FIELD).append("=").append(spanStartTimeEpochMicros);
-        if (isCompleted()) {
-            builder.append(",").append(DURATION_NANOS_FIELD).append("=").append(durationNanos);
-        }
-
-        return builder.toString();
     }
 
     /**
@@ -403,25 +392,9 @@ public class Span implements Closeable {
      *          not have to use a third party utility, etc.
      */
     public static Span fromKeyValueString(String keyValueStr) {
-        try {
-            // Create a map of keys to values.
-            Map<String, String> map = new HashMap<>();
-
-            // Split on the commas that separate the key/value pairs.
-            String[] fieldPairs = keyValueStr.split(",");
-            for (String fieldPair : fieldPairs) {
-                // Split again on the equals character that separate the field's key from its value.
-                String[] keyVal = fieldPair.split("=");
-                map.put(keyVal[0], keyVal[1]);
-            }
-
-            return fromKeyValueMap(map);
-        } catch (Exception e) {
-            logger.error("Error extracting Span from key/value string. Defaulting to null. bad_span_key_value_string={}", keyValueStr, e);
-            return null;
-        }
+    		return SpanParser.fromKeyValueString(keyValueStr);
     }
-
+    
     /**
      * @return A JSON string based on this {@link Span} instance.
      *         NOTE: The {@link #DURATION_NANOS_FIELD} field will be added only if {@link #isCompleted()} is true. This lets you call this method at any time
@@ -430,32 +403,9 @@ public class Span implements Closeable {
     public String toJSON() {
         // Profiling shows this JSON creation to generate a lot of garbage in certain situations, so we should cache the result.
         if (cachedJsonRepresentation == null)
-            cachedJsonRepresentation = calculateJson();
+            cachedJsonRepresentation = SpanParser.convertSpanToJSON(this);
 
         return cachedJsonRepresentation;
-    }
-
-    /**
-     * Calculates and returns the JSON representation of this span instance. We build this manually ourselves to avoid pulling in an extra dependency
-     * (e.g. Jackson) just for building a simple JSON string.
-     */
-    protected String calculateJson() {
-        StringBuilder builder = new StringBuilder();
-
-        builder.append("{\"").append(TRACE_ID_FIELD).append("\":\"").append(traceId);
-        builder.append("\",\"").append(PARENT_SPAN_ID_FIELD).append("\":\"").append(parentSpanId);
-        builder.append("\",\"").append(SPAN_ID_FIELD).append("\":\"").append(spanId);
-        builder.append("\",\"").append(SPAN_NAME_FIELD).append("\":\"").append(spanName);
-        builder.append("\",\"").append(SAMPLEABLE_FIELD).append("\":\"").append(sampleable);
-        builder.append("\",\"").append(USER_ID_FIELD).append("\":\"").append(userId);
-        builder.append("\",\"").append(SPAN_PURPOSE_FIELD).append("\":\"").append(spanPurpose.name());
-        builder.append("\",\"").append(START_TIME_EPOCH_MICROS_FIELD).append("\":\"").append(spanStartTimeEpochMicros);
-        if (isCompleted()) {
-            builder.append("\",\"").append(DURATION_NANOS_FIELD).append("\":\"").append(durationNanos);
-        }
-        builder.append("\"}");
-
-        return builder.toString();
     }
 
     /**
@@ -465,82 +415,7 @@ public class Span implements Closeable {
      *          not have to use a third party utility like Jackson, etc.
      */
     public static Span fromJSON(String json) {
-        try {
-            // Create a map of JSON field keys to values.
-            Map<String, String> map = new HashMap<>();
-
-            // Strip off the {" and "} at the beginning/end.
-            String innerJsonCore = json.substring(2, json.length() - 2);
-            // Split on the doublequotes-comma-doublequotes that separate the fields.
-            String[] fieldPairs = innerJsonCore.split("\",\"");
-            for (String fieldPair : fieldPairs) {
-                // Split again on the doublequotes-colon-doublequotes that separate the field's key from its value. At this point all double-quotes have been stripped off
-                // and we can just map the key to the value.
-                String[] keyVal = fieldPair.split("\":\"");
-                map.put(keyVal[0], keyVal[1]);
-            }
-
-            return fromKeyValueMap(map);
-        } catch (Exception e) {
-            logger.error("Error extracting Span from JSON. Defaulting to null. bad_span_json={}", json, e);
-            return null;
-        }
-    }
-
-    private static Span fromKeyValueMap(Map<String, String> map) {
-        // Use the map to get the field values for the span.
-        String traceId = nullSafeGetString(map, TRACE_ID_FIELD);
-        String spanId = nullSafeGetString(map, SPAN_ID_FIELD);
-        String parentSpanId = nullSafeGetString(map, PARENT_SPAN_ID_FIELD);
-        String spanName = nullSafeGetString(map, SPAN_NAME_FIELD);
-        Boolean sampleable = nullSafeGetBoolean(map, SAMPLEABLE_FIELD);
-        if (sampleable == null)
-            throw new IllegalStateException("Unable to parse " + SAMPLEABLE_FIELD + " from JSON");
-        String userId = nullSafeGetString(map, USER_ID_FIELD);
-        Long startTimeEpochMicros = nullSafeGetLong(map, START_TIME_EPOCH_MICROS_FIELD);
-        if (startTimeEpochMicros == null)
-            throw new IllegalStateException("Unable to parse " + START_TIME_EPOCH_MICROS_FIELD + " from JSON");
-        Long durationNanos = nullSafeGetLong(map, DURATION_NANOS_FIELD);
-        SpanPurpose spanPurpose = nullSafeGetSpanPurpose(map, SPAN_PURPOSE_FIELD);
-        return new Span(traceId, parentSpanId, spanId, spanName, sampleable, userId, spanPurpose, startTimeEpochMicros, null, durationNanos);
-    }
-
-    private static String nullSafeGetString(Map<String, String> map, String key) {
-        String value = map.get(key);
-        if (value == null || value.equals("null"))
-            return null;
-
-        return value;
-    }
-
-    private static Long nullSafeGetLong(Map<String, String> map, String key) {
-        String value = nullSafeGetString(map, key);
-        if (value == null)
-            return null;
-
-        return Long.parseLong(value);
-    }
-
-    private static Boolean nullSafeGetBoolean(Map<String, String> map, String key) {
-        String value = nullSafeGetString(map, key);
-        if (value == null)
-            return null;
-
-        return Boolean.parseBoolean(value);
-    }
-
-    private static SpanPurpose nullSafeGetSpanPurpose(Map<String, String> map, String key) {
-        String value = nullSafeGetString(map, key);
-        if (value == null)
-            return null;
-
-        try {
-            return SpanPurpose.valueOf(value);
-        }
-        catch(Exception ex) {
-            logger.warn("Unable to parse \"{}\" to a SpanPurpose enum. Received exception: {}", value, ex.toString());
-            return null;
-        }
+    		return SpanParser.fromJSON(json);
     }
 
     /**
@@ -601,7 +476,8 @@ public class Span implements Closeable {
                Objects.equals(parentSpanId, span.parentSpanId) &&
                Objects.equals(spanName, span.spanName) &&
                Objects.equals(userId, span.userId) &&
-               Objects.equals(durationNanos, span.durationNanos);
+               Objects.equals(durationNanos, span.durationNanos) &&
+               Objects.equals(tags, span.tags);
     }
 
     @Override
@@ -632,6 +508,7 @@ public class Span implements Closeable {
         private Long spanStartTimeNanos;
         private Long durationNanos;
         private SpanPurpose spanPurpose;
+        private Map<String,String> tags = new HashMap<String,String>();
 
         private Builder(String spanName, SpanPurpose spanPurpose) {
             this.spanName = spanName;
@@ -792,7 +669,31 @@ public class Span implements Closeable {
             this.spanPurpose = spanPurpose;
             return this;
         }
-
+        
+        /**
+         * Sets the value of a tag for the respective key.  This will replace an existing tag value for the respective key.   
+         * @param key the {@code key} of the tag
+         * @param value the {@code value} of the tag
+         * @return a reference to this Builder
+         */
+        public Builder withTag(String key, String value) {
+        		tags.put(key, value);
+        		return this;
+        }
+        
+        /**
+         * Adds all the tags from the supplied {@code Map} to the existing set of tags
+         * @param tags The tags to be added to the current span
+         * @return
+         * @throws NullPointerException if the specified map is null, or if
+         *         this map does not permit null keys or values, and the
+         *         specified map contains null keys or values
+         */
+        public Builder withTags(Map<String,String> tags) {
+        		this.tags.putAll(tags);
+        		return this;
+        }
+        
         /**
          * <p>
          *  Returns a {@link Span} built from the parameters set via the various {@code with*(...)} methods on this builder instance.
@@ -837,7 +738,7 @@ public class Span implements Closeable {
             if (spanStartTimeNanos == null)
                 spanStartTimeNanos = System.nanoTime();
 
-            return new Span(traceId, parentSpanId, spanId, spanName, sampleable, userId, spanPurpose, spanStartTimeEpochMicros, spanStartTimeNanos, durationNanos);
+            return new Span(traceId, parentSpanId, spanId, spanName, sampleable, userId, spanPurpose, spanStartTimeEpochMicros, spanStartTimeNanos, durationNanos, tags);
         }
     }
 }

@@ -1,20 +1,8 @@
 package com.nike.wingtips;
 
-import com.nike.wingtips.Span.SpanPurpose;
-import com.nike.wingtips.util.TracerManagedSpanStatus;
-
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.tngtech.java.junit.dataprovider.DataProvider;
-import com.tngtech.java.junit.dataprovider.DataProviderRunner;
-
-import org.assertj.core.data.Offset;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.mockito.internal.util.reflection.Whitebox;
-import org.slf4j.MDC;
+import static java.util.Collections.singletonList;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Fail.fail;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -25,9 +13,21 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
-import static java.util.Collections.singletonList;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Fail.fail;
+import org.assertj.core.data.Offset;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.internal.util.reflection.Whitebox;
+import org.slf4j.MDC;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nike.wingtips.Span.SpanPurpose;
+import com.nike.wingtips.util.SpanParser;
+import com.nike.wingtips.util.TracerManagedSpanStatus;
+import com.tngtech.java.junit.dataprovider.DataProvider;
+import com.tngtech.java.junit.dataprovider.DataProviderRunner;
 
 /**
  * Tests the functionality of {@link Span}
@@ -49,6 +49,7 @@ public class SpanTest {
         System.nanoTime());
     private long durationNanosForFullyCompletedSpan = 424242;
     private SpanPurpose spanPurposeForFullyCompletedSpan = SpanPurpose.SERVER;
+    private Map<String,String> tags = new HashMap<String,String>();
 
     private ObjectMapper objectMapper = new ObjectMapper();
 
@@ -67,36 +68,15 @@ public class SpanTest {
         Tracer.getInstance().unregisterFromThread();
     }
 
-    /**
-     * @return The string "null" if obj is null (in order to match how Span.toJson() functions), otherwise
-     * String.valueOf(obj).
-     */
-    private String nullSafeStringValueOf(Object obj) {
-        if (obj == null) {
-            return "null";
-        }
-
-        return String.valueOf(obj);
-    }
+   
 
     private Span createFilledOutSpan(boolean completed) {
         Long durationNanos = (completed) ? durationNanosForFullyCompletedSpan : null;
         return new Span(traceId, parentSpanId, spanId, spanName, sampleableForFullyCompleteSpan, userId,
-                        spanPurposeForFullyCompletedSpan, startTimeEpochMicrosForFullyCompleteSpan, startTimeNanosForFullyCompleteSpan, durationNanos);
+                        spanPurposeForFullyCompletedSpan, startTimeEpochMicrosForFullyCompleteSpan, startTimeNanosForFullyCompleteSpan, durationNanos, null);
     }
 
-    private void verifySpanEqualsDeserializedValues(Span span, Map<String, String> deserializedValues) {
-        assertThat(nullSafeStringValueOf(span.getSpanStartTimeEpochMicros())).isEqualTo(deserializedValues.get(Span.START_TIME_EPOCH_MICROS_FIELD));
-        assertThat(span.isCompleted()).isEqualTo(deserializedValues.containsKey(Span.DURATION_NANOS_FIELD));
-        assertThat(nullSafeStringValueOf(span.getTraceId())).isEqualTo(deserializedValues.get(Span.TRACE_ID_FIELD));
-        assertThat(nullSafeStringValueOf(span.getSpanId())).isEqualTo(deserializedValues.get(Span.SPAN_ID_FIELD));
-        assertThat(nullSafeStringValueOf(span.getParentSpanId())).isEqualTo(deserializedValues.get(Span.PARENT_SPAN_ID_FIELD));
-        assertThat(nullSafeStringValueOf(span.getSpanName())).isEqualTo(deserializedValues.get(Span.SPAN_NAME_FIELD));
-        assertThat(nullSafeStringValueOf(span.isSampleable())).isEqualTo(deserializedValues.get(Span.SAMPLEABLE_FIELD));
-        assertThat(nullSafeStringValueOf(span.getUserId())).isEqualTo(deserializedValues.get(Span.USER_ID_FIELD));
-        assertThat(nullSafeStringValueOf(span.getDurationNanos())).isEqualTo(nullSafeStringValueOf(deserializedValues.get(Span.DURATION_NANOS_FIELD)));
-        assertThat(nullSafeStringValueOf(span.getSpanPurpose())).isEqualTo(nullSafeStringValueOf(deserializedValues.get(Span.SPAN_PURPOSE_FIELD)));
-    }
+    
 
     private void verifySpanDeepEquals(Span span1, Span span2, boolean allowStartTimeNanosFudgeFactor) {
         assertThat(span1.getSpanStartTimeEpochMicros()).isEqualTo(span2.getSpanStartTimeEpochMicros());
@@ -113,13 +93,14 @@ public class SpanTest {
         assertThat(span1.getUserId()).isEqualTo(span2.getUserId());
         assertThat(span1.getDurationNanos()).isEqualTo(span2.getDurationNanos());
         assertThat(span1.getSpanPurpose()).isEqualTo(span2.getSpanPurpose());
+        assertThat(span1.getTags()).isEqualTo(span2.getTags());
     }
 
     @Test
     public void public_constructor_works_as_expected_for_completed_span() {
         // when
         Span span = new Span(traceId, parentSpanId, spanId, spanName, sampleableForFullyCompleteSpan, userId, spanPurposeForFullyCompletedSpan,
-                             startTimeEpochMicrosForFullyCompleteSpan, startTimeNanosForFullyCompleteSpan, durationNanosForFullyCompletedSpan);
+                             startTimeEpochMicrosForFullyCompleteSpan, startTimeNanosForFullyCompleteSpan, durationNanosForFullyCompletedSpan, tags);
 
         // then
         assertThat(span.getTraceId()).isEqualTo(traceId);
@@ -134,13 +115,14 @@ public class SpanTest {
 
         assertThat(span.isCompleted()).isTrue();
         assertThat(span.getDurationNanos()).isEqualTo(durationNanosForFullyCompletedSpan);
+        assertThat(span.getTags()).isEqualTo(tags);
     }
 
     @Test
     public void public_constructor_works_as_expected_for_incomplete_span() {
         // when
         Span span = new Span(traceId, parentSpanId, spanId, spanName, sampleableForFullyCompleteSpan, userId, spanPurposeForFullyCompletedSpan,
-                             startTimeEpochMicrosForFullyCompleteSpan, startTimeNanosForFullyCompleteSpan, null);
+                             startTimeEpochMicrosForFullyCompleteSpan, startTimeNanosForFullyCompleteSpan, null, null);
 
         // then
         assertThat(span.getTraceId()).isEqualTo(traceId);
@@ -155,35 +137,45 @@ public class SpanTest {
 
         assertThat(span.isCompleted()).isFalse();
         assertThat(span.getDurationNanos()).isNull();
+        assertThat(span.getTags()).isEqualTo(tags);
     }
 
     @Test(expected = IllegalArgumentException.class)
     public void public_constructor_throws_IllegalArgumentException_if_passed_null_trace_id() {
         // expect
-        new Span(null, parentSpanId, spanId, spanName, true, userId, spanPurpose, 42, null, null);
+        new Span(null, parentSpanId, spanId, spanName, true, userId, spanPurpose, 42, null, null, null);
     }
 
     @Test(expected = IllegalArgumentException.class)
     public void public_constructor_throws_IllegalArgumentException_if_passed_null_span_id() {
         // expect
-        new Span(traceId, parentSpanId, null, spanName, true, userId, spanPurpose, 42, null, null);
+        new Span(traceId, parentSpanId, null, spanName, true, userId, spanPurpose, 42, null, null, null);
     }
 
     @Test(expected = IllegalArgumentException.class)
     public void public_constructor_throws_IllegalArgumentException_if_passed_null_span_name() {
         // expect
-        new Span(traceId, parentSpanId, spanId, null, true, userId, spanPurpose, 42, null, null);
+        new Span(traceId, parentSpanId, spanId, null, true, userId, spanPurpose, 42, null, null, null);
     }
 
     @Test
     public void public_constructor_defaults_to_UNKNOWN_span_purpose_if_passed_null() {
         // when
-        Span span = new Span(traceId, parentSpanId, spanId, spanName, true, userId, null, 42, null, null);
+        Span span = new Span(traceId, parentSpanId, spanId, spanName, true, userId, null, 42, null, null, null);
 
         // then
         assertThat(span.getSpanPurpose()).isEqualTo(SpanPurpose.UNKNOWN);
     }
 
+    @Test
+    public void public_constructor_keeps_empty_set_when_tags_are_set_null() {
+        // when
+        Span span = new Span(traceId, parentSpanId, spanId, spanName, true, userId, null, 42, null, null, null);
+
+        // then
+        assertThat(span.getTags()).isNotNull();
+    }
+    
     @Test
     public void public_constructor_calculates_start_time_nanos_if_passed_null() {
         // given
@@ -192,7 +184,7 @@ public class SpanTest {
         long epochMicrosBeforeCall = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
 
         // when
-        Span span = new Span(traceId, parentSpanId, spanId, spanName, true, userId, spanPurpose, startTimeEpochMicrosUsed, null, 41L);
+        Span span = new Span(traceId, parentSpanId, spanId, spanName, true, userId, spanPurpose, startTimeEpochMicrosUsed, null, 41L, null);
         long epochMicrosAfterCall = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
         long nanosAfterCall = System.nanoTime();
 
@@ -218,7 +210,7 @@ public class SpanTest {
 
         // then
         verifySpanDeepEquals(result,
-                             new Span(placeholderValue, null, placeholderValue, placeholderValue, false, null, SpanPurpose.UNKNOWN, -1, -1L, -1L),
+                             new Span(placeholderValue, null, placeholderValue, placeholderValue, false, null, SpanPurpose.UNKNOWN, -1, -1L, -1L, null),
                              false);
     }
 
@@ -375,486 +367,7 @@ public class SpanTest {
         assertThat(toStringVal).isEqualTo(span.toJSON());
     }
 
-    @Test
-    public void toJson_should_function_properly_when_there_are_no_null_values() throws IOException {
-        // given: valid span without any null values, span completed (so that end time is not null) and JSON string from Span.toJson()
-        Span validSpan = createFilledOutSpan(true);
-        assertThat(validSpan.getTraceId()).isNotEmpty();
-        assertThat(validSpan.getUserId()).isNotEmpty();
-        assertThat(validSpan.getParentSpanId()).isNotEmpty();
-        assertThat(validSpan.getSpanName()).isNotEmpty();
-        assertThat(validSpan.getSpanId()).isNotEmpty();
-        assertThat(validSpan.getDurationNanos()).isNotNull();
-        assertThat(validSpan.isCompleted()).isTrue();
-        assertThat(validSpan.getSpanPurpose()).isNotNull();
-        String json = validSpan.toJSON();
-
-        // when: jackson is used to deserialize that JSON
-        Map<String, String> spanValuesFromJackson = objectMapper.readValue(json, new TypeReference<Map<String, String>>() { });
-
-        // then: the original span and jackson's span values should be exactly the same
-        verifySpanEqualsDeserializedValues(validSpan, spanValuesFromJackson);
-    }
-
-    @Test
-    public void toJson_should_function_properly_when_there_are_null_values() throws IOException {
-        // given: valid span with null values and JSON string from Span.toJson()
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName, null).build();
-        assertThat(validSpan.getParentSpanId()).isNull();
-        assertThat(validSpan.getUserId()).isNull();
-        String json = validSpan.toJSON();
-
-        // when: jackson is used to deserialize that JSON
-        Map<String, String> spanValuesFromJackson = objectMapper.readValue(json, new TypeReference<Map<String, String>>() {});
-
-        // then: the original span context and jackson's span context values should be exactly the same
-        verifySpanEqualsDeserializedValues(validSpan, spanValuesFromJackson);
-    }
-
-    @Test
-    public void toJson_should_function_properly_for_non_completed_spans() throws IOException {
-        // given: valid span and JSON string from Span.toJson()
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
-        String json = validSpan.toJSON();
-        assertThat(validSpan.isCompleted()).isFalse();
-        assertThat(validSpan.getDurationNanos()).isNull();
-
-        // when: jackson is used to deserialize that JSON
-        Map<String, String> spanValuesFromJackson = objectMapper.readValue(json, new TypeReference<Map<String, String>>() {});
-
-        // then: the original span and jackson's span values should be exactly the same
-        verifySpanEqualsDeserializedValues(validSpan, spanValuesFromJackson);
-    }
-
-    @Test
-    public void toJson_should_function_properly_for_completed_spans() throws IOException {
-        // given: valid span and completed, and JSON string from Span.toJson()
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
-        validSpan.complete();
-        assertThat(validSpan.isCompleted()).isTrue();
-        assertThat(validSpan.getDurationNanos()).isNotNull();
-        String json = validSpan.toJSON();
-
-        // when: jackson is used to deserialize that JSON
-        Map<String, String> spanValuesFromJackson = objectMapper.readValue(json, new TypeReference<Map<String, String>>() {});
-
-        // then: the original span and jackson's span values should be exactly the same
-        verifySpanEqualsDeserializedValues(validSpan, spanValuesFromJackson);
-    }
-
-    @Test
-    public void toJson_should_use_cached_json() {
-        // given
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
-        String uuidString = UUID.randomUUID().toString();
-        Whitebox.setInternalState(validSpan, "cachedJsonRepresentation", uuidString);
-
-        // when
-        String toJsonResult = validSpan.toJSON();
-
-        // then
-        assertThat(toJsonResult).isEqualTo(uuidString);
-    }
-
-    @Test
-    public void complete_should_reset_cached_json() throws IOException {
-        // given
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
-        String uuidString = UUID.randomUUID().toString();
-        Whitebox.setInternalState(validSpan, "cachedJsonRepresentation", uuidString);
-
-        // when
-        String beforeCompleteJson = validSpan.toJSON();
-        validSpan.complete();
-
-        // then
-        String afterCompleteJson = validSpan.toJSON();
-        assertThat(afterCompleteJson).isNotEqualTo(beforeCompleteJson);
-        assertThat(afterCompleteJson).isNotEqualTo(uuidString);
-        Map<String, String> spanValuesFromJackson = objectMapper.readValue(afterCompleteJson, new TypeReference<Map<String, String>>() { });
-        verifySpanEqualsDeserializedValues(validSpan, spanValuesFromJackson);
-    }
-
-    @Test
-    public void fromJson_should_function_properly_when_there_are_no_null_values() {
-        // given: valid span without any null values, completed (so that end time is not null) and JSON string from Span.toJson()
-        Span validSpan = createFilledOutSpan(true);
-        assertThat(validSpan).isNotNull();
-        assertThat(validSpan.getTraceId()).isNotNull();
-        assertThat(validSpan.getUserId()).isNotNull();
-        assertThat(validSpan.getParentSpanId()).isNotNull();
-        assertThat(validSpan.getSpanName()).isNotNull();
-        assertThat(validSpan.getSpanId()).isNotNull();
-        assertThat(validSpan.getDurationNanos()).isNotNull();
-        assertThat(validSpan.isCompleted()).isTrue();
-        assertThat(validSpan.getSpanPurpose()).isNotNull();
-        String json = validSpan.toJSON();
-
-        // when: fromJson is called
-        Span spanFromJson = Span.fromJSON(json);
-
-        // then: the original span and the fromJson() span values should be exactly the same
-        verifySpanDeepEquals(validSpan, spanFromJson, true);
-    }
-
-    @Test
-    public void fromJson_should_function_properly_when_there_are_null_values() throws IOException {
-        // given: valid span with null values and JSON string from Span.toJson()
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName, null).build();
-        assertThat(validSpan.getParentSpanId()).isNull();
-        assertThat(validSpan.getUserId()).isNull();
-        assertThat(validSpan.getDurationNanos()).isNull();
-        String json = validSpan.toJSON();
-
-        // when: fromJson is called
-        Span spanFromJson = Span.fromJSON(json);
-
-        // then: the original span and the fromJson() span values should be exactly the same
-        verifySpanDeepEquals(validSpan, spanFromJson, true);
-    }
-
-    @Test
-    public void fromJson_should_function_properly_for_non_completed_spans() throws IOException {
-        // given: valid, non-completed span and JSON string from Span.toJson()
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
-        String json = validSpan.toJSON();
-        assertThat(validSpan.isCompleted()).isFalse();
-
-        // when: fromJson is called
-        Span spanFromJson = Span.fromJSON(json);
-
-        // then: the original span and the fromJson() span values should be exactly the same
-        verifySpanDeepEquals(validSpan, spanFromJson, true);
-    }
-
-        @Test
-    public void fromJson_should_function_properly_for_completed_spans() throws IOException {
-        // given: valid span that has been completed, and JSON string from Span.toJson()
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
-        validSpan.complete();
-        assertThat(validSpan.isCompleted()).isTrue();
-        String json = validSpan.toJSON();
-
-        // when: fromJson is called
-        Span spanFromJson = Span.fromJSON(json);
-
-        // then: the original span and the fromJson() span values should be exactly the same
-        verifySpanDeepEquals(validSpan, spanFromJson, true);
-    }
-
-    @Test
-    public void fromJson_should_return_null_for_garbage_input() throws IOException {
-        // given: garbage input
-        String garbageInput = "garbagio";
-
-        // when: fromJson is called
-        Span spanFromJson = Span.fromJSON(garbageInput);
-
-        // then: the return value should be null
-        assertThat(spanFromJson).isNull();
-    }
-
-    @Test
-    public void fromJson_returns_null_if_sampleable_field_is_missing() throws IOException {
-        // given
-        Span validSpan = createFilledOutSpan(true);
-        String validJson = validSpan.toJSON();
-        String invalidJson = validJson.replace(String.format(",\"%s\":\"%s\"", Span.SAMPLEABLE_FIELD, String.valueOf(validSpan.isSampleable())), "");
-
-        // when
-        Span result = Span.fromJSON(invalidJson);
-
-        // then
-        assertThat(result).isNull();
-    }
-
-    @Test
-    public void fromJson_returns_null_if_startTimeEpochMicros_field_is_missing() throws IOException {
-        // given
-        Span validSpan = createFilledOutSpan(true);
-        String validJson = validSpan.toJSON();
-        String invalidJson = validJson.replace(
-            String.format(",\"%s\":\"%s\"", Span.START_TIME_EPOCH_MICROS_FIELD, String.valueOf(validSpan.getSpanStartTimeEpochMicros())),
-            ""
-        );
-
-        // when
-        Span result = Span.fromJSON(invalidJson);
-
-        // then
-        assertThat(result).isNull();
-    }
-
-    @DataProvider(value = {
-        "",
-        "foobar-not-a-real-enum-value"
-    }, splitBy = "\\|")
-    @Test
-    public void fromJson_returns_span_with_UNKNOWN_span_purpose_if_spanPurpose_field_is_missing_or_garbage(String badValue) throws IOException {
-        // given
-        Span validSpan = createFilledOutSpan(true);
-        String validJson = validSpan.toJSON();
-        if (badValue.trim().length() > 0) {
-            badValue = ",\"spanPurpose\":\"" + badValue + "\"";
-        }
-        String invalidJson = validJson.replace(
-            String.format(",\"%s\":\"%s\"", Span.SPAN_PURPOSE_FIELD, validSpan.getSpanPurpose().name()),
-            badValue
-        );
-        assertThat(validSpan.getSpanPurpose()).isNotEqualTo(SpanPurpose.UNKNOWN);
-
-        // when
-        Span result = Span.fromJSON(invalidJson);
-
-        // then
-        assertThat(result).isNotNull();
-        assertThat(result.getSpanPurpose()).isEqualTo(SpanPurpose.UNKNOWN);
-    }
-
-    private Map<String, String> deserializeKeyValueSpanString(String keyValStr) {
-        Map<String, String> map = new HashMap<>();
-        String[] fields = keyValStr.split(",");
-        for (String field : fields) {
-            String[] info = field.split("=");
-            map.put(info[0], info[1]);
-        }
-        return map;
-    }
-
-    @Test
-    public void toKeyValueString_should_function_properly_when_there_are_no_null_values() throws IOException {
-        // given: valid known span without any null values, span completed (so that end time is not null) and key/value string from Span.toKeyValueString()
-        Span validSpan = createFilledOutSpan(true);
-        assertThat(validSpan.getTraceId()).isNotEmpty();
-        assertThat(validSpan.getUserId()).isNotEmpty();
-        assertThat(validSpan.getParentSpanId()).isNotEmpty();
-        assertThat(validSpan.getSpanName()).isNotEmpty();
-        assertThat(validSpan.getSpanId()).isNotEmpty();
-        assertThat(validSpan.getDurationNanos()).isNotNull();
-        assertThat(validSpan.isCompleted()).isTrue();
-        assertThat(validSpan.getSpanPurpose()).isNotNull();
-        String keyValueStr = validSpan.toKeyValueString();
-
-        // when: the string is deserialized into a map
-        Map<String, String> deserializedValues = deserializeKeyValueSpanString(keyValueStr);
-
-        // then: the original span and deserialized map values should be exactly the same
-        verifySpanEqualsDeserializedValues(validSpan, deserializedValues);
-    }
-
-    @Test
-    public void toKeyValueString_should_function_properly_when_there_are_null_values() throws IOException {
-        // given: valid span with null values and key/value string from Span.toKeyValueString()
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName, null).build();
-        assertThat(validSpan.getParentSpanId()).isNull();
-        assertThat(validSpan.getUserId()).isNull();
-        assertThat(validSpan.getDurationNanos()).isNull();
-        String keyValueStr = validSpan.toKeyValueString();
-
-        // when: the string is deserialized into a map
-        Map<String, String> deserializedValues = deserializeKeyValueSpanString(keyValueStr);
-
-        // then: the original span and deserialized map values should be exactly the same
-        verifySpanEqualsDeserializedValues(validSpan, deserializedValues);
-    }
-
-    @Test
-    public void toKeyValueString_should_function_properly_for_non_completed_spans() throws IOException {
-        // given: valid span and key/value string from Span.toKeyValueString()
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
-        String keyValueStr = validSpan.toKeyValueString();
-        assertThat(validSpan.isCompleted()).isFalse();
-
-        // when: the string is deserialized into a map
-        Map<String, String> deserializedValues = deserializeKeyValueSpanString(keyValueStr);
-
-        // then: the original span and deserialized map values should be exactly the same
-        verifySpanEqualsDeserializedValues(validSpan, deserializedValues);
-    }
-
-    @Test
-    public void toKeyValueString_should_function_properly_for_completed_spans() throws IOException {
-        // given: valid span and completed, and key/value string from Span.toKeyValueString()
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
-        validSpan.complete();
-        assertThat(validSpan.isCompleted()).isTrue();
-        String keyValueStr = validSpan.toKeyValueString();
-
-        // when: the string is deserialized into a map
-        Map<String, String> deserializedValues = deserializeKeyValueSpanString(keyValueStr);
-
-        // then: the original span and deserialized map values should be exactly the same
-        verifySpanEqualsDeserializedValues(validSpan, deserializedValues);
-    }
-
-    @Test
-    public void toKeyValueString_should_use_cached_key_value_string() {
-        // given
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
-        String uuidString = UUID.randomUUID().toString();
-        Whitebox.setInternalState(validSpan, "cachedKeyValueRepresentation", uuidString);
-
-        // when
-        String toKeyValueStringResult = validSpan.toKeyValueString();
-
-        // then
-        assertThat(toKeyValueStringResult).isEqualTo(uuidString);
-    }
-
-    @Test
-    public void complete_should_reset_cached_key_value_string() throws IOException {
-        // given
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
-        String uuidString = UUID.randomUUID().toString();
-        Whitebox.setInternalState(validSpan, "cachedKeyValueRepresentation", uuidString);
-
-        // when
-        String beforeCompleteKeyValueString = validSpan.toKeyValueString();
-        validSpan.complete();
-
-        // then
-        String afterCompleteKeyValueString = validSpan.toKeyValueString();
-        assertThat(afterCompleteKeyValueString).isNotEqualTo(beforeCompleteKeyValueString);
-        assertThat(afterCompleteKeyValueString).isNotEqualTo(uuidString);
-        Map<String, String> deserializedValues = deserializeKeyValueSpanString(afterCompleteKeyValueString);
-        verifySpanEqualsDeserializedValues(validSpan, deserializedValues);
-    }
-
-    @Test
-    public void fromKeyValueString_should_function_properly_when_there_are_no_null_values() {
-        // given: valid span without any null values, completed (so that end time is not null) and key/value string from Span.fromKeyValueString()
-        Span validSpan = createFilledOutSpan(true);
-        assertThat(validSpan).isNotNull();
-        assertThat(validSpan.getTraceId()).isNotNull();
-        assertThat(validSpan.getUserId()).isNotNull();
-        assertThat(validSpan.getParentSpanId()).isNotNull();
-        assertThat(validSpan.getSpanName()).isNotNull();
-        assertThat(validSpan.getSpanId()).isNotNull();
-        assertThat(validSpan.getDurationNanos()).isNotNull();
-        assertThat(validSpan.isCompleted()).isTrue();
-        assertThat(validSpan.getSpanPurpose()).isNotNull();
-        String keyValStr = validSpan.toKeyValueString();
-
-        // when: toKeyValueString is called
-        Span spanFromKeyValStr = Span.fromKeyValueString(keyValStr);
-
-        // then: the original span and the fromKeyValueString() span values should be exactly the same
-        verifySpanDeepEquals(validSpan, spanFromKeyValStr, true);
-    }
-
-    @Test
-    public void fromKeyValueString_should_function_properly_when_there_are_null_values() throws IOException {
-        // given: valid span with null values and key/value string from Span.fromKeyValueString()
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName, null).build();
-        assertThat(validSpan.getParentSpanId()).isNull();
-        assertThat(validSpan.getUserId()).isNull();
-        assertThat(validSpan.getDurationNanos()).isNull();
-        String keyValStr = validSpan.toKeyValueString();
-
-        // when: toKeyValueString is called
-        Span spanFromKeyValStr = Span.fromKeyValueString(keyValStr);
-
-        // then: the original span and the fromKeyValueString() span values should be exactly the same
-        verifySpanDeepEquals(validSpan, spanFromKeyValStr, true);
-    }
-
-    @Test
-    public void fromKeyValueString_should_function_properly_for_non_completed_spans() throws IOException {
-        // given: valid, non-completed span and key/value string from Span.fromKeyValueString()
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
-        String keyValStr = validSpan.toKeyValueString();
-        assertThat(validSpan.isCompleted()).isFalse();
-
-        // when: toKeyValueString is called
-        Span spanFromKeyValStr = Span.fromKeyValueString(keyValStr);
-
-        // then: the original span and the fromKeyValueString() span values should be exactly the same
-        verifySpanDeepEquals(validSpan, spanFromKeyValStr, true);
-    }
-
-    @Test
-    public void fromKeyValueString_should_function_properly_for_completed_spans() throws IOException {
-        // given: valid span that has been completed, and key/value string from Span.fromKeyValueString()
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
-        validSpan.complete();
-        assertThat(validSpan.isCompleted()).isTrue();
-        String keyValStr = validSpan.toKeyValueString();
-
-        // when: toKeyValueString is called
-        Span spanFromKeyValStr = Span.fromKeyValueString(keyValStr);
-
-        // then: the original span and the fromKeyValueString() span values should be exactly the same
-        verifySpanDeepEquals(validSpan, spanFromKeyValStr, true);
-    }
-
-    @Test
-    public void fromKeyValueString_should_return_null_for_garbage_input() throws IOException {
-        // given: garbage input
-        String garbageInput = "garbagio";
-
-        // when: fromKeyValueString is called
-        Span spanFromKeyValStr = Span.fromKeyValueString(garbageInput);
-
-        // then: the return value should be null
-        assertThat(spanFromKeyValStr).isNull();
-    }
-
-    @Test
-    public void fromKeyValueString_returns_null_if_sampleable_field_is_missing() throws IOException {
-        // given
-        Span validSpan = createFilledOutSpan(true);
-        String validKeyValStr = validSpan.toKeyValueString();
-        String invalidKeyValStr = validKeyValStr.replace(String.format(",%s=%s", Span.SAMPLEABLE_FIELD, String.valueOf(validSpan.isSampleable())), "");
-
-        // when
-        Span result = Span.fromKeyValueString(invalidKeyValStr);
-
-        // then
-        assertThat(result).isNull();
-    }
-
-    @Test
-    public void fromKeyValueString_returns_null_if_startTimeEpochMicros_field_is_missing() throws IOException {
-        // given
-        Span validSpan = createFilledOutSpan(true);
-        String validKeyValStr = validSpan.toKeyValueString();
-        String invalidKeyValStr = validKeyValStr.replace(
-            String.format(",%s=%s", Span.START_TIME_EPOCH_MICROS_FIELD, String.valueOf(validSpan.getSpanStartTimeEpochMicros())),
-            ""
-        );
-
-        // when
-        Span result = Span.fromKeyValueString(invalidKeyValStr);
-
-        // then
-        assertThat(result).isNull();
-    }
-
-    @DataProvider(value = {
-        "",
-        "foobar-not-a-real-enum-value"
-    }, splitBy = "\\|")
-    @Test
-    public void fromKeyValueString_returns_span_with_UNKNOWN_span_purpose_if_spanPurpose_field_is_missing_or_garbage(String badValue) throws IOException {
-        // given
-        Span validSpan = createFilledOutSpan(true);
-        String validKeyValStr = validSpan.toKeyValueString();
-        if (badValue.trim().length() > 0) {
-            badValue = ",spanPurpose=" + badValue;
-        }
-        String invalidKeyValStr = validKeyValStr.replace(
-            String.format(",%s=%s", Span.SPAN_PURPOSE_FIELD, String.valueOf(validSpan.getSpanPurpose())),
-            badValue
-        );
-        assertThat(validSpan.getSpanPurpose()).isNotEqualTo(SpanPurpose.UNKNOWN);
-
-        // when
-        Span result = Span.fromKeyValueString(invalidKeyValStr);
-
-        // then
-        assertThat(result).isNotNull();
-        assertThat(result.getSpanPurpose()).isEqualTo(SpanPurpose.UNKNOWN);
-    }
+    
 
     @Test
     public void getDuration_should_be_null_until_span_is_completed() {
@@ -1085,6 +598,10 @@ public class SpanTest {
 
     @Test
     public void newBuilder_honors_values_for_all_fields_if_set() {
+    	
+    		//add a tag
+    		tags.put("oneKey", "oneValue");
+    		
         // given
         Span.Builder builder = Span
                 .newBuilder("override_me", SpanPurpose.UNKNOWN)
@@ -1097,8 +614,9 @@ public class SpanTest {
                 .withSpanPurpose(spanPurpose)
                 .withSpanStartTimeEpochMicros(startTimeEpochMicrosForFullyCompleteSpan)
                 .withSpanStartTimeNanos(startTimeNanosForFullyCompleteSpan)
-                .withDurationNanos(durationNanosForFullyCompletedSpan);
-
+                .withDurationNanos(durationNanosForFullyCompletedSpan)
+                .withTags(tags);
+        
         assertThat(spanPurpose).isNotEqualTo(SpanPurpose.UNKNOWN);
 
         // when
@@ -1115,6 +633,7 @@ public class SpanTest {
         assertThat(span.getSpanStartTimeEpochMicros()).isEqualTo(startTimeEpochMicrosForFullyCompleteSpan);
         assertThat(span.getSpanStartTimeNanos()).isEqualTo(startTimeNanosForFullyCompleteSpan);
         assertThat(span.getDurationNanos()).isEqualTo(durationNanosForFullyCompletedSpan);
+        assertThat(span.getTags()).isEqualTo(tags);
     }
 
     @Test
