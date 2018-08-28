@@ -70,6 +70,7 @@ ext {
     springVersion = '4.3.7.RELEASE'
     springbootVersion = '1.5.2.RELEASE'
     apacheHttpClientVersion = '4.4.1'
+    apacheCommonsCodecVersion = '1.11'
 
     nikeInternalUtilVersion = '0.9.0.1'
 
