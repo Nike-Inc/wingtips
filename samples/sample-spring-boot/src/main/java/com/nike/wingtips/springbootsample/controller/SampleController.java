@@ -18,6 +18,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.concurrent.ListenableFuture;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.AsyncRestTemplate;
@@ -83,11 +84,19 @@ public class SampleController {
     public static final String ASYNC_FUTURE_RESULT =
         "async endpoint hit (CompletableFuture) - check logs for distributed tracing info";
 
+    public static final String ASYNC_TIMEOUT_PATH = SAMPLE_PATH_BASE + "/async-timeout";
     public static final String ASYNC_ERROR_PATH = SAMPLE_PATH_BASE + "/async-error";
 
     public static final String SPAN_INFO_CALL_PATH = SAMPLE_PATH_BASE + "/span-info";
     public static final String NESTED_BLOCKING_CALL_PATH = SAMPLE_PATH_BASE + "/nested-blocking-call";
     public static final String NESTED_ASYNC_CALL_PATH = SAMPLE_PATH_BASE + "/nested-async-call";
+
+    public static final String PATH_PARAM_ENDPOINT_PATH_PREFIX = SAMPLE_PATH_BASE + "/path-param";
+    public static final String PATH_PARAM_ENDPOINT_RESULT =
+        "path param endpoint hit - check logs for distributed tracing info";
+
+    public static final String WILDCARD_PATH_PREFIX = SAMPLE_PATH_BASE + "/wildcard";
+    public static final String WILDCARD_RESULT = "wildcard endpoint hit - check logs for distributed tracing info";
 
     public static final long SLEEP_TIME_MILLIS = 100;
 
@@ -124,6 +133,24 @@ public class SampleController {
         sleepThread(SLEEP_TIME_MILLIS);
 
         return BLOCKING_RESULT;
+    }
+
+    @GetMapping(path = PATH_PARAM_ENDPOINT_PATH_PREFIX + "/{somePathParam}")
+    @SuppressWarnings("unused")
+    public String getPathParam(@PathVariable String somePathParam) {
+        logger.info("Path param endpoint hit - somePathParam: {}", somePathParam);
+        sleepThread(SLEEP_TIME_MILLIS);
+
+        return PATH_PARAM_ENDPOINT_RESULT;
+    }
+
+    @GetMapping(path = WILDCARD_PATH_PREFIX + "/**")
+    @SuppressWarnings("unused")
+    public String getWildcard() {
+        logger.info("Wildcard endpoint hit");
+        sleepThread(SLEEP_TIME_MILLIS);
+
+        return WILDCARD_RESULT;
     }
 
     @GetMapping(path = ASYNC_DEFERRED_RESULT_PATH)
@@ -169,12 +196,25 @@ public class SampleController {
         );
     }
 
+    @GetMapping(path = ASYNC_TIMEOUT_PATH)
+    @SuppressWarnings("unused")
+    public DeferredResult<String> getAsyncTimeout() {
+        logger.info("Async timeout endpoint hit");
+
+        return new DeferredResult<>(SLEEP_TIME_MILLIS);
+    }
+
     @GetMapping(path = ASYNC_ERROR_PATH)
     @SuppressWarnings("unused")
     public DeferredResult<String> getAsyncError() {
         logger.info("Async error endpoint hit");
 
-        return new DeferredResult<>(SLEEP_TIME_MILLIS);
+        sleepThread(SLEEP_TIME_MILLIS);
+
+        DeferredResult<String> deferredResult = new DeferredResult<>();
+        deferredResult.setErrorResult(new RuntimeException("Intentional exception by asyncError endpoint"));
+
+        return deferredResult;
     }
 
     @GetMapping(path = SPAN_INFO_CALL_PATH)

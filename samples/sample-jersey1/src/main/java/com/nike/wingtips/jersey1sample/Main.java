@@ -56,6 +56,7 @@ public class Main {
         contextHandler.addServlet(SampleResource.SampleAsyncServlet.class, SampleResource.ASYNC_PATH);
         contextHandler.addServlet(SampleResource.SampleBlockingForwardServlet.class, SampleResource.BLOCKING_FORWARD_PATH);
         contextHandler.addServlet(SampleResource.SampleAsyncForwardServlet.class, SampleResource.ASYNC_FORWARD_PATH);
+        contextHandler.addServlet(SampleResource.SampleAsyncTimeoutServlet.class, SampleResource.ASYNC_TIMEOUT_PATH);
         contextHandler.addServlet(SampleResource.SampleAsyncErrorServlet.class, SampleResource.ASYNC_ERROR_PATH);
         contextHandler.addServlet(new ServletHolder(jerseyServletContainer), "/*");
         contextHandler.addFilter(RequestTracingFilter.class, "/*", EnumSet.allOf(DispatcherType.class));

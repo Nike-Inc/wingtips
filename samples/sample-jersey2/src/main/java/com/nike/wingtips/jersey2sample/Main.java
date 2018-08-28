@@ -1,5 +1,6 @@
 package com.nike.wingtips.jersey2sample;
 
+import com.nike.wingtips.jersey2.SpanCustomizingApplicationEventListener;
 import com.nike.wingtips.jersey2sample.resource.SampleResource;
 import com.nike.wingtips.servlet.RequestTracingFilter;
 
@@ -49,6 +50,7 @@ public class Main {
 
         ResourceConfig rc = new ResourceConfig();
         rc.register(new SampleResource());
+        rc.register(SpanCustomizingApplicationEventListener.create());
         contextHandler.addServlet(new ServletHolder(new ServletContainer(rc)), "/*");
         contextHandler.addFilter(RequestTracingFilter.class, "/*", EnumSet.allOf(DispatcherType.class));
         return contextHandler;

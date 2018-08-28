@@ -71,8 +71,11 @@ ext {
     springbootVersion = '1.5.2.RELEASE'
     apacheHttpClientVersion = '4.4.1'
     apacheCommonsCodecVersion = '1.11'
+    jersey2Version = '2.23.2'
 
     nikeInternalUtilVersion = '0.9.0.1'
+
+    jetbrainsAnnotationsVersion = '16.0.3'
 
     junitVersion = '4.11'
     mockitoVersion = '1.9.5'

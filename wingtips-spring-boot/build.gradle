@@ -21,6 +21,7 @@ dependencies {
             "org.assertj:assertj-core:$assertJVersion",
             "com.tngtech.java:junit-dataprovider:$junitDataproviderVersion",
             "org.springframework.boot:spring-boot-starter-web:$springbootVersion",
-            "javax.servlet:javax.servlet-api:$servletApiForTestsVersion"
+            "javax.servlet:javax.servlet-api:$servletApiForTestsVersion",
+            "io.rest-assured:rest-assured:$restAssuredVersion"
     )
 }

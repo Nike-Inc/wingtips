@@ -1,67 +1,117 @@
 package com.nike.wingtips.spring.interceptor.tag;
 
-import java.io.IOException;
-import java.net.MalformedURLException;
+import com.nike.wingtips.tags.HttpTagAndSpanNamingAdapter;
 
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpRequest;
+import org.springframework.http.client.AsyncClientHttpRequest;
 import org.springframework.http.client.ClientHttpResponse;
+import org.springframework.http.client.support.HttpRequestWrapper;
 
-import com.nike.wingtips.tags.HttpTagAdapter;
+import java.io.IOException;
+import java.util.List;
 
-public class SpringHttpClientTagAdapter implements HttpTagAdapter<HttpRequest, ClientHttpResponse>{
+/**
+ * Extension of {@link HttpTagAndSpanNamingAdapter} that knows how to handle Spring {@link HttpRequest} and
+ * {@link ClientHttpResponse} objects.
+ */
+public class SpringHttpClientTagAdapter extends HttpTagAndSpanNamingAdapter<HttpRequest, ClientHttpResponse> {
 
-    /**
-     * @return true if the current {@code Span} should be tagged as having an errd state. This defaults to return true
-     * if the response status code is &gt;= 500.  
-     * 
-     * Both the {@code HttpRequest} and {@code ClientHttpResponse} are provided for inspection for other 
-     * subclass implementation overrides.
-     *  
-     * @param response - {@code ClientHttpResponse}
-     * @throws IOException - in case of I/O errors while pulling the response status code
-     */
-    @Override
-    public boolean isErrorResponse(ClientHttpResponse response) {
-        try {
-            return response.getRawStatusCode() >= 500;
-        } catch (IOException ioe) {
-            return true;
-        }
-    }
+    @SuppressWarnings("WeakerAccess")
+    protected static final SpringHttpClientTagAdapter DEFAULT_INSTANCE = new SpringHttpClientTagAdapter();
 
     /**
-     * @return The value for the {@code http.url} tag.  The default is to use the full URL.{@code request.getURI().toString()}. 
-     * 
-     * @param request - The {@code HttpRequest}
-     * @throws IOException - in case of I/O errors while pulling the request URI
+     * @return A reusable, thread-safe, singleton instance of this class that can be used by anybody who wants to use
+     * this class and does not need any customization.
      */
+    @SuppressWarnings("unchecked")
+    public static SpringHttpClientTagAdapter getDefaultInstance() {
+        return DEFAULT_INSTANCE;
+    }
+
     @Override
-    public String getRequestUrl(HttpRequest request) {
+    public @Nullable String getRequestUrl(@Nullable HttpRequest request) {
+        if (request == null) {
+            return null;
+        }
+
+        return request.getURI().toString();
+    }
+
+    @Override
+    public @Nullable Integer getResponseHttpStatus(@Nullable ClientHttpResponse response) {
+        if (response == null) {
+            return null;
+        }
+
         try {
-            return request.getURI().toURL().toString();
-        } catch(MalformedURLException exception) {
-            // Return the abbreviated version if it can't be converted to a full url
-            return request.getURI().toString();
+            return response.getRawStatusCode();
+        }
+        catch (IOException ioe) {
+            return null;
         }
     }
 
     @Override
-    public String getResponseHttpStatus(ClientHttpResponse response) {
-        try {
-            return String.valueOf(response.getRawStatusCode());
-        } catch(IOException ioe) {
-            return "IOException";
+    public @Nullable String getRequestHttpMethod(@Nullable HttpRequest request) {
+        if (request == null) {
+            return null;
         }
+
+        HttpMethod method = request.getMethod();
+
+        return (method == null) ? "UNKNOWN_HTTP_METHOD" : method.name();
     }
 
     @Override
-    public String getRequestHttpMethod(HttpRequest request) {
-        return request.getMethod().name();
+    public @Nullable String getRequestUriPathTemplate(
+        @Nullable HttpRequest request,
+        @Nullable ClientHttpResponse response
+    ) {
+        // Nothing we can do by default - this needs to be overridden on a per-project basis and given some smarts
+        //      based on project-specific knowledge.
+        return null;
     }
 
     @Override
-    public String getRequestUri(HttpRequest request) {
+    public @Nullable String getRequestPath(@Nullable HttpRequest request) {
+        if (request == null) {
+            return null;
+        }
+        
         return request.getURI().getPath();
     }
 
+    @Override
+    public @Nullable String getHeaderSingleValue(@Nullable HttpRequest request, @NotNull String headerKey) {
+        if (request == null) {
+            return null;
+        }
+
+        return request.getHeaders().getFirst(headerKey);
+    }
+
+    @Override
+    public @Nullable List<String> getHeaderMultipleValue(@Nullable HttpRequest request, @NotNull String headerKey) {
+        if (request == null) {
+            return null;
+        }
+
+        return request.getHeaders().getValuesAsList(headerKey);
+    }
+
+    @Override
+    public @Nullable String getSpanHandlerTagValue(@Nullable HttpRequest request, @Nullable ClientHttpResponse response) {
+        if (request instanceof HttpRequestWrapper) {
+            request = ((HttpRequestWrapper) request).getRequest();
+        }
+
+        if (request instanceof AsyncClientHttpRequest) {
+            return "spring.asyncresttemplate";
+        }
+
+        return "spring.resttemplate";
+    }
 }

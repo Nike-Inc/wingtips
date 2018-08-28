@@ -4,9 +4,14 @@ import com.nike.wingtips.Span;
 import com.nike.wingtips.Span.SpanPurpose;
 import com.nike.wingtips.TraceAndSpanIdGenerator;
 import com.nike.wingtips.TraceHeaders;
+import com.nike.wingtips.tags.KnownZipkinTags;
+
+import com.tngtech.java.junit.dataprovider.DataProvider;
+import com.tngtech.java.junit.dataprovider.DataProviderRunner;
 
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
 import org.mockito.Mockito;
 
 import java.lang.reflect.Constructor;
@@ -19,10 +24,12 @@ import javax.servlet.http.HttpServletRequest;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.doReturn;
 
 /**
  * Tests the functionality of {@link HttpSpanFactory}.
  */
+@RunWith(DataProviderRunner.class)
 public class HttpSpanFactoryTest {
 
     private String sampleTraceID = TraceAndSpanIdGenerator.generateId();
@@ -279,49 +286,113 @@ public class HttpSpanFactoryTest {
         assertThat(firstSpan.getSpanId()).isNotEqualTo(secondSpan.getSpanId());
     }
 
+    @DataProvider(value = {
+        // http.route takes precedence
+        "/some/http/route   |   /some/spring/pattern    |   /some/http/route",
+
+        "/some/http/route   |   null                    |   /some/http/route",
+        "/some/http/route   |                           |   /some/http/route",
+        "/some/http/route   |   [whitespace]            |   /some/http/route",
+
+        // Spring matching pattern request attr is used if http.route is null/blank
+        "null               |   /some/spring/pattern    |   /some/spring/pattern",
+        "                   |   /some/spring/pattern    |   /some/spring/pattern",
+        "[whitespace]       |   /some/spring/pattern    |   /some/spring/pattern",
+
+        // null returned if both request attrs are null/blank
+        "null               |   null                    |   null",
+        "                   |                           |   null",
+        "[whitespace]       |   [whitespace]            |   null",
+    }, splitBy = "\\|")
     @Test
-    public void getSpanName_should_start_with_request_method() {
-        given(request.getMethod()).willReturn("AWESOME");
+    public void determineUriPathTemplate_works_as_expected(
+        String httpRouteRequestAttr,
+        String springMatchingPatternRequestAttr,
+        String expectedResult
+    ) {
+        // given
+        if ("[whitespace]".equals(httpRouteRequestAttr)) {
+            httpRouteRequestAttr = "  \t\r\n  ";
+        }
 
-        // when: getSpanName is called
-        String spanName = HttpSpanFactory.getSpanName(request);
+        if ("[whitespace]".equals(springMatchingPatternRequestAttr)) {
+            springMatchingPatternRequestAttr = "  \t\r\n  ";
+        }
 
-        // then: the returned span name should start with the getMethod() value
-        assertThat(spanName).startsWith("AWESOME");
+        doReturn(httpRouteRequestAttr).when(request).getAttribute(KnownZipkinTags.HTTP_ROUTE);
+        doReturn(springMatchingPatternRequestAttr)
+            .when(request).getAttribute(HttpSpanFactory.SPRING_BEST_MATCHING_PATTERN_REQUEST_ATTRIBUTE_KEY);
+
+        // when
+        String result = HttpSpanFactory.determineUriPathTemplate(request);
+
+        // then
+        assertThat(result).isEqualTo(expectedResult);
     }
 
     @Test
-    public void getSpanName_should_use_servlet_path_if_available() {
-        given(request.getServletPath()).willReturn("/some/servlet/path");
+    public void determineUriPathTemplate_returns_null_if_passed_null() {
+        // expect
+        assertThat(HttpSpanFactory.determineUriPathTemplate(null)).isNull();
+    }
 
-        // when: getSpanName is called
-        String spanName = HttpSpanFactory.getSpanName(request);
+    @DataProvider(value = {
+        "GET            |   /some/http/route    |   /some/spring/pattern    |   GET /some/http/route",
+        "GET            |   /some/http/route    |   null                    |   GET /some/http/route",
+        "GET            |   /some/http/route    |                           |   GET /some/http/route",
+        "GET            |   /some/http/route    |   [whitespace]            |   GET /some/http/route",
+        "GET            |   null                |   /some/spring/pattern    |   GET /some/spring/pattern",
+        "GET            |                       |   /some/spring/pattern    |   GET /some/spring/pattern",
+        "GET            |   [whitespace]        |   /some/spring/pattern    |   GET /some/spring/pattern",
+        "GET            |   null                |   null                    |   GET",
+        "GET            |                       |                           |   GET",
+        "GET            |   [whitespace]        |   [whitespace]            |   GET",
+        "null           |   /some/http/route    |   null                    |   UNKNOWN_HTTP_METHOD /some/http/route",
+        "               |   /some/http/route    |   null                    |   UNKNOWN_HTTP_METHOD /some/http/route",
+        "[whitespace]   |   /some/http/route    |   null                    |   UNKNOWN_HTTP_METHOD /some/http/route",
+        "null           |   null                |   /some/spring/pattern    |   UNKNOWN_HTTP_METHOD /some/spring/pattern",
+        "               |   null                |   /some/spring/pattern    |   UNKNOWN_HTTP_METHOD /some/spring/pattern",
+        "[whitespace]   |   null                |   /some/spring/pattern    |   UNKNOWN_HTTP_METHOD /some/spring/pattern",
+        "null           |   /some/http/route    |   /some/spring/pattern    |   UNKNOWN_HTTP_METHOD /some/http/route",
+        "null           |   null                |   null                    |   UNKNOWN_HTTP_METHOD",
+        "               |                       |                           |   UNKNOWN_HTTP_METHOD",
+        "[whitespace]   |   [whitespace]        |   [whitespace]            |   UNKNOWN_HTTP_METHOD",
+    }, splitBy = "\\|")
+    @Test
+    public void getSpanName_works_as_expected(
+        String httpMethod,
+        String httpRouteRequestAttr,
+        String springMatchingPatternRequestAttr,
+        String expectedResult
+    ) {
+        // given
+        if ("[whitespace]".equals(httpMethod)) {
+            httpMethod = "  \t\r\n  ";
+        }
 
-        // then: the returned span name should end with the getServletPath() value
-        assertThat(spanName).endsWith("/some/servlet/path");
+        if ("[whitespace]".equals(httpRouteRequestAttr)) {
+            httpRouteRequestAttr = "  \t\r\n  ";
+        }
+
+        if ("[whitespace]".equals(springMatchingPatternRequestAttr)) {
+            springMatchingPatternRequestAttr = "  \t\r\n  ";
+        }
+
+        doReturn(httpMethod).when(request).getMethod();
+        doReturn(httpRouteRequestAttr).when(request).getAttribute(KnownZipkinTags.HTTP_ROUTE);
+        doReturn(springMatchingPatternRequestAttr)
+            .when(request).getAttribute(HttpSpanFactory.SPRING_BEST_MATCHING_PATTERN_REQUEST_ATTRIBUTE_KEY);
+
+        // when
+        String result = HttpSpanFactory.getSpanName(request);
+
+        // then
+        assertThat(result).isEqualTo(expectedResult);
     }
 
     @Test
-    public void getSpanName_should_use_request_uri_if_servlet_path_is_null() {
-        given(request.getServletPath()).willReturn(null);
-        given(request.getRequestURI()).willReturn("/some/request/uri/path");
-
-        // when: getSpanName is called
-        String spanName = HttpSpanFactory.getSpanName(request);
-
-        // then: the returned span name should end with the getRequestURI value
-        assertThat(spanName).endsWith("/some/request/uri/path");
-    }
-
-    @Test
-    public void getSpanName_should_use_request_uri_if_servlet_path_is_whitespace_only() {
-        given(request.getServletPath()).willReturn(" ");
-        given(request.getRequestURI()).willReturn("/some/request/uri/path");
-
-        // when: getSpanName is called
-        String spanName = HttpSpanFactory.getSpanName(request);
-
-        // then: the returned span name should end with the getRequestURI value
-        assertThat(spanName).endsWith("/some/request/uri/path");
+    public void getSpanName_returns_UNKNOWN_HTTP_METHOD_when_passed_null_request() {
+        // expect
+        assertThat(HttpSpanFactory.getSpanName(null)).isEqualTo("UNKNOWN_HTTP_METHOD");
     }
 }

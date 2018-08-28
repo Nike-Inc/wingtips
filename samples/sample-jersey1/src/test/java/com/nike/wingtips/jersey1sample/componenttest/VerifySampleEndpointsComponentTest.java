@@ -6,7 +6,10 @@ import com.nike.wingtips.Span;
 import com.nike.wingtips.TraceHeaders;
 import com.nike.wingtips.Tracer;
 import com.nike.wingtips.jersey1sample.Main;
+import com.nike.wingtips.jersey1sample.resource.SampleResource;
 import com.nike.wingtips.lifecyclelistener.SpanLifecycleListener;
+import com.nike.wingtips.tags.KnownZipkinTags;
+import com.nike.wingtips.tags.WingtipsTags;
 
 import com.tngtech.java.junit.dataprovider.DataProvider;
 import com.tngtech.java.junit.dataprovider.DataProviderRunner;
@@ -33,6 +36,7 @@ import static com.nike.wingtips.jersey1sample.resource.SampleResource.ASYNC_ERRO
 import static com.nike.wingtips.jersey1sample.resource.SampleResource.ASYNC_FORWARD_PATH;
 import static com.nike.wingtips.jersey1sample.resource.SampleResource.ASYNC_PATH;
 import static com.nike.wingtips.jersey1sample.resource.SampleResource.ASYNC_RESULT;
+import static com.nike.wingtips.jersey1sample.resource.SampleResource.ASYNC_TIMEOUT_PATH;
 import static com.nike.wingtips.jersey1sample.resource.SampleResource.BLOCKING_FORWARD_PATH;
 import static com.nike.wingtips.jersey1sample.resource.SampleResource.BLOCKING_PATH;
 import static com.nike.wingtips.jersey1sample.resource.SampleResource.BLOCKING_RESULT;
@@ -119,6 +123,7 @@ public class VerifySampleEndpointsComponentTest {
                 .baseUri("http://localhost")
                 .port(SERVER_PORT)
                 .headers(upstreamSpanInfo.getRight())
+                .queryParam("foo", "bar")
                 .log().all()
             .when()
                 .get(SIMPLE_PATH)
@@ -128,7 +133,19 @@ public class VerifySampleEndpointsComponentTest {
 
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.asString()).isEqualTo(SIMPLE_RESULT);
-        verifySingleSpanCompletedAndReturnedInResponse(response, 0, upstreamSpanInfo.getLeft());
+        Span completedSpan =
+            verifySingleSpanCompletedAndReturnedInResponse(response, 0, upstreamSpanInfo.getLeft());
+        verifySpanNameAndTags(
+            completedSpan,
+            "GET",
+            "GET",
+            SIMPLE_PATH,
+            "http://localhost:" + SERVER_PORT + SIMPLE_PATH + "?foo=bar",
+            null,
+            response.statusCode(),
+            null,
+            "servlet"
+        );
     }
 
     @DataProvider(value = {
@@ -146,6 +163,7 @@ public class VerifySampleEndpointsComponentTest {
                 .baseUri("http://localhost")
                 .port(SERVER_PORT)
                 .headers(upstreamSpanInfo.getRight())
+                .queryParam("foo", "bar")
                 .log().all()
             .when()
                 .get(BLOCKING_PATH)
@@ -155,7 +173,19 @@ public class VerifySampleEndpointsComponentTest {
 
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.asString()).isEqualTo(BLOCKING_RESULT);
-        verifySingleSpanCompletedAndReturnedInResponse(response, SLEEP_TIME_MILLIS, upstreamSpanInfo.getLeft());
+        Span completedSpan =
+            verifySingleSpanCompletedAndReturnedInResponse(response, SLEEP_TIME_MILLIS, upstreamSpanInfo.getLeft());
+        verifySpanNameAndTags(
+            completedSpan,
+            "GET",
+            "GET",
+            BLOCKING_PATH,
+            "http://localhost:" + SERVER_PORT + BLOCKING_PATH + "?foo=bar",
+            null,
+            response.statusCode(),
+            null,
+            "servlet"
+        );
     }
 
     @DataProvider(value = {
@@ -173,6 +203,7 @@ public class VerifySampleEndpointsComponentTest {
                 .baseUri("http://localhost")
                 .port(SERVER_PORT)
                 .headers(upstreamSpanInfo.getRight())
+                .queryParam("foo", "bar")
                 .log().all()
             .when()
                 .get(ASYNC_PATH)
@@ -182,7 +213,19 @@ public class VerifySampleEndpointsComponentTest {
 
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.asString()).isEqualTo(ASYNC_RESULT);
-        verifySingleSpanCompletedAndReturnedInResponse(response, SLEEP_TIME_MILLIS, upstreamSpanInfo.getLeft());
+        Span completedSpan =
+            verifySingleSpanCompletedAndReturnedInResponse(response, SLEEP_TIME_MILLIS, upstreamSpanInfo.getLeft());
+        verifySpanNameAndTags(
+            completedSpan,
+            "GET",
+            "GET",
+            ASYNC_PATH,
+            "http://localhost:" + SERVER_PORT + ASYNC_PATH + "?foo=bar",
+            null,
+            response.statusCode(),
+            null,
+            "servlet"
+        );
     }
 
     @DataProvider(value = {
@@ -200,6 +243,7 @@ public class VerifySampleEndpointsComponentTest {
                 .baseUri("http://localhost")
                 .port(SERVER_PORT)
                 .headers(upstreamSpanInfo.getRight())
+                .queryParam("foo", "bar")
                 .log().all()
             .when()
                 .get(BLOCKING_FORWARD_PATH)
@@ -209,7 +253,19 @@ public class VerifySampleEndpointsComponentTest {
 
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.asString()).isEqualTo(BLOCKING_RESULT);
-        verifySingleSpanCompletedAndReturnedInResponse(response, SLEEP_TIME_MILLIS * 2, upstreamSpanInfo.getLeft());
+        Span completedSpan =
+            verifySingleSpanCompletedAndReturnedInResponse(response, SLEEP_TIME_MILLIS * 2, upstreamSpanInfo.getLeft());
+        verifySpanNameAndTags(
+            completedSpan,
+            "GET",
+            "GET",
+            BLOCKING_FORWARD_PATH,
+            "http://localhost:" + SERVER_PORT + BLOCKING_FORWARD_PATH + "?foo=bar",
+            null,
+            response.statusCode(),
+            null,
+            "servlet"
+        );
     }
 
     @DataProvider(value = {
@@ -227,6 +283,7 @@ public class VerifySampleEndpointsComponentTest {
                 .baseUri("http://localhost")
                 .port(SERVER_PORT)
                 .headers(upstreamSpanInfo.getRight())
+                .queryParam("foo", "bar")
                 .log().all()
             .when()
                 .get(ASYNC_FORWARD_PATH)
@@ -236,9 +293,61 @@ public class VerifySampleEndpointsComponentTest {
 
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.asString()).isEqualTo(ASYNC_RESULT);
-        verifySingleSpanCompletedAndReturnedInResponse(response, SLEEP_TIME_MILLIS * 2, upstreamSpanInfo.getLeft());
+        Span completedSpan =
+            verifySingleSpanCompletedAndReturnedInResponse(response, SLEEP_TIME_MILLIS * 2, upstreamSpanInfo.getLeft());
+        verifySpanNameAndTags(
+            completedSpan,
+            "GET",
+            "GET",
+            ASYNC_FORWARD_PATH,
+            "http://localhost:" + SERVER_PORT + ASYNC_FORWARD_PATH + "?foo=bar",
+            null,
+            response.statusCode(),
+            null,
+            "servlet"
+        );
     }
 
+    @DataProvider(value = {
+        "true",
+        "false"
+    })
+    @Test
+    public void verify_async_timeout_endpoint_traced_correctly(boolean upstreamSendsSpan) {
+        Pair<Span, Map<String, String>> upstreamSpanInfo = (upstreamSendsSpan)
+                                                           ? generateUpstreamSpanHeaders()
+                                                           : Pair.of((Span)null, Collections.<String, String>emptyMap());
+
+        ExtractableResponse response =
+            given()
+                .baseUri("http://localhost")
+                .port(SERVER_PORT)
+                .headers(upstreamSpanInfo.getRight())
+                .queryParam("foo", "bar")
+                .log().all()
+                .when()
+                .get(ASYNC_TIMEOUT_PATH)
+                .then()
+                .log().all()
+                .extract();
+
+        assertThat(response.statusCode()).isEqualTo(500);
+        Span completedSpan =
+            verifySingleSpanCompletedAndReturnedInResponse(response, SLEEP_TIME_MILLIS, upstreamSpanInfo.getLeft());
+        verifySpanNameAndTags(
+            completedSpan,
+            "GET",
+            "GET",
+            ASYNC_TIMEOUT_PATH,
+            "http://localhost:" + SERVER_PORT + ASYNC_TIMEOUT_PATH + "?foo=bar",
+            null,
+            response.statusCode(),
+            // This is the exception message that Jetty happens to put on the TimeoutException that gets thrown.
+            "Async API violation",
+            "servlet"
+        );
+    }
+    
     @DataProvider(value = {
         "true",
         "false"
@@ -254,6 +363,7 @@ public class VerifySampleEndpointsComponentTest {
                 .baseUri("http://localhost")
                 .port(SERVER_PORT)
                 .headers(upstreamSpanInfo.getRight())
+                .queryParam("foo", "bar")
                 .log().all()
             .when()
                 .get(ASYNC_ERROR_PATH)
@@ -262,7 +372,19 @@ public class VerifySampleEndpointsComponentTest {
                 .extract();
 
         assertThat(response.statusCode()).isEqualTo(500);
-        verifySingleSpanCompletedAndReturnedInResponse(response, SLEEP_TIME_MILLIS, upstreamSpanInfo.getLeft());
+        Span completedSpan =
+            verifySingleSpanCompletedAndReturnedInResponse(response, SLEEP_TIME_MILLIS, upstreamSpanInfo.getLeft());
+        verifySpanNameAndTags(
+            completedSpan,
+            "GET",
+            "GET",
+            ASYNC_ERROR_PATH,
+            "http://localhost:" + SERVER_PORT + ASYNC_ERROR_PATH + "?foo=bar",
+            null,
+            response.statusCode(),
+            SampleResource.SampleAsyncErrorServlet.EXCEPTION_MESSAGE,
+            "servlet"
+        );
     }
 
     private Pair<Span, Map<String, String>> generateUpstreamSpanHeaders() {
@@ -277,7 +399,7 @@ public class VerifySampleEndpointsComponentTest {
         return Pair.of(span, headers);
     }
 
-    private void verifySingleSpanCompletedAndReturnedInResponse(ExtractableResponse response,
+    private Span verifySingleSpanCompletedAndReturnedInResponse(ExtractableResponse response,
                                                                 long expectedMinSpanDurationMillis,
                                                                 Span expectedUpstreamSpan) {
         // We can have a race condition where the response is sent and we try to verify here before the servlet filter
@@ -291,6 +413,8 @@ public class VerifySampleEndpointsComponentTest {
         assertThat(traceIdFromResponse).isNotNull();
         assertThat(completedSpan.getTraceId()).isEqualTo(traceIdFromResponse);
 
+        assertThat(completedSpan.getSpanName()).doesNotContain("?");
+
         assertThat(TimeUnit.NANOSECONDS.toMillis(completedSpan.getDurationNanos()))
             .isGreaterThanOrEqualTo(expectedMinSpanDurationMillis);
 
@@ -298,6 +422,30 @@ public class VerifySampleEndpointsComponentTest {
             assertThat(completedSpan.getTraceId()).isEqualTo(expectedUpstreamSpan.getTraceId());
             assertThat(completedSpan.getParentSpanId()).isEqualTo(expectedUpstreamSpan.getSpanId());
         }
+
+        return completedSpan;
+    }
+
+    private void verifySpanNameAndTags(
+        Span span,
+        String expectedSpanName,
+        String expectedHttpMethodTagValue,
+        String expectedPathTagValue,
+        String expectedUrlTagValue,
+        String expectedHttpRouteTagValue,
+        int expectedStatusCodeTagValue,
+        String expectedErrorTagValue,
+        String expectedSpanHandlerTagValue
+    ) {
+        assertThat(span.getSpanName()).isEqualTo(expectedSpanName);
+        assertThat(span.getTags().get(KnownZipkinTags.HTTP_METHOD)).isEqualTo(expectedHttpMethodTagValue);
+        assertThat(span.getTags().get(KnownZipkinTags.HTTP_PATH)).isEqualTo(expectedPathTagValue);
+        assertThat(span.getTags().get(KnownZipkinTags.HTTP_URL)).isEqualTo(expectedUrlTagValue);
+        assertThat(span.getTags().get(KnownZipkinTags.HTTP_ROUTE)).isEqualTo(expectedHttpRouteTagValue);
+        assertThat(span.getTags().get(KnownZipkinTags.HTTP_STATUS_CODE))
+            .isEqualTo(String.valueOf(expectedStatusCodeTagValue));
+        assertThat(span.getTags().get(KnownZipkinTags.ERROR)).isEqualTo(expectedErrorTagValue);
+        assertThat(span.getTags().get(WingtipsTags.SPAN_HANDLER)).isEqualTo(expectedSpanHandlerTagValue);
     }
 
     private void waitUntilSpanRecorderHasExpectedNumSpans(int expectedNumSpans) {

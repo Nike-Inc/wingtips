@@ -1,23 +1,24 @@
 package com.nike.wingtips.spring.interceptor;
 
-import static com.nike.wingtips.spring.testutils.TestUtils.getExpectedSpanForHeaders;
-import static com.nike.wingtips.spring.testutils.TestUtils.normalizeTracingState;
-import static com.nike.wingtips.spring.testutils.TestUtils.resetTracing;
-import static com.nike.wingtips.spring.testutils.TestUtils.verifyExpectedTracingHeaders;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.catchThrowable;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.verify;
+import com.nike.internal.util.Pair;
+import com.nike.wingtips.Span;
+import com.nike.wingtips.Span.SpanPurpose;
+import com.nike.wingtips.Tracer;
+import com.nike.wingtips.spring.interceptor.WingtipsAsyncClientHttpRequestInterceptor.SpanAroundAsyncCallFinisher;
+import com.nike.wingtips.spring.interceptor.tag.SpringHttpClientTagAdapter;
+import com.nike.wingtips.spring.testutils.ArgCapturingHttpTagAndSpanNamingStrategy;
+import com.nike.wingtips.spring.testutils.ArgCapturingHttpTagAndSpanNamingStrategy.InitialSpanNameArgs;
+import com.nike.wingtips.spring.testutils.ArgCapturingHttpTagAndSpanNamingStrategy.RequestTaggingArgs;
+import com.nike.wingtips.spring.testutils.ArgCapturingHttpTagAndSpanNamingStrategy.ResponseTaggingArgs;
+import com.nike.wingtips.spring.testutils.TestUtils.SpanRecorder;
+import com.nike.wingtips.spring.util.HttpRequestWrapperWithModifiableHeaders;
+import com.nike.wingtips.tags.HttpTagAndSpanNamingAdapter;
+import com.nike.wingtips.tags.HttpTagAndSpanNamingStrategy;
+import com.nike.wingtips.tags.ZipkinHttpTagStrategy;
+import com.nike.wingtips.util.TracingState;
 
-import java.io.IOException;
-import java.net.URI;
-import java.util.UUID;
+import com.tngtech.java.junit.dataprovider.DataProvider;
+import com.tngtech.java.junit.dataprovider.DataProviderRunner;
 
 import org.junit.After;
 import org.junit.Before;
@@ -32,16 +33,30 @@ import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.util.concurrent.ListenableFuture;
 import org.springframework.util.concurrent.SettableListenableFuture;
 
-import com.nike.wingtips.Span;
-import com.nike.wingtips.Span.SpanPurpose;
-import com.nike.wingtips.Tracer;
-import com.nike.wingtips.spring.testutils.TestUtils.SpanRecorder;
-import com.nike.wingtips.spring.util.HttpRequestWrapperWithModifiableHeaders;
-import com.nike.wingtips.tags.HttpTagStrategy;
-import com.nike.wingtips.tags.KnownOpenTracingTags;
-import com.nike.wingtips.util.TracingState;
-import com.tngtech.java.junit.dataprovider.DataProvider;
-import com.tngtech.java.junit.dataprovider.DataProviderRunner;
+import java.io.IOException;
+import java.net.URI;
+import java.util.UUID;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
+
+import static com.nike.wingtips.spring.testutils.TestUtils.getExpectedSpanForHeaders;
+import static com.nike.wingtips.spring.testutils.TestUtils.normalizeTracingState;
+import static com.nike.wingtips.spring.testutils.TestUtils.resetTracing;
+import static com.nike.wingtips.spring.testutils.TestUtils.verifyExpectedTracingHeaders;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.eq;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.verifyZeroInteractions;
 
 /**
  * Tests the functionality of {@link WingtipsAsyncClientHttpRequestInterceptor}.
@@ -51,13 +66,14 @@ import com.tngtech.java.junit.dataprovider.DataProviderRunner;
 @RunWith(DataProviderRunner.class)
 public class WingtipsAsyncClientHttpRequestInterceptorTest {
 
-    private HttpRequest httpRequest;
+    private HttpRequest requestMock;
+    private HttpHeaders headersMock;
     private HttpMethod method;
     private URI uri;
 
     private ClientHttpResponse normalCompletionResponse;
     private int normalResponseCode;
-    
+
     private byte[] body;
     private AsyncClientHttpRequestExecution executionMock;
 
@@ -66,29 +82,44 @@ public class WingtipsAsyncClientHttpRequestInterceptorTest {
 
     private SettableListenableFuture<ClientHttpResponse> executionResponseFuture;
 
+    private HttpTagAndSpanNamingStrategy<HttpRequest, ClientHttpResponse> tagAndNamingStrategy;
+    private HttpTagAndSpanNamingAdapter<HttpRequest, ClientHttpResponse> tagAndNamingAdapterMock;
+    private AtomicReference<String> initialSpanNameFromStrategy;
+    private AtomicBoolean strategyInitialSpanNameMethodCalled;
+    private AtomicBoolean strategyRequestTaggingMethodCalled;
+    private AtomicBoolean strategyResponseTaggingAndFinalSpanNameMethodCalled;
+    private AtomicReference<InitialSpanNameArgs> strategyInitialSpanNameArgs;
+    private AtomicReference<RequestTaggingArgs> strategyRequestTaggingArgs;
+    private AtomicReference<ResponseTaggingArgs> strategyResponseTaggingArgs;
+
     @Before
     public void beforeMethod() throws IOException {
         resetTracing();
+
+        initialSpanNameFromStrategy = new AtomicReference<>("span-name-from-strategy-" + UUID.randomUUID().toString());
+        strategyInitialSpanNameMethodCalled = new AtomicBoolean(false);
+        strategyRequestTaggingMethodCalled = new AtomicBoolean(false);
+        strategyResponseTaggingAndFinalSpanNameMethodCalled = new AtomicBoolean(false);
+        strategyInitialSpanNameArgs = new AtomicReference<>(null);
+        strategyRequestTaggingArgs = new AtomicReference<>(null);
+        strategyResponseTaggingArgs = new AtomicReference<>(null);
+        tagAndNamingStrategy = new ArgCapturingHttpTagAndSpanNamingStrategy(
+            initialSpanNameFromStrategy, strategyInitialSpanNameMethodCalled, strategyRequestTaggingMethodCalled,
+            strategyResponseTaggingAndFinalSpanNameMethodCalled, strategyInitialSpanNameArgs,
+            strategyRequestTaggingArgs, strategyResponseTaggingArgs
+        );
+        tagAndNamingAdapterMock = mock(HttpTagAndSpanNamingAdapter.class);
 
         spanRecorder = new SpanRecorder();
         Tracer.getInstance().addSpanLifecycleListener(spanRecorder);
 
         method = HttpMethod.PATCH;
         uri = URI.create("http://localhost:4242/" + UUID.randomUUID().toString());
-        httpRequest = new HttpRequest() {
-            @Override
-            public HttpHeaders getHeaders() { return new HttpHeaders(); }
-
-            @Override
-            public HttpMethod getMethod() {
-                return method;
-            }
-
-            @Override
-            public URI getURI() {
-                return uri;
-            }
-        };
+        headersMock = mock(HttpHeaders.class);
+        requestMock = mock(HttpRequest.class);
+        doReturn(headersMock).when(requestMock).getHeaders();
+        doReturn(method).when(requestMock).getMethod();
+        doReturn(uri).when(requestMock).getURI();
 
         body = UUID.randomUUID().toString().getBytes();
         executionMock = mock(AsyncClientHttpRequestExecution.class);
@@ -97,7 +128,7 @@ public class WingtipsAsyncClientHttpRequestInterceptorTest {
             executionResponseFuture = new SettableListenableFuture<>();
             return executionResponseFuture;
         }).when(executionMock).executeAsync(any(HttpRequest.class), any(byte[].class));
-        
+
         normalCompletionResponse = mock(ClientHttpResponse.class);
         normalResponseCode = 200; //Normal
         doReturn(normalResponseCode).when(normalCompletionResponse).getRawStatusCode();
@@ -115,6 +146,8 @@ public class WingtipsAsyncClientHttpRequestInterceptorTest {
 
         // then
         assertThat(interceptor.surroundCallsWithSubspan).isTrue();
+        assertThat(interceptor.tagAndNamingStrategy).isSameAs(ZipkinHttpTagStrategy.getDefaultInstance());
+        assertThat(interceptor.tagAndNamingAdapter).isSameAs(SpringHttpClientTagAdapter.getDefaultInstance());
     }
 
     @DataProvider(value = {
@@ -126,10 +159,76 @@ public class WingtipsAsyncClientHttpRequestInterceptorTest {
         boolean subspanOptionOn
     ) {
         // when
-        WingtipsAsyncClientHttpRequestInterceptor interceptor = new WingtipsAsyncClientHttpRequestInterceptor(subspanOptionOn);
+        WingtipsAsyncClientHttpRequestInterceptor interceptor =
+            new WingtipsAsyncClientHttpRequestInterceptor(subspanOptionOn);
 
         // then
         assertThat(interceptor.surroundCallsWithSubspan).isEqualTo(subspanOptionOn);
+        assertThat(interceptor.tagAndNamingStrategy).isSameAs(ZipkinHttpTagStrategy.getDefaultInstance());
+        assertThat(interceptor.tagAndNamingAdapter).isSameAs(SpringHttpClientTagAdapter.getDefaultInstance());
+    }
+
+    @DataProvider(value = {
+        "true",
+        "false"
+    })
+    @Test
+    public void constructor_with_tag_and_span_naming_args_sets_fields_as_expected(boolean subspanOptionOn) {
+        // when
+        WingtipsAsyncClientHttpRequestInterceptor interceptor = new WingtipsAsyncClientHttpRequestInterceptor(
+            subspanOptionOn, tagAndNamingStrategy, tagAndNamingAdapterMock
+        );
+
+        // then
+        assertThat(interceptor.surroundCallsWithSubspan).isEqualTo(subspanOptionOn);
+        assertThat(interceptor.tagAndNamingStrategy).isSameAs(tagAndNamingStrategy);
+        assertThat(interceptor.tagAndNamingAdapter).isSameAs(tagAndNamingAdapterMock);
+    }
+
+    private enum NullConstructorArgsScenario {
+        NULL_STRATEGY_ARG(
+            null,
+            mock(HttpTagAndSpanNamingAdapter.class),
+            "tagAndNamingStrategy cannot be null - if you really want no strategy, use NoOpHttpTagStrategy"
+        ),
+        NULL_ADAPTER_ARG(
+            mock(HttpTagAndSpanNamingStrategy.class),
+            null,
+            "tagAndNamingAdapter cannot be null - if you really want no adapter, use NoOpHttpTagAdapter"
+        );
+
+        public final HttpTagAndSpanNamingStrategy<HttpRequest, ClientHttpResponse> strategy;
+        public final HttpTagAndSpanNamingAdapter<HttpRequest, ClientHttpResponse> adapter;
+        public final String expectedExceptionMessage;
+
+        NullConstructorArgsScenario(
+            HttpTagAndSpanNamingStrategy<HttpRequest, ClientHttpResponse> strategy,
+            HttpTagAndSpanNamingAdapter<HttpRequest, ClientHttpResponse> adapter,
+            String expectedExceptionMessage
+        ) {
+            this.strategy = strategy;
+            this.adapter = adapter;
+            this.expectedExceptionMessage = expectedExceptionMessage;
+        }
+    }
+
+    @DataProvider(value = {
+        "NULL_STRATEGY_ARG",
+        "NULL_ADAPTER_ARG"
+    })
+    @Test
+    public void constructor_with_tag_and_span_naming_args_throws_IllegalArgumentException_if_passed_null_args(
+        NullConstructorArgsScenario scenario
+    ) {
+        // when
+        Throwable ex = catchThrowable(
+            () -> new WingtipsAsyncClientHttpRequestInterceptor(true, scenario.strategy, scenario.adapter)
+        );
+
+        // then
+        assertThat(ex)
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage(scenario.expectedExceptionMessage);
     }
 
     @Test
@@ -155,82 +254,158 @@ public class WingtipsAsyncClientHttpRequestInterceptorTest {
         EXCEPTION_THROWN,
         FUTURE_CANCELLED
     }
-
+    
     @DataProvider(value = {
-        "true   |   true    |   NORMAL_COMPLETION",
-        "true   |   false   |   NORMAL_COMPLETION",
-        "false  |   true    |   NORMAL_COMPLETION",
-        "false  |   false   |   NORMAL_COMPLETION",
-        "true   |   true    |   EXCEPTION_THROWN",
-        "true   |   false   |   EXCEPTION_THROWN",
-        "false  |   true    |   EXCEPTION_THROWN",
-        "false  |   false   |   EXCEPTION_THROWN",
-        "true   |   true    |   FUTURE_CANCELLED",
-        "true   |   false   |   FUTURE_CANCELLED",
-        "false  |   true    |   FUTURE_CANCELLED",
-        "false  |   false   |   FUTURE_CANCELLED"
+        "true   |   true    |   NORMAL_COMPLETION   |   false",
+        "true   |   false   |   NORMAL_COMPLETION   |   false",
+        "false  |   true    |   NORMAL_COMPLETION   |   false",
+        "false  |   false   |   NORMAL_COMPLETION   |   false",
+        "true   |   true    |   EXCEPTION_THROWN    |   false",
+        "true   |   false   |   EXCEPTION_THROWN    |   false",
+        "false  |   true    |   EXCEPTION_THROWN    |   false",
+        "false  |   false   |   EXCEPTION_THROWN    |   false",
+        "true   |   true    |   FUTURE_CANCELLED    |   false",
+        "true   |   false   |   FUTURE_CANCELLED    |   false",
+        "false  |   true    |   FUTURE_CANCELLED    |   false",
+        "false  |   false   |   FUTURE_CANCELLED    |   false",
+        "true   |   true    |   FUTURE_CANCELLED    |   false",
+        "true   |   false   |   FUTURE_CANCELLED    |   false",
+        "false  |   true    |   FUTURE_CANCELLED    |   false",
+        "false  |   false   |   FUTURE_CANCELLED    |   false",
+        "true   |   true    |   null                |   true",
+        "true   |   false   |   null                |   true",
+        "false  |   true    |   null                |   true",
+        "false  |   false   |   null                |   true"
     }, splitBy = "\\|")
     @Test
     public void expected_successful_execution(
-        boolean currentSpanExists, boolean subspanOptionOn, ResponseFutureResult responseFutureCompletionResult
+        boolean currentSpanExists,
+        boolean subspanOptionOn,
+        ResponseFutureResult responseFutureCompletionResult,
+        boolean throwExceptionWhenExecuteAsyncCalled
     ) throws IOException {
         // given
-        WingtipsAsyncClientHttpRequestInterceptor defaultInterceptor = new WingtipsAsyncClientHttpRequestInterceptor(subspanOptionOn);
-        boolean tagsExpected = true; // Tags should be generated in all of the use cases for this test
-        
-        intercept_worked_as_expected(defaultInterceptor, currentSpanExists, subspanOptionOn, responseFutureCompletionResult, tagsExpected);
+        WingtipsAsyncClientHttpRequestInterceptor defaultInterceptor = new WingtipsAsyncClientHttpRequestInterceptor(
+            subspanOptionOn, tagAndNamingStrategy, tagAndNamingAdapterMock
+        );
+
+        Function<SettableListenableFuture<ClientHttpResponse>, Pair<ClientHttpResponse, Throwable>>
+            responseFutureFinisher = null;
+
+        if (responseFutureCompletionResult != null) {
+            switch (responseFutureCompletionResult) {
+                case NORMAL_COMPLETION:
+                    responseFutureFinisher = future -> {
+                        future.set(normalCompletionResponse);
+                        return Pair.of(normalCompletionResponse, null);
+                    };
+                    break;
+                case EXCEPTION_THROWN:
+                    responseFutureFinisher = future -> {
+                        Throwable error = new RuntimeException("kaboom");
+                        future.setException(error);
+                        return Pair.of(null, error);
+                    };
+                    break;
+                case FUTURE_CANCELLED:
+                    responseFutureFinisher = future -> {
+                        future.cancel(true);
+                        Throwable cancellationError = catchThrowable(future::get);
+                        assertThat(cancellationError).isInstanceOf(CancellationException.class);
+                        return Pair.of(null, cancellationError);
+                    };
+                    break;
+                default:
+                    throw new RuntimeException(
+                        "Unhandled ResponseFutureResult type: " + responseFutureCompletionResult.name());
+            }
+        }
+
+        Throwable executeAsyncException = (throwExceptionWhenExecuteAsyncCalled)
+                                          ? new RuntimeException("Intentional exception during executeAsync()")
+                                          : null;
+        if (executeAsyncException != null) {
+            doAnswer(invocation -> {
+                tracingStateAtTimeOfExecution = TracingState.getCurrentThreadTracingState();
+                throw executeAsyncException;
+            }).when(executionMock).executeAsync(any(HttpRequest.class), any(byte[].class));
+        }
+
+        intercept_worked_as_expected(
+            defaultInterceptor, currentSpanExists, subspanOptionOn, responseFutureFinisher, executeAsyncException
+        );
     }
-    
-    public void intercept_worked_as_expected(WingtipsAsyncClientHttpRequestInterceptor interceptor,
-            boolean currentSpanExists, boolean subspanOptionOn, ResponseFutureResult responseFutureCompletionResult, boolean tagsExpected
-        ) throws IOException {
-        
+
+    public void intercept_worked_as_expected(
+        WingtipsAsyncClientHttpRequestInterceptor interceptor,
+        boolean currentSpanExists,
+        boolean subspanOptionOn,
+        Function<SettableListenableFuture<ClientHttpResponse>, Pair<ClientHttpResponse, Throwable>> responseFutureFinisher,
+        Throwable expectedAsyncExecutionError
+    ) {
+
         Span rootSpan = (currentSpanExists)
-                ? Tracer.getInstance().startRequestWithRootSpan("rootSpan")
-                : null;
-        
+                        ? Tracer.getInstance().startRequestWithRootSpan("rootSpan")
+                        : null;
+
         // Tracing info should be propagated on the headers if a current span exists when the interceptor is called,
         //      or if the subspan option is turned on. Or to look at it from the other direction
         //      we should *not* see propagation when no current span exists and the subspan option is off.
         boolean expectTracingInfoPropagation = (currentSpanExists || subspanOptionOn);
-        
+
         TracingState tracingStateBeforeInterceptorCall = TracingState.getCurrentThreadTracingState();
-        
+
         // when
-        ListenableFuture<ClientHttpResponse> result = interceptor.intercept(httpRequest, body, executionMock);
-        assertThat(result).isSameAs(executionResponseFuture);
-        
+        ListenableFuture<ClientHttpResponse> result = null;
+        Throwable actualExFromInterceptor = null;
+        try {
+            result = interceptor.intercept(requestMock, body, executionMock);
+        }
+        catch (Throwable ex) {
+            actualExFromInterceptor = ex;
+        }
+
         // then
-        // Before the response future finishes we should have zero completed spans.
-        assertThat(spanRecorder.completedSpans).isEmpty();
+        if (expectedAsyncExecutionError == null) {
+            assertThat(result).isSameAs(executionResponseFuture);
+            assertThat(actualExFromInterceptor).isNull();
+        }
+        else {
+            assertThat(result).isNull();
+            assertThat(actualExFromInterceptor).isSameAs(expectedAsyncExecutionError);
+        }
+
+        // Before the response future finishes we should have zero completed spans, unless executeAsync() threw an
+        //      error, in which case any subspan should be completed now.
+        if (expectedAsyncExecutionError != null && subspanOptionOn) {
+            assertThat(spanRecorder.completedSpans).hasSize(1);
+        }
+        else {
+            assertThat(spanRecorder.completedSpans).isEmpty();
+        }
 
         // The HttpRequest that was passed to the ClientHttpRequestExecution should be a
         //      HttpRequestWrapperWithModifiableHeaders to allow the headers to be modified.
         HttpRequest executedRequest = extractRequestFromExecution();
         assertThat(executedRequest).isInstanceOf(HttpRequestWrapperWithModifiableHeaders.class);
-        assertThat(((HttpRequestWrapperWithModifiableHeaders)executedRequest).getRequest()).isSameAs(httpRequest);
+        assertThat(((HttpRequestWrapperWithModifiableHeaders) executedRequest).getRequest()).isSameAs(requestMock);
 
         // The tracing headers should be set on the request based on what the tracing state was at the time of execution
         //      (which depends on whether the subspan option was on, which we'll get to later).
-        Span expectedSpanForHeaders = getExpectedSpanForHeaders(expectTracingInfoPropagation,
-                                                                tracingStateAtTimeOfExecution);
-         verifyExpectedTracingHeaders(executedRequest, expectedSpanForHeaders);
+        Span expectedSpanForHeaders = getExpectedSpanForHeaders(
+            expectTracingInfoPropagation,
+            tracingStateAtTimeOfExecution
+        );
+        verifyExpectedTracingHeaders(executedRequest, expectedSpanForHeaders);
 
-        
-        // Now we can complete the response future to trigger any span closing/etc that might happen.
-        switch(responseFutureCompletionResult) {
-            case NORMAL_COMPLETION:
-                executionResponseFuture.set(normalCompletionResponse);
-                break;
-            case EXCEPTION_THROWN:
-                executionResponseFuture.setException(new RuntimeException("kaboom"));
-                break;
-            case FUTURE_CANCELLED:
-                executionResponseFuture.cancel(true);
-                break;
-            default:
-                throw new RuntimeException("Unhandled ResponseFutureResult type: " + responseFutureCompletionResult.name());
-        }
+        // Now we can complete the response future to trigger any span closing/etc that might happen, and retrieve
+        //      the expected response (which may be null, depending on how the future was finished).
+        //      If expectedAsyncExecutionError is not null, then the future was never created, so we put in a stand-in
+        //      to expect null response and expectedAsyncExecutionError as the error.
+        Pair<ClientHttpResponse, Throwable> expectedResult =
+            (expectedAsyncExecutionError == null)
+            ? responseFutureFinisher.apply(executionResponseFuture)
+            : Pair.of(null, expectedAsyncExecutionError);
 
         if (subspanOptionOn) {
             // The subspan option was on so we should have a span that was completed.
@@ -254,24 +429,31 @@ public class WingtipsAsyncClientHttpRequestInterceptorTest {
 
             // The completed span should have been a CLIENT span.
             assertThat(completedSpan.getSpanPurpose()).isEqualTo(SpanPurpose.CLIENT);
-            
-            if(tagsExpected) {
-                // The completed span has the appropriate tags
-                assertThat(completedSpan.getTags().get(KnownOpenTracingTags.HTTP_METHOD)).isEqualTo(method.toString());
-                assertThat(completedSpan.getTags().get(KnownOpenTracingTags.HTTP_URL)).isEqualTo(uri.toURL().toString());
-                
-                // A non-errored response should have a HTTP Status tag
-                if(responseFutureCompletionResult.equals(ResponseFutureResult.NORMAL_COMPLETION)) {
-                    assertThat(completedSpan.getTags().get(KnownOpenTracingTags.HTTP_STATUS)).isEqualTo(String.valueOf(normalResponseCode));
-                }
-                
-                //Default behavior is to mark span as err'd if execution failed
-                if(!responseFutureCompletionResult.equals(ResponseFutureResult.NORMAL_COMPLETION)) {
-                        assertThat(completedSpan.getTags().get(KnownOpenTracingTags.ERROR)).isEqualTo(Boolean.TRUE.toString());
-                } else {
-                        assertThat(completedSpan.getTags().get(KnownOpenTracingTags.ERROR)).isNull();    
-                }
-            }
+
+            // The completed span should have a name from getSubspanSpanName().
+            assertThat(completedSpan.getSpanName()).isEqualTo(initialSpanNameFromStrategy.get());
+
+            // Verify that the span name and tagging strategy was called as expected for request and response tagging
+            //      and span naming.
+            assertThat(strategyInitialSpanNameMethodCalled.get()).isTrue();
+            assertThat(strategyInitialSpanNameArgs.get()).isNotNull();
+            strategyInitialSpanNameArgs.get().verifyArgs(executedRequest, interceptor.tagAndNamingAdapter);
+
+            assertThat(strategyRequestTaggingMethodCalled.get()).isTrue();
+            assertThat(strategyRequestTaggingArgs.get()).isNotNull();
+            strategyRequestTaggingArgs.get().verifyArgs(
+                completedSpan, executedRequest, interceptor.tagAndNamingAdapter
+            );
+
+            ClientHttpResponse expectedResponseForTagging = expectedResult.getLeft();
+            Throwable expectedErrorForTagging = expectedResult.getRight();
+
+            assertThat(strategyResponseTaggingAndFinalSpanNameMethodCalled.get()).isTrue();
+            assertThat(strategyResponseTaggingArgs.get()).isNotNull();
+            strategyResponseTaggingArgs.get().verifyArgs(
+                completedSpan, executedRequest, expectedResponseForTagging, expectedErrorForTagging,
+                interceptor.tagAndNamingAdapter
+            );
         }
         else {
             // The subspan option was turned off, so we should *not* have any completed spans, and the tracing state
@@ -279,6 +461,16 @@ public class WingtipsAsyncClientHttpRequestInterceptorTest {
             assertThat(spanRecorder.completedSpans).isEmpty();
             assertThat(tracingStateAtTimeOfExecution).isEqualTo(tracingStateBeforeInterceptorCall);
 
+            // Verify that tag and span naming strategy was not called.
+            assertThat(strategyInitialSpanNameMethodCalled.get()).isFalse();
+            assertThat(strategyInitialSpanNameArgs.get()).isNull();
+
+            assertThat(strategyRequestTaggingMethodCalled.get()).isFalse();
+            assertThat(strategyRequestTaggingArgs.get()).isNull();
+
+            assertThat(strategyResponseTaggingAndFinalSpanNameMethodCalled.get()).isFalse();
+            assertThat(strategyResponseTaggingArgs.get()).isNull();
+            
             // We already verified that the propagation headers were added (or not) as appropriate depending on
             //      whether the tracingStateAtTimeOfExecution had a span (or not). So we'll do one last explicit
             //      verification that tracingStateAtTimeOfExecution is populated (or not) based on whether a current
@@ -290,7 +482,7 @@ public class WingtipsAsyncClientHttpRequestInterceptorTest {
                 assertThat(tracingStateAtTimeOfExecution.spanStack).isNullOrEmpty();
             }
         }
-        
+
         // After all is said and done, we should end up with the same tracing state as when we called the interceptor.
         assertThat(normalizeTracingState(TracingState.getCurrentThreadTracingState()))
             .isEqualTo(normalizeTracingState(tracingStateBeforeInterceptorCall));
@@ -307,7 +499,9 @@ public class WingtipsAsyncClientHttpRequestInterceptorTest {
         boolean currentSpanExists, boolean subspanOptionOn
     ) throws IOException {
         // given
-        WingtipsAsyncClientHttpRequestInterceptor interceptor = new WingtipsAsyncClientHttpRequestInterceptor(subspanOptionOn);
+        WingtipsAsyncClientHttpRequestInterceptor interceptor = new WingtipsAsyncClientHttpRequestInterceptor(
+            subspanOptionOn, tagAndNamingStrategy, tagAndNamingAdapterMock
+        );
         Span rootSpan = (currentSpanExists)
                         ? Tracer.getInstance().startRequestWithRootSpan("rootSpan")
                         : null;
@@ -321,7 +515,7 @@ public class WingtipsAsyncClientHttpRequestInterceptorTest {
         }).when(executionMock).executeAsync(any(HttpRequest.class), any(byte[].class));
 
         // when
-        Throwable ex = catchThrowable(() -> interceptor.intercept(httpRequest, body, executionMock));
+        Throwable ex = catchThrowable(() -> interceptor.intercept(requestMock, body, executionMock));
 
         // then
         assertThat(ex).isSameAs(executionExplosion);
@@ -359,54 +553,89 @@ public class WingtipsAsyncClientHttpRequestInterceptorTest {
     }
 
     @DataProvider(value = {
-            "NORMAL_COMPLETION", 
-            "EXCEPTION_THROWN", 
-            "FUTURE_CANCELLED"
-    })
+        "spanNameFromStrategy   |   PATCH           |   spanNameFromStrategy",
+        "null                   |   PATCH           |   asyncresttemplate_downstream_call-PATCH",
+        "                       |   PATCH           |   asyncresttemplate_downstream_call-PATCH",
+        "[whitespace]           |   PATCH           |   asyncresttemplate_downstream_call-PATCH",
+        "null                   |   null            |   asyncresttemplate_downstream_call-UNKNOWN_HTTP_METHOD",
+    }, splitBy = "\\|")
     @Test
-    public void intercept_handles_span_closing_logic_even_if_tagging_explodes(ResponseFutureResult responseFutureResult) throws IOException {
+    public void getSubspanSpanName_works_as_expected(
+        String strategyResult, HttpMethod httpMethod, String expectedResult
+    ) {
         // given
-        boolean currentSpanExists = false;
-        boolean subspanOptionOn = true;
-        boolean tagsExpected = false; // With all calls exploding we don't expect anything to be tagged
-        HttpTagStrategy<HttpRequest, ClientHttpResponse> explodingTagStrategy = mock(HttpTagStrategy.class);
-        doThrow(new RuntimeException("boom")).when(explodingTagStrategy).tagSpanWithRequestAttributes(any(Span.class), any(HttpRequest.class));
-        doThrow(new RuntimeException("boom")).when(explodingTagStrategy).tagSpanWithResponseAttributes(any(Span.class), any(ClientHttpResponse.class));
-        doThrow(new RuntimeException("boom")).when(explodingTagStrategy).handleErroredRequest(any(Span.class), any(Throwable.class));
-        
-        // when
-        WingtipsAsyncClientHttpRequestInterceptor explodingTagStrategyInterceptor = new WingtipsAsyncClientHttpRequestInterceptor(true, explodingTagStrategy);
-           
-        // then
-        intercept_worked_as_expected(explodingTagStrategyInterceptor, currentSpanExists, subspanOptionOn, responseFutureResult, tagsExpected);
-    }
-    
-    @DataProvider(value = {
-        "true",
-        "false"
-    })
-    @Test
-    public void getSubspanSpanName_works_as_expected(boolean includeQueryString) {
-        // given
-        WingtipsAsyncClientHttpRequestInterceptor interceptorSpy = spy(new WingtipsAsyncClientHttpRequestInterceptor());
-
-        HttpMethod method = HttpMethod.OPTIONS;
-
-        String noQueryStringUri = uri.toString();
-        if (includeQueryString) {
-            uri = URI.create(uri.toString() + "?foo=" + UUID.randomUUID().toString());
+        if ("[whitespace]".equals(strategyResult)) {
+            strategyResult = "  \n\r\t  ";
         }
 
-        httpRequest = mock(HttpRequest.class);
-        doReturn(uri).when(httpRequest).getURI();
-        doReturn(method).when(httpRequest).getMethod();
+        initialSpanNameFromStrategy.set(strategyResult);
+        doReturn(httpMethod).when(requestMock).getMethod();
+
+        WingtipsAsyncClientHttpRequestInterceptor interceptor = new WingtipsAsyncClientHttpRequestInterceptor(
+            true, tagAndNamingStrategy, tagAndNamingAdapterMock
+        );
 
         // when
-        String result = interceptorSpy.getSubspanSpanName(httpRequest);
+        String result = interceptor.getSubspanSpanName(requestMock, tagAndNamingStrategy, tagAndNamingAdapterMock);
 
         // then
-        assertThat(result).isEqualTo("asyncresttemplate_downstream_call-" + method.name() + "_" + noQueryStringUri);
-        verify(httpRequest).getURI();
+        assertThat(result).isEqualTo(expectedResult);
     }
-    
+
+    // Unlikely to happen in practice, but let's test it anyway.
+    @Test
+    public void createAsyncSubSpanAndExecute_trigger_null_subspanFinisher_in_catch_block_branch_for_code_coverage() {
+        // given
+        Tracer.getInstance().startRequestWithRootSpan("someRootSpan");
+        TracingState tracingStateBeforeInterceptorCall = TracingState.getCurrentThreadTracingState();
+
+        WingtipsAsyncClientHttpRequestInterceptor interceptorSpy = spy(new WingtipsAsyncClientHttpRequestInterceptor(
+            true, tagAndNamingStrategy, tagAndNamingAdapterMock
+        ));
+
+        RuntimeException explodingSubspanNameMethodEx =
+            new RuntimeException("Intentional exception thrown by getSubspanSpanName()");
+
+        doThrow(explodingSubspanNameMethodEx).when(interceptorSpy).getSubspanSpanName(
+            any(HttpRequest.class), any(HttpTagAndSpanNamingStrategy.class), any(HttpTagAndSpanNamingAdapter.class)
+        );
+
+        HttpRequestWrapperWithModifiableHeaders wrapperRequest =
+            new HttpRequestWrapperWithModifiableHeaders(requestMock);
+        byte[] body = new byte[]{42};
+
+
+        // when
+        Throwable ex = catchThrowable(
+            () -> interceptorSpy.createAsyncSubSpanAndExecute(wrapperRequest, body, executionMock)
+        );
+
+        // then
+        assertThat(ex).isSameAs(explodingSubspanNameMethodEx);
+        verify(interceptorSpy).getSubspanSpanName(wrapperRequest, tagAndNamingStrategy, tagAndNamingAdapterMock);
+
+        // TracingState should have been reset even though an exception occurred in some unexpected place.
+        assertThat(normalizeTracingState(TracingState.getCurrentThreadTracingState()))
+            .isEqualTo(normalizeTracingState(tracingStateBeforeInterceptorCall));
+    }
+
+    // Another one that's unlikely to happen in practice, but let's test it anyway.
+    @Test
+    public void SpanAroundAsyncCallFinisher_finishCallSpan_does_nothing_if_spanAroundCallTracingState_is_null() {
+        // given
+        SpanAroundAsyncCallFinisher finisherSpy = spy(new SpanAroundAsyncCallFinisher(
+            null, requestMock, tagAndNamingStrategy, tagAndNamingAdapterMock
+        ));
+
+        ClientHttpResponse responseMock = mock(ClientHttpResponse.class);
+        Throwable errorMock = mock(Throwable.class);
+
+        // when
+        finisherSpy.finishCallSpan(responseMock, errorMock);
+
+        // then
+        verify(finisherSpy).finishCallSpan(responseMock, errorMock);
+        verifyNoMoreInteractions(finisherSpy);
+        verifyZeroInteractions(responseMock, errorMock);
+    }
 }

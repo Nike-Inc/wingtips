@@ -10,6 +10,9 @@ dependencies {
             "org.slf4j:slf4j-api:$slf4jVersion",
             "com.nike.internal:nike-internal-util:$nikeInternalUtilVersion"
     )
+    compileOnly(
+            "org.jetbrains:annotations:$jetbrainsAnnotationsVersion"
+    )
     testCompile(
             "junit:junit-dep:$junitVersion",
             "org.mockito:mockito-core:$mockitoVersion",
@@ -17,6 +20,7 @@ dependencies {
             "com.fasterxml.jackson.core:jackson-databind:$jacksonVersion",
             "ch.qos.logback:logback-classic:$logbackVersion",
             "org.assertj:assertj-core:$assertJVersion",
-            "com.tngtech.java:junit-dataprovider:$junitDataproviderVersion"
+            "com.tngtech.java:junit-dataprovider:$junitDataproviderVersion",
+            "org.jetbrains:annotations:$jetbrainsAnnotationsVersion"
     )
 }

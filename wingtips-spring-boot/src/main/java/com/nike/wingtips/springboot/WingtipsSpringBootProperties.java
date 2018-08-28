@@ -2,6 +2,8 @@ package com.nike.wingtips.springboot;
 
 import com.nike.wingtips.Tracer;
 import com.nike.wingtips.servlet.RequestTracingFilter;
+import com.nike.wingtips.tags.OpenTracingHttpTagStrategy;
+import com.nike.wingtips.tags.ZipkinHttpTagStrategy;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
@@ -26,9 +28,25 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *         logging format will not be changed (defaults to JSON).
  *     </li>
  *     <li>
- *         wingtips.server-side-span-tagging-strategy - Determines the set of tags Wingtips will apply to spans. Represents the
- *         {@link com.nike.wingtips.tag.HttpTagStrategy} implementation. Must be one of: ZIPKIN, OPENTRACING, or NONE. 
- *         If missing then the default strategy will not be changed (defaults to OPENTRACING).
+ *         wingtips.server-side-span-tagging-strategy - Represents the {@link
+ *         com.nike.wingtips.tags.HttpTagAndSpanNamingStrategy} implementation that should be used by {@link
+ *         RequestTracingFilter} to generate span names and automatically set tags on spans that it handles.
+ *         {@link RequestTracingFilter} will default to {@link ZipkinHttpTagStrategy}, however you
+ *         can pass in a fully qualified class name for this property if you have a custom impl you want to use.
+ *         The following short names are also understood:
+ *         <ul>
+ *             <li>{@code ZIPKIN} - short for {@link ZipkinHttpTagStrategy}</li>
+ *             <li>{@code OPENTRACING} - short for {@link OpenTracingHttpTagStrategy}</li>
+ *             <li>{@code NONE} - short for {@link com.nike.wingtips.tags.NoOpHttpTagStrategy}</li>
+ *         </ul>
+ *     </li>
+ *     <li>
+ *         wingtips.server-side-span-tagging-adapter - Represents the {@link
+ *         com.nike.wingtips.tags.HttpTagAndSpanNamingAdapter} implementation that should be passed to the
+ *         {@code wingtips.server-side-span-tagging-strategy} when generating span names and tagging spans.
+ *         {@link RequestTracingFilter} will default to {@link com.nike.wingtips.servlet.tag.ServletRequestTagAdapter},
+ *         however you can pass in a fully qualified class name for this property if you have a custom impl you want
+ *         to use.
  *     </li>
  * </ul>
  *
@@ -37,7 +55,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *     wingtips.wingtips-disabled=false
  *     wingtips.user-id-header-keys=userid,altuserid
  *     wingtips.span-logging-format=KEY_VALUE
- *     wingtips.server-side-span-tagging-strategy=OPENTRACING
+ *     wingtips.server-side-span-tagging-strategy=ZIPKIN
+ *     wingtips.server-side-span-tagging-adapter=com.nike.wingtips.servlet.tag.ServletRequestTagAdapter
  * </pre>
  *
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
@@ -50,6 +69,7 @@ public class WingtipsSpringBootProperties {
     private String userIdHeaderKeys;
     private Tracer.SpanLoggingRepresentation spanLoggingFormat;
     private String serverSideSpanTaggingStrategy;
+    private String serverSideSpanTaggingAdapter;
 
     public boolean isWingtipsDisabled() {
         return wingtipsDisabled;
@@ -79,7 +99,15 @@ public class WingtipsSpringBootProperties {
         return serverSideSpanTaggingStrategy;
     }
 
-    public void setServerSideSpanTaggingStrategy(String spanTaggingStrategy) {
-        this.serverSideSpanTaggingStrategy = spanTaggingStrategy;
+    public void setServerSideSpanTaggingStrategy(String serverSideSpanTaggingStrategy) {
+        this.serverSideSpanTaggingStrategy = serverSideSpanTaggingStrategy;
+    }
+
+    public String getServerSideSpanTaggingAdapter() {
+        return serverSideSpanTaggingAdapter;
+    }
+
+    public void setServerSideSpanTaggingAdapter(String serverSideSpanTaggingAdapter) {
+        this.serverSideSpanTaggingAdapter = serverSideSpanTaggingAdapter;
     }
 }

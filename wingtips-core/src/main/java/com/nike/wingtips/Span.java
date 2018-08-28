@@ -53,7 +53,7 @@ public class Span implements Closeable {
     private final String traceId;
     private final String spanId;
     private final String parentSpanId;
-    private final String spanName;
+    private String spanName;
     private final boolean sampleable;
     private final String userId;
     private final SpanPurpose spanPurpose;
@@ -258,6 +258,27 @@ public class Span implements Closeable {
     }
 
     /**
+     * Sets the {@link #spanName} to the given value. Intentionally package-scoped to force all span name changes to go
+     * through {@link SpanMutator} - this is not a method that should normally be called or that users should normally
+     * have to see and worry about, so this package scoping reduces accidental and unwise usage.
+     *
+     * <p>The main reason this method exists at all is to facilitate situations where full context for the correct
+     * span name isn't known at the time of span creation. For example, for HTTP spans we'd like the span name to
+     * include the HTTP route (URL path template), but this information usually isn't known until after the request
+     * has been processed. So this method allows for the span name to be set to something initially, and then changed
+     * later when the data for the final span name is available.
+     *
+     * @param newName The new span name that should be set on {@link #spanName} - cannot be null.
+     */
+    /*package*/ void setSpanName(String newName) {
+        if (newName == null) {
+            throw new IllegalArgumentException("The new span name cannot be null");
+        }
+        
+        this.spanName = newName;
+    }
+
+    /**
      * @return True if this span is sampleable and should be output to the logging/span collection system, false otherwise.
      */
     public boolean isSampleable() {
@@ -305,7 +326,7 @@ public class Span implements Closeable {
      * <p/>
      * NOTE: This is intentionally package scoped to make sure completions and logging/span output logic happens centrally through {@link Tracer}.
      */
-    void complete() {
+    /*package*/ void complete() {
         if (this.durationNanos != null)
             throw new IllegalStateException("This Span is already completed.");
 

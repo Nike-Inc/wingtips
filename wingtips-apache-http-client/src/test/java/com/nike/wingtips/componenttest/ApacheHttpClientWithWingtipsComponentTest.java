@@ -6,19 +6,25 @@ import com.nike.wingtips.TraceHeaders;
 import com.nike.wingtips.Tracer;
 import com.nike.wingtips.apache.httpclient.WingtipsApacheHttpClientInterceptor;
 import com.nike.wingtips.apache.httpclient.WingtipsHttpClientBuilder;
+import com.nike.wingtips.apache.httpclient.tag.ApacheHttpClientTagAdapter;
 import com.nike.wingtips.lifecyclelistener.SpanLifecycleListener;
 import com.nike.wingtips.servlet.RequestTracingFilter;
+import com.nike.wingtips.tags.KnownZipkinTags;
+import com.nike.wingtips.tags.WingtipsTags;
+import com.nike.wingtips.tags.ZipkinHttpTagStrategy;
 
 import com.tngtech.java.junit.dataprovider.DataProvider;
 import com.tngtech.java.junit.dataprovider.DataProviderRunner;
 
 import org.apache.commons.io.IOUtils;
+import org.apache.http.HttpRequest;
 import org.apache.http.HttpRequestInterceptor;
 import org.apache.http.HttpResponse;
 import org.apache.http.HttpResponseInterceptor;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.HttpClientBuilder;
+import org.jetbrains.annotations.Nullable;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -42,6 +48,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import javax.servlet.http.HttpServletRequest;
 
@@ -61,6 +68,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @RunWith(DataProviderRunner.class)
 public class ApacheHttpClientWithWingtipsComponentTest {
+
     private static final int SERVER_PORT = findFreePort();
     private static ConfigurableApplicationContext serverAppContext;
 
@@ -79,7 +87,8 @@ public class ApacheHttpClientWithWingtipsComponentTest {
     private static int findFreePort() {
         try (ServerSocket serverSocket = new ServerSocket(0)) {
             return serverSocket.getLocalPort();
-        } catch (IOException e) {
+        }
+        catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
@@ -129,16 +138,24 @@ public class ApacheHttpClientWithWingtipsComponentTest {
             parent = Tracer.getInstance().startRequestWithRootSpan("somePreexistingParentSpan");
         }
 
-        WingtipsHttpClientBuilder builder = WingtipsHttpClientBuilder.create(subspanOptionOn);
+        String pathTemplateForTags = "/some/path/template/" + UUID.randomUUID().toString();
+
+        WingtipsHttpClientBuilder builder = WingtipsHttpClientBuilder.create(
+            subspanOptionOn,
+            ZipkinHttpTagStrategy.getDefaultInstance(),
+            new ApacheHttpClientTagAdapterWithHttpRouteKnowledge(pathTemplateForTags)
+        );
         HttpClient httpClient = builder.build();
 
         // We always expect at least one span to be completed as part of the call: the server span.
         //      We may or may not have a second span completed depending on the value of subspanOptionOn.
         int expectedNumSpansCompleted = (subspanOptionOn) ? 2 : 1;
 
+        String fullRequestUrl = "http://localhost:" + SERVER_PORT + ENDPOINT_PATH + "?foo=bar";
+
         // when
         HttpResponse response = httpClient.execute(
-            new HttpGet("http://localhost:" + SERVER_PORT + ENDPOINT_PATH + "?foo=bar")
+            new HttpGet(fullRequestUrl)
         );
 
         // then
@@ -148,9 +165,58 @@ public class ApacheHttpClientWithWingtipsComponentTest {
             response, SLEEP_TIME_MILLIS, expectedNumSpansCompleted, parent, subspanOptionOn
         );
 
+        if (subspanOptionOn) {
+            verifySpanNameAndTags(
+                findApacheHttpClientSpanFromCompletedSpans(),
+                "GET " + pathTemplateForTags,
+                "GET",
+                ENDPOINT_PATH,
+                fullRequestUrl,
+                pathTemplateForTags,
+                response.getStatusLine().getStatusCode(),
+                "apache.httpclient"
+            );
+        }
+
         if (parent != null) {
             parent.close();
         }
+    }
+
+    private Span findApacheHttpClientSpanFromCompletedSpans() {
+        List<Span> httpClientSpans = spanRecorder.completedSpans
+            .stream()
+            .filter(s -> "apache.httpclient".equals(s.getTags().get(WingtipsTags.SPAN_HANDLER)))
+            .collect(Collectors.toList());
+
+        assertThat(httpClientSpans)
+            .withFailMessage(
+                "Expected to find exactly one Span that came from Apache HttpClient - instead found: "
+                + httpClientSpans.size()
+            )
+            .hasSize(1);
+
+        return httpClientSpans.get(0);
+    }
+
+    private void verifySpanNameAndTags(
+        Span span,
+        String expectedSpanName,
+        String expectedHttpMethodTagValue,
+        String expectedPathTagValue,
+        String expectedUrlTagValue,
+        String expectedHttpRouteTagValue,
+        int expectedStatusCodeTagValue,
+        String expectedSpanHandlerTagValue
+    ) {
+        assertThat(span.getSpanName()).isEqualTo(expectedSpanName);
+        assertThat(span.getTags().get(KnownZipkinTags.HTTP_METHOD)).isEqualTo(expectedHttpMethodTagValue);
+        assertThat(span.getTags().get(KnownZipkinTags.HTTP_PATH)).isEqualTo(expectedPathTagValue);
+        assertThat(span.getTags().get(KnownZipkinTags.HTTP_URL)).isEqualTo(expectedUrlTagValue);
+        assertThat(span.getTags().get(KnownZipkinTags.HTTP_ROUTE)).isEqualTo(expectedHttpRouteTagValue);
+        assertThat(span.getTags().get(KnownZipkinTags.HTTP_STATUS_CODE))
+            .isEqualTo(String.valueOf(expectedStatusCodeTagValue));
+        assertThat(span.getTags().get(WingtipsTags.SPAN_HANDLER)).isEqualTo(expectedSpanHandlerTagValue);
     }
 
     @DataProvider(value = {
@@ -165,7 +231,13 @@ public class ApacheHttpClientWithWingtipsComponentTest {
     ) throws IOException {
 
         // given
-        WingtipsApacheHttpClientInterceptor interceptor = new WingtipsApacheHttpClientInterceptor(subspanOptionOn);
+        String pathTemplateForTags = "/some/path/template/" + UUID.randomUUID().toString();
+
+        WingtipsApacheHttpClientInterceptor interceptor = new WingtipsApacheHttpClientInterceptor(
+            subspanOptionOn,
+            ZipkinHttpTagStrategy.getDefaultInstance(),
+            new ApacheHttpClientTagAdapterWithHttpRouteKnowledge(pathTemplateForTags)
+        );
 
         Span parent = null;
         if (spanAlreadyExistsBeforeCall) {
@@ -174,16 +246,18 @@ public class ApacheHttpClientWithWingtipsComponentTest {
 
         HttpClient httpClient = HttpClientBuilder
             .create()
-            .addInterceptorFirst((HttpRequestInterceptor)interceptor)
-            .addInterceptorLast((HttpResponseInterceptor)interceptor)
+            .addInterceptorFirst((HttpRequestInterceptor) interceptor)
+            .addInterceptorLast((HttpResponseInterceptor) interceptor)
             .build();
 
         // We always expect at least one span to be completed as part of the call: the server span.
         //      We may or may not have a second span completed depending on the value of subspanOptionOn.
         int expectedNumSpansCompleted = (subspanOptionOn) ? 2 : 1;
 
+        String fullRequestUrl = "http://localhost:" + SERVER_PORT + ENDPOINT_PATH;
+
         // when
-        HttpResponse response = httpClient.execute(new HttpGet("http://localhost:" + SERVER_PORT + ENDPOINT_PATH));
+        HttpResponse response = httpClient.execute(new HttpGet(fullRequestUrl));
 
         // then
         assertThat(response.getStatusLine().getStatusCode()).isEqualTo(200);
@@ -191,6 +265,19 @@ public class ApacheHttpClientWithWingtipsComponentTest {
         verifySpansCompletedAndReturnedInResponse(
             response, SLEEP_TIME_MILLIS, expectedNumSpansCompleted, parent, subspanOptionOn
         );
+
+        if (subspanOptionOn) {
+            verifySpanNameAndTags(
+                findApacheHttpClientSpanFromCompletedSpans(),
+                "GET " + pathTemplateForTags,
+                "GET",
+                ENDPOINT_PATH,
+                fullRequestUrl,
+                pathTemplateForTags,
+                response.getStatusLine().getStatusCode(),
+                "apache.httpclient"
+            );
+        }
 
         if (parent != null) {
             parent.close();
@@ -206,11 +293,13 @@ public class ApacheHttpClientWithWingtipsComponentTest {
         }
     }
 
-    private void verifySpansCompletedAndReturnedInResponse(HttpResponse response,
-                                                           long expectedMinSpanDurationMillis,
-                                                           int expectedNumSpansCompleted,
-                                                           Span expectedUpstreamSpan,
-                                                           boolean expectSubspanFromHttpClient) {
+    private void verifySpansCompletedAndReturnedInResponse(
+        HttpResponse response,
+        long expectedMinSpanDurationMillis,
+        int expectedNumSpansCompleted,
+        Span expectedUpstreamSpan,
+        boolean expectSubspanFromHttpClient
+    ) {
         // We can have a race condition where the response is sent and we try to verify here before the servlet filter
         //      has had a chance to complete the span. Wait a few milliseconds to give the servlet filter time to
         //      finish.
@@ -227,8 +316,8 @@ public class ApacheHttpClientWithWingtipsComponentTest {
         // Find the span with the longest duration - this is the outermost span (either from the server or from
         //      the Apache HttpClient depending on whether the subspan option was on).
         Span outermostSpan = spanRecorder.completedSpans.stream()
-                                                           .max(Comparator.comparing(Span::getDurationNanos))
-                                                           .get();
+                                                        .max(Comparator.comparing(Span::getDurationNanos))
+                                                        .get();
         assertThat(TimeUnit.NANOSECONDS.toMillis(outermostSpan.getDurationNanos()))
             .isGreaterThanOrEqualTo(expectedMinSpanDurationMillis);
 
@@ -273,10 +362,12 @@ public class ApacheHttpClientWithWingtipsComponentTest {
         public final List<Span> completedSpans = new ArrayList<>();
 
         @Override
-        public void spanStarted(Span span) { }
+        public void spanStarted(Span span) {
+        }
 
         @Override
-        public void spanSampled(Span span) { }
+        public void spanSampled(Span span) {
+        }
 
         @Override
         public void spanCompleted(Span span) {
@@ -310,5 +401,21 @@ public class ApacheHttpClientWithWingtipsComponentTest {
 
         }
 
+    }
+
+    static class ApacheHttpClientTagAdapterWithHttpRouteKnowledge extends ApacheHttpClientTagAdapter {
+
+        private final String httpRouteForAllRequests;
+
+        ApacheHttpClientTagAdapterWithHttpRouteKnowledge(String httpRouteForAllRequests) {
+            this.httpRouteForAllRequests = httpRouteForAllRequests;
+        }
+
+        @Override
+        public @Nullable String getRequestUriPathTemplate(
+            @Nullable HttpRequest request, @Nullable HttpResponse response
+        ) {
+            return httpRouteForAllRequests;
+        }
     }
 }
