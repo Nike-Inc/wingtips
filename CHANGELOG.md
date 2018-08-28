@@ -54,6 +54,16 @@ for details.
     - Added by [Long Ton That][contrib_longtonthat] in pull requests [#75](https://github.com/Nike-Inc/wingtips/pull/75)
     and [#76](https://github.com/Nike-Inc/wingtips/pull/76).
     
+### Fixed
+
+- Fixed issues around value-escaping when serializing spans to string using `Span.toKeyValueString()` and 
+`Span.toJSON()`. For key/value format and JSON format, values are now escaped using minimal JSON-escaping rules.
+See [RFC 7159 Section 7](https://tools.ietf.org/html/rfc7159#section-7) for full details on these rules, but in 
+particular note that we are only escaping the bare minimum required characters: quotation mark, reverse solidus 
+(backslash), and the control characters (U+0000 through U+001F). Additionally, for key/value format we are now 
+surrounding all values with quotes, i.e. `some_key="some JSON-escaped value"`.
+    - Fixed by [Brandon Currie][contrib_brandoncurrie] and [Nic Munroe][contrib_nicmunroe] as part of pull requests 
+    [#74](https://github.com/Nike-Inc/wingtips/pull/74) and [#78](https://github.com/Nike-Inc/wingtips/pull/78). 
 
 ## [0.15.0](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.15.0)
 
