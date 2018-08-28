@@ -8,6 +8,7 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 
 #### 0.x Releases
 
+- `0.16.x` Releases - [0.16.0](#0160)
 - `0.15.x` Releases - [0.15.0](#0150) 
 - `0.14.x` Releases - [0.14.2](#0142), [0.14.1](#0141), [0.14.0](#0140)
 - `0.13.x` Releases - [0.13.0](#0130)
@@ -15,6 +16,44 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 - `0.11.x` Releases - [0.11.2](#0112), [0.11.1](#0111), [0.11.0](#0110)
 - `0.10.x` Releases - [0.10.0](#0100)
 - `0.9.x` Releases - [0.9.0.1](#0901), [0.9.0](#090)
+
+## [0.16.0](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.16.0)
+
+Released on 2018-08-28.
+
+### Added
+
+- Added initial support for tagging `Span`s with key/value pairs. These will be included in `Span.toKeyValueString()` 
+and `Span.toJSON()` output, so you will see tags when `Tracer` logs `Span`s. These tags are now also sent to Zipkin
+when using `WingtipsToZipkinLifecycleListener`. You can take advantage of known Zipkin and/or OpenTracing tag
+constants via `KnownZipkinTags` and `KnownOpenTracingTags`. `Span` serialization and deserialization logic (both for
+key/value format and JSON format) has been moved to a new `SpanParser` class, so some of the parsing-related methods
+and constants that were in `Span` have been deprecated (but not yet removed) in favor of moving to `SpanParser`.
+Some more details about tags can be found in the [main readme](README.md#span_tags). NOTE: timestamped annotations
+are not yet implemented, and neither has server/client instrumentation been updated to take advantage of tags
+(i.e. automatically tagging spans with `http.method`, `http.path`, `http.status_code`, `error`, etc). Those features
+and functionality will come later. 
+    - Added by [Brandon Currie][contrib_brandoncurrie] and [Nic Munroe][contrib_nicmunroe] in pull requests 
+    [#74](https://github.com/Nike-Inc/wingtips/pull/74) and [#78](https://github.com/Nike-Inc/wingtips/pull/78). 
+- `wingtips-zipkin2`'s `WingtipsToZipkinSpanConverterDefaultImpl` now has an alternate constructor that sets it up
+to "sanitize" IDs (Trace IDs, Span IDs, Parent Span IDs) that aren't Zipkin compatible. This can be necessary when
+you are reporting spans from Wingtips to Zipkin via `WingtipsToZipkinLifecycleListener`, but callers into your system
+are not sending IDs that conform to the Zipkin B3 spec. When a non-Zipkin-compatible ID is detected and you've 
+configured `WingtipsToZipkinSpanConverterDefaultImpl` to sanitize, then the invalid IDs will be converted to valid IDs
+in a deterministic way, a correlation log message will be output, and the original bad IDs will be sent to Zipkin as
+tags on the span: `invalid.trace_id`, `invalid.span_id`. and/or `invalid.parent_id`. This sanitization feature is
+*not* turned on by default - you must explicitly opt-in by creating the span converter using the alternate constructor.
+See `WingtipsToZipkinSpanConverterDefaultImpl` for more details.
+    - Added by [Long Ton That][contrib_longtonthat] and [Nic Munroe][contrib_nicmunroe] in pull requests 
+    [#73](https://github.com/Nike-Inc/wingtips/pull/73) and [#77](https://github.com/Nike-Inc/wingtips/pull/77). 
+- `wingtips-zipkin2-spring-boot`'s `WingtipsWithZipkinSpringBootConfiguration` now allows you to override the 
+`WingtipsToZipkinSpanConverter` that is used when converting Wingtips spans to Zipkin spans for reporting to Zipkin.
+This is accomplished via a `@Bean` that exposes the `WingtipsToZipkinSpanConverter` impl you want used. See the 
+[wingtips-zipkin2-spring-boot readme](wingtips-zipkin2-spring-boot#overriding-the-default-wingtipstozipkinspanconverter)
+for details.
+    - Added by [Long Ton That][contrib_longtonthat] in pull requests [#75](https://github.com/Nike-Inc/wingtips/pull/75)
+    and [#76](https://github.com/Nike-Inc/wingtips/pull/76).
+    
 
 ## [0.15.0](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.15.0)
 
@@ -281,3 +320,5 @@ Released on 2016-06-07.
 [contrib_adriancole]: https://github.com/adriancole
 [contrib_woldie]: https://github.com/woldie
 [contrib_alesj]: https://github.com/alesj
+[contrib_longtonthat]: https://github.com/longtonthat
+[contrib_brandoncurrie]: https://github.com/brandoncurrie
