@@ -1,9 +1,14 @@
 package com.nike.wingtips.zipkin.util;
 
-import static com.nike.wingtips.TraceAndSpanIdGenerator.generateId;
-import static com.nike.wingtips.TraceAndSpanIdGenerator.unsignedLowerHexStringToLong;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.ThrowableAssert.catchThrowable;
+import com.nike.wingtips.Span;
+
+import com.tngtech.java.junit.dataprovider.DataProvider;
+import com.tngtech.java.junit.dataprovider.DataProviderRunner;
+
+import org.assertj.core.api.Condition;
+import org.assertj.core.api.ThrowableAssert;
+import org.junit.Test;
+import org.junit.runner.RunWith;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -11,19 +16,15 @@ import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
-import org.assertj.core.api.Condition;
-import org.assertj.core.api.ThrowableAssert;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-
-import com.nike.wingtips.Span;
-import com.tngtech.java.junit.dataprovider.DataProvider;
-import com.tngtech.java.junit.dataprovider.DataProviderRunner;
-
 import zipkin.Annotation;
 import zipkin.BinaryAnnotation;
 import zipkin.Constants;
 import zipkin.Endpoint;
+
+import static com.nike.wingtips.TraceAndSpanIdGenerator.generateId;
+import static com.nike.wingtips.TraceAndSpanIdGenerator.unsignedLowerHexStringToLong;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.ThrowableAssert.catchThrowable;
 
 /**
  * Tests the functionality of {@link WingtipsToZipkinSpanConverterDefaultImpl}.
@@ -80,13 +81,12 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
     }
     
     private void assertBinaryAnnotationsAreEmptyOrOnlyHaveStringTags(zipkin.Span span) {
-    		//Asserts that binary annotations should be empty or only contain tags (string type)
+            //Asserts that binary annotations should be empty or only contain tags (string type)
         Condition<BinaryAnnotation> stringTypeOnly = new Condition<BinaryAnnotation>() {
-        	   public boolean matches(BinaryAnnotation value) {
-        	     return value.type == BinaryAnnotation.Type.STRING &&
-        	    		 !Constants.CORE_ANNOTATIONS.contains(value.key);
-        	   }
-        	 };
+            public boolean matches(BinaryAnnotation value) {
+                return value.type == BinaryAnnotation.Type.STRING && !Constants.CORE_ANNOTATIONS.contains(value.key);
+            }
+        };
         assertThat(span.binaryAnnotations).are(stringTypeOnly);
     }
     
@@ -187,17 +187,17 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
     }
 
     protected Map<String,String> createSingleTagMap() {
-		Map<String,String> singleValue = new HashMap<String,String>(1);
-		singleValue.put(tagOneKey, tagOneValue);
-		return singleValue;
-	}
-	
-	protected Map<String,String> createMultipleTagMap() {
-		Map<String,String> multipleValues = createSingleTagMap();
-		multipleValues.put(tagTwoKey, tagTwoValue);
-		return multipleValues;
-	}
-	
+        Map<String,String> singleValue = new HashMap<String,String>(1);
+        singleValue.put(tagOneKey, tagOneValue);
+        return singleValue;
+    }
+
+    protected Map<String,String> createMultipleTagMap() {
+        Map<String,String> multipleValues = createSingleTagMap();
+        multipleValues.put(tagTwoKey, tagTwoValue);
+        return multipleValues;
+    }
+
     @DataProvider(value = {
         "                                      ", // empty trace ID
         "123e4567-e89b-12d3-a456-426655440000  "  // UUID format (hyphens and also >32 chars)
