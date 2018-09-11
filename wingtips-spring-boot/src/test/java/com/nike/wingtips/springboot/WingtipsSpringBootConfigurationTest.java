@@ -46,11 +46,13 @@ public class WingtipsSpringBootConfigurationTest {
 
     private WingtipsSpringBootProperties generateProps(boolean disabled,
                                                        String userIdHeaderKeys,
-                                                       SpanLoggingRepresentation spanLoggingFormat) {
+                                                       SpanLoggingRepresentation spanLoggingFormat,
+                                                       String taggingStrategy) {
         WingtipsSpringBootProperties props = new WingtipsSpringBootProperties();
         props.setWingtipsDisabled(String.valueOf(disabled));
         props.setUserIdHeaderKeys(userIdHeaderKeys);
         props.setSpanLoggingFormat(spanLoggingFormat);
+        props.setServerSideSpanTaggingStrategy(taggingStrategy);
         return props;
     }
 
@@ -62,7 +64,7 @@ public class WingtipsSpringBootConfigurationTest {
     @Test
     public void constructor_works_as_expected(SpanLoggingRepresentation spanLoggingFormat) {
         // given
-        WingtipsSpringBootProperties props = generateProps(false, UUID.randomUUID().toString(), spanLoggingFormat);
+        WingtipsSpringBootProperties props = generateProps(false, UUID.randomUUID().toString(), spanLoggingFormat, "OPENTRACING");
         SpanLoggingRepresentation existingSpanLoggingFormat = Tracer.getInstance().getSpanLoggingRepresentation();
         SpanLoggingRepresentation expectedSpanLoggingFormat = (spanLoggingFormat == null)
                                                               ? existingSpanLoggingFormat
@@ -90,7 +92,7 @@ public class WingtipsSpringBootConfigurationTest {
         RequestTracingFilter appFilterOverride = (appFilterOverrideIsNull) ? null : mock(RequestTracingFilter.class);
         String userIdHeaderKeys = (userIdHeaderKeysIsNull) ? null : UUID.randomUUID().toString();
 
-        WingtipsSpringBootProperties props = generateProps(false, userIdHeaderKeys, null);
+        WingtipsSpringBootProperties props = generateProps(false, userIdHeaderKeys, null, null);
         WingtipsSpringBootConfiguration conf = new WingtipsSpringBootConfiguration(props);
         conf.requestTracingFilter = appFilterOverride;
 
@@ -120,10 +122,50 @@ public class WingtipsSpringBootConfigurationTest {
         assertThat(filterRegistrationBean.getOrder()).isEqualTo(Ordered.HIGHEST_PRECEDENCE);
     }
 
+    @DataProvider(value = {
+            "null",
+            "OPENTRACING",
+            "ZIPKIN",
+            "NONE",
+            "BadFormat"
+        }, splitBy = "\\|")
+    @Test
+    public void wingtipsRequestTracingFilter_returns_FilterRegistrationBean_with_expected_tag_strategies(
+        String tagStrategy
+    ) {
+        // given
+        
+
+        WingtipsSpringBootProperties props = generateProps(false, null, null, tagStrategy);
+        WingtipsSpringBootConfiguration conf = new WingtipsSpringBootConfiguration(props);
+        conf.requestTracingFilter = null;
+
+        // when
+        FilterRegistrationBean filterRegistrationBean = conf.wingtipsRequestTracingFilter();
+
+        // then
+        assertThat(filterRegistrationBean.getFilter())
+            .isNotNull()
+            .isInstanceOf(RequestTracingFilter.class);
+        
+
+        String tagStrategyFilterInitParam =
+            filterRegistrationBean.getInitParameters().get(RequestTracingFilter.TAG_STRATEGY_INIT_PARAM_NAME);
+
+        if (tagStrategy == null) {
+            assertThat(tagStrategyFilterInitParam).isNull();
+        }
+        else {
+            assertThat(tagStrategyFilterInitParam).isEqualTo(tagStrategy);
+        }
+
+        assertThat(filterRegistrationBean.getOrder()).isEqualTo(Ordered.HIGHEST_PRECEDENCE);
+    }
+
     @Test
     public void wingtipsRequestTracingFilter_returns_DoNothingServletFilter_if_WingtipsSpringBootProperties_indicates_disabled() {
         // given
-        WingtipsSpringBootProperties props = generateProps(true, null, null);
+        WingtipsSpringBootProperties props = generateProps(true, null, null, null);
         WingtipsSpringBootConfiguration conf = new WingtipsSpringBootConfiguration(props);
 
         // when

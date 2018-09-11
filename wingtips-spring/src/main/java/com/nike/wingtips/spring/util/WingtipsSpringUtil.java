@@ -9,11 +9,14 @@ import com.nike.wingtips.spring.interceptor.WingtipsClientHttpRequestInterceptor
 import com.nike.wingtips.spring.util.asynchelperwrapper.FailureCallbackWithTracing;
 import com.nike.wingtips.spring.util.asynchelperwrapper.ListenableFutureCallbackWithTracing;
 import com.nike.wingtips.spring.util.asynchelperwrapper.SuccessCallbackWithTracing;
+import com.nike.wingtips.tags.HttpTagStrategy;
 import com.nike.wingtips.util.TracingState;
 
 import org.slf4j.MDC;
 import org.springframework.http.HttpMessage;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpRequest;
+import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.util.concurrent.FailureCallback;
 import org.springframework.util.concurrent.ListenableFutureCallback;
 import org.springframework.util.concurrent.SuccessCallback;
@@ -63,6 +66,20 @@ public class WingtipsSpringUtil {
         );
         return restTemplate;
     }
+    
+    /**
+     * @param tagStrategy The tagging strategy to be used to tag request/response metadata to the subspan
+     * @return A new {@link RestTemplate} instance with a {@link WingtipsClientHttpRequestInterceptor}
+     * already added and with the subspan option on and a {@code HttpTagStrategy} for appending the request/response metadata
+     * to the subspan
+     */
+    public static RestTemplate createTracingEnabledRestTemplate(HttpTagStrategy<HttpRequest, ClientHttpResponse> tagStrategy) {
+        RestTemplate restTemplate = new RestTemplate();
+        restTemplate.getInterceptors().add(
+            new WingtipsClientHttpRequestInterceptor(true, tagStrategy)
+        );
+        return restTemplate;
+    }
 
     /**
      * @return A new {@link AsyncRestTemplate} instance with a {@link WingtipsAsyncClientHttpRequestInterceptor}
@@ -84,6 +101,20 @@ public class WingtipsSpringUtil {
         AsyncRestTemplate asyncRestTemplate = new AsyncRestTemplate();
         asyncRestTemplate.getInterceptors().add(
             new WingtipsAsyncClientHttpRequestInterceptor(surroundCallsWithSubspan)
+        );
+        return asyncRestTemplate;
+    }
+    
+    /**
+     * @param tagStrategy The tagging strategy to be used to tag request/response metadata to the subspan
+     * @return A new {@link AsyncRestTemplate} instance with a {@link WingtipsAsyncClientHttpRequestInterceptor}
+     * already added and with the subspan option on and a tag strategy for appending the request/response metadata
+     * to the subspan
+     */
+    public static AsyncRestTemplate createTracingEnabledAsyncRestTemplate(HttpTagStrategy<HttpRequest, ClientHttpResponse> tagStrategy) {
+        AsyncRestTemplate asyncRestTemplate = new AsyncRestTemplate();
+        asyncRestTemplate.getInterceptors().add(
+            new WingtipsAsyncClientHttpRequestInterceptor(true, tagStrategy)
         );
         return asyncRestTemplate;
     }

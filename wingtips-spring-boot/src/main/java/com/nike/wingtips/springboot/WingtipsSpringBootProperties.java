@@ -25,6 +25,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *         {@link Tracer.SpanLoggingRepresentation} enum. Must be either JSON or KEY_VALUE. If missing then the span
  *         logging format will not be changed (defaults to JSON).
  *     </li>
+ *     <li>
+ *         wingtips.server-side-span-tagging-strategy - Determines the set of tags Wingtips will apply to spans. Represents the
+ *         {@link com.nike.wingtips.tag.HttpTagStrategy} implementation. Must be one of: ZIPKIN, OPENTRACING, or NONE. 
+ *         If missing then the default strategy will not be changed (defaults to OPENTRACING).
+ *     </li>
  * </ul>
  *
  * <p>For example you could set the following properties in your {@code application.properties}:
@@ -32,6 +37,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *     wingtips.wingtips-disabled=false
  *     wingtips.user-id-header-keys=userid,altuserid
  *     wingtips.span-logging-format=KEY_VALUE
+ *     wingtips.server-side-span-tagging-strategy=OPENTRACING
  * </pre>
  *
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
@@ -43,6 +49,7 @@ public class WingtipsSpringBootProperties {
     private boolean wingtipsDisabled = false;
     private String userIdHeaderKeys;
     private Tracer.SpanLoggingRepresentation spanLoggingFormat;
+    private String serverSideSpanTaggingStrategy;
 
     public boolean isWingtipsDisabled() {
         return wingtipsDisabled;
@@ -66,5 +73,13 @@ public class WingtipsSpringBootProperties {
 
     public void setSpanLoggingFormat(Tracer.SpanLoggingRepresentation spanLoggingFormat) {
         this.spanLoggingFormat = spanLoggingFormat;
+    }
+
+    public String getServerSideSpanTaggingStrategy() {
+        return serverSideSpanTaggingStrategy;
+    }
+
+    public void setServerSideSpanTaggingStrategy(String spanTaggingStrategy) {
+        this.serverSideSpanTaggingStrategy = spanTaggingStrategy;
     }
 }

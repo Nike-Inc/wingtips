@@ -1,14 +1,23 @@
 package com.nike.wingtips.spring.interceptor;
 
-import com.nike.wingtips.Span;
-import com.nike.wingtips.Span.SpanPurpose;
-import com.nike.wingtips.Tracer;
-import com.nike.wingtips.spring.testutils.TestUtils.SpanRecorder;
-import com.nike.wingtips.spring.util.HttpRequestWrapperWithModifiableHeaders;
-import com.nike.wingtips.util.TracingState;
+import static com.nike.wingtips.spring.testutils.TestUtils.getExpectedSpanForHeaders;
+import static com.nike.wingtips.spring.testutils.TestUtils.normalizeTracingState;
+import static com.nike.wingtips.spring.testutils.TestUtils.resetTracing;
+import static com.nike.wingtips.spring.testutils.TestUtils.verifyExpectedTracingHeaders;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.eq;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
 
-import com.tngtech.java.junit.dataprovider.DataProvider;
-import com.tngtech.java.junit.dataprovider.DataProviderRunner;
+import java.io.IOException;
+import java.net.URI;
+import java.util.UUID;
 
 import org.junit.After;
 import org.junit.Before;
@@ -23,23 +32,16 @@ import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.util.concurrent.ListenableFuture;
 import org.springframework.util.concurrent.SettableListenableFuture;
 
-import java.io.IOException;
-import java.net.URI;
-import java.util.UUID;
-
-import static com.nike.wingtips.spring.testutils.TestUtils.getExpectedSpanForHeaders;
-import static com.nike.wingtips.spring.testutils.TestUtils.normalizeTracingState;
-import static com.nike.wingtips.spring.testutils.TestUtils.resetTracing;
-import static com.nike.wingtips.spring.testutils.TestUtils.verifyExpectedTracingHeaders;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.catchThrowable;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.verify;
+import com.nike.wingtips.Span;
+import com.nike.wingtips.Span.SpanPurpose;
+import com.nike.wingtips.Tracer;
+import com.nike.wingtips.spring.testutils.TestUtils.SpanRecorder;
+import com.nike.wingtips.spring.util.HttpRequestWrapperWithModifiableHeaders;
+import com.nike.wingtips.tags.HttpTagStrategy;
+import com.nike.wingtips.tags.KnownOpenTracingTags;
+import com.nike.wingtips.util.TracingState;
+import com.tngtech.java.junit.dataprovider.DataProvider;
+import com.tngtech.java.junit.dataprovider.DataProviderRunner;
 
 /**
  * Tests the functionality of {@link WingtipsAsyncClientHttpRequestInterceptor}.
@@ -53,6 +55,9 @@ public class WingtipsAsyncClientHttpRequestInterceptorTest {
     private HttpMethod method;
     private URI uri;
 
+    private ClientHttpResponse normalCompletionResponse;
+    private int normalResponseCode;
+    
     private byte[] body;
     private AsyncClientHttpRequestExecution executionMock;
 
@@ -92,6 +97,10 @@ public class WingtipsAsyncClientHttpRequestInterceptorTest {
             executionResponseFuture = new SettableListenableFuture<>();
             return executionResponseFuture;
         }).when(executionMock).executeAsync(any(HttpRequest.class), any(byte[].class));
+        
+        normalCompletionResponse = mock(ClientHttpResponse.class);
+        normalResponseCode = 200; //Normal
+        doReturn(normalResponseCode).when(normalCompletionResponse).getRawStatusCode();
     }
 
     @After
@@ -162,26 +171,35 @@ public class WingtipsAsyncClientHttpRequestInterceptorTest {
         "false  |   false   |   FUTURE_CANCELLED"
     }, splitBy = "\\|")
     @Test
-    public void intercept_works_as_expected(
+    public void expected_successful_execution(
         boolean currentSpanExists, boolean subspanOptionOn, ResponseFutureResult responseFutureCompletionResult
     ) throws IOException {
         // given
-        WingtipsAsyncClientHttpRequestInterceptor interceptor = new WingtipsAsyncClientHttpRequestInterceptor(subspanOptionOn);
+        WingtipsAsyncClientHttpRequestInterceptor defaultInterceptor = new WingtipsAsyncClientHttpRequestInterceptor(subspanOptionOn);
+        boolean tagsExpected = true; // Tags should be generated in all of the use cases for this test
+        
+        intercept_worked_as_expected(defaultInterceptor, currentSpanExists, subspanOptionOn, responseFutureCompletionResult, tagsExpected);
+    }
+    
+    public void intercept_worked_as_expected(WingtipsAsyncClientHttpRequestInterceptor interceptor,
+            boolean currentSpanExists, boolean subspanOptionOn, ResponseFutureResult responseFutureCompletionResult, boolean tagsExpected
+        ) throws IOException {
+        
         Span rootSpan = (currentSpanExists)
-                        ? Tracer.getInstance().startRequestWithRootSpan("rootSpan")
-                        : null;
-
+                ? Tracer.getInstance().startRequestWithRootSpan("rootSpan")
+                : null;
+        
         // Tracing info should be propagated on the headers if a current span exists when the interceptor is called,
         //      or if the subspan option is turned on. Or to look at it from the other direction
         //      we should *not* see propagation when no current span exists and the subspan option is off.
         boolean expectTracingInfoPropagation = (currentSpanExists || subspanOptionOn);
-
+        
         TracingState tracingStateBeforeInterceptorCall = TracingState.getCurrentThreadTracingState();
-
+        
         // when
         ListenableFuture<ClientHttpResponse> result = interceptor.intercept(httpRequest, body, executionMock);
         assertThat(result).isSameAs(executionResponseFuture);
-
+        
         // then
         // Before the response future finishes we should have zero completed spans.
         assertThat(spanRecorder.completedSpans).isEmpty();
@@ -196,12 +214,13 @@ public class WingtipsAsyncClientHttpRequestInterceptorTest {
         //      (which depends on whether the subspan option was on, which we'll get to later).
         Span expectedSpanForHeaders = getExpectedSpanForHeaders(expectTracingInfoPropagation,
                                                                 tracingStateAtTimeOfExecution);
-        verifyExpectedTracingHeaders(executedRequest, expectedSpanForHeaders);
+         verifyExpectedTracingHeaders(executedRequest, expectedSpanForHeaders);
 
+        
         // Now we can complete the response future to trigger any span closing/etc that might happen.
         switch(responseFutureCompletionResult) {
             case NORMAL_COMPLETION:
-                executionResponseFuture.set(mock(ClientHttpResponse.class));
+                executionResponseFuture.set(normalCompletionResponse);
                 break;
             case EXCEPTION_THROWN:
                 executionResponseFuture.setException(new RuntimeException("kaboom"));
@@ -235,6 +254,24 @@ public class WingtipsAsyncClientHttpRequestInterceptorTest {
 
             // The completed span should have been a CLIENT span.
             assertThat(completedSpan.getSpanPurpose()).isEqualTo(SpanPurpose.CLIENT);
+            
+            if(tagsExpected) {
+                // The completed span has the appropriate tags
+                assertThat(completedSpan.getTags().get(KnownOpenTracingTags.HTTP_METHOD)).isEqualTo(method.toString());
+                assertThat(completedSpan.getTags().get(KnownOpenTracingTags.HTTP_URL)).isEqualTo(uri.toURL().toString());
+                
+                // A non-errored response should have a HTTP Status tag
+                if(responseFutureCompletionResult.equals(ResponseFutureResult.NORMAL_COMPLETION)) {
+                    assertThat(completedSpan.getTags().get(KnownOpenTracingTags.HTTP_STATUS)).isEqualTo(String.valueOf(normalResponseCode));
+                }
+                
+                //Default behavior is to mark span as err'd if execution failed
+                if(!responseFutureCompletionResult.equals(ResponseFutureResult.NORMAL_COMPLETION)) {
+                        assertThat(completedSpan.getTags().get(KnownOpenTracingTags.ERROR)).isEqualTo(Boolean.TRUE.toString());
+                } else {
+                        assertThat(completedSpan.getTags().get(KnownOpenTracingTags.ERROR)).isNull();    
+                }
+            }
         }
         else {
             // The subspan option was turned off, so we should *not* have any completed spans, and the tracing state
@@ -321,6 +358,29 @@ public class WingtipsAsyncClientHttpRequestInterceptorTest {
             .isEqualTo(normalizeTracingState(tracingStateBeforeInterceptorCall));
     }
 
+    @DataProvider(value = {
+            "NORMAL_COMPLETION", 
+            "EXCEPTION_THROWN", 
+            "FUTURE_CANCELLED"
+    })
+    @Test
+    public void intercept_handles_span_closing_logic_even_if_tagging_explodes(ResponseFutureResult responseFutureResult) throws IOException {
+        // given
+        boolean currentSpanExists = false;
+        boolean subspanOptionOn = true;
+        boolean tagsExpected = false; // With all calls exploding we don't expect anything to be tagged
+        HttpTagStrategy<HttpRequest, ClientHttpResponse> explodingTagStrategy = mock(HttpTagStrategy.class);
+        doThrow(new RuntimeException("boom")).when(explodingTagStrategy).tagSpanWithRequestAttributes(any(Span.class), any(HttpRequest.class));
+        doThrow(new RuntimeException("boom")).when(explodingTagStrategy).tagSpanWithResponseAttributes(any(Span.class), any(ClientHttpResponse.class));
+        doThrow(new RuntimeException("boom")).when(explodingTagStrategy).handleErroredRequest(any(Span.class), any(Throwable.class));
+        
+        // when
+        WingtipsAsyncClientHttpRequestInterceptor explodingTagStrategyInterceptor = new WingtipsAsyncClientHttpRequestInterceptor(true, explodingTagStrategy);
+           
+        // then
+        intercept_worked_as_expected(explodingTagStrategyInterceptor, currentSpanExists, subspanOptionOn, responseFutureResult, tagsExpected);
+    }
+    
     @DataProvider(value = {
         "true",
         "false"

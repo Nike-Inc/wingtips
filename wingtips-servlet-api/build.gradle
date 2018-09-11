@@ -22,4 +22,11 @@ dependencies {
             "io.rest-assured:rest-assured:$restAssuredVersion",
             "org.eclipse.jetty:jetty-webapp:$jettyVersion"
     )
+jacocoTestReport {
+    reports {
+        xml.enabled false
+        csv.enabled false
+        html.destination file("${buildDir}/jacocoHtml")
+    }
+}
 }

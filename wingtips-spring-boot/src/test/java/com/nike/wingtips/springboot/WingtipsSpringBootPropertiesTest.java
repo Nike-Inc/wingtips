@@ -72,6 +72,15 @@ public class WingtipsSpringBootPropertiesTest {
             props.setSpanLoggingFormat(null);
             assertThat(props.getSpanLoggingFormat()).isNull();
         }
+        
+        // tagStrategy getter/setter
+        {
+            props.setServerSideSpanTaggingStrategy("OPENTRACING");
+            assertThat(props.getServerSideSpanTaggingStrategy()).isEqualTo("OPENTRACING");
+
+            props.setServerSideSpanTaggingStrategy(null);
+            assertThat(props.getServerSideSpanTaggingStrategy()).isNull();
+        }
     }
 
 }

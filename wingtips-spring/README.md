@@ -8,7 +8,8 @@ This module is a plugin extension module of the core Wingtips library and contai
 
 * **`WingtipsClientHttpRequestInterceptor`** - An interceptor for Spring's synchronous `RestTemplate` HTTP client that
 automatically [propagates](../README.md#propagating_traces) Wingtips tracing information on the downstream call's 
-request headers, with an option to surround the downstream call in a [subspan](../README.md#sub_spans).  
+request headers, with an option to surround the downstream call in a [subspan](../README.md#sub_spans). This interceptor
+uses the `OpenTracingTagStrategy` to tag any created subspans. See [Client Request Span Tagging](#client_request_span_tagging) for more details. 
 * **`WingtipsAsyncClientHttpRequestInterceptor`** - An interceptor for Spring's asynchronous `AsyncRestTemplate` HTTP 
 client that automatically [propagates](../README.md#propagating_traces) Wingtips tracing information on the 
 downstream call's request headers, with an option to surround the downstream call in a 
@@ -28,6 +29,76 @@ available for public use if you have the same need.
 module. 
 
 For general Wingtips information please see the [base project README.md](../README.md).
+
+<a name="client_request_span_tagging"/>
+## Client Request Span Tagging
+
+Both synchronous and asynchronous outbound requests make calls to the provided `HttpTagStrategy` to allow for metadata
+to be appended to the span surrounding the request. 
+
+Related: [Server Request Span Tagging](../wingtips-servlet-api/README.md#server_request_span_tagging)
+
+### Default Tagging Strategy
+
+The default implementation uses the `OpenTracingTagStrategy` to append the following tags to the span.
+
+|  Tag  | Description | Example value |
+| `http.method` | The request method used. | `GET` |
+| `http.url` | The full URL of the request with no request parameters | `http://api.example.com/endpoint` |
+| `http.status_code` | The status code from the response | `200` |
+| `error` | Only exists if there was an error while making the request, this tag will not be present if there were no errors. Determined by the [SpringHttpClientTagAdapter#isErrorResponse(response)](src/main/java/com/nike/wingtips/spring/interceptor/tag/SpringHttpClientTagAdapter.java) | `true` |
+
+### Defining a Custom Tagging Strategy
+
+The `WingtipsSpringUtil` class exposes methods to generate a `RestTemplate` and an `AsyncRestTemplate` that accept an
+`HttpTagStrategy<HttpRequest, ClientHttpResponse>` as a parameter. 
+- `public static RestTemplate createTracingEnabledRestTemplate(HttpTagStrategy<HttpRequest, ClientHttpResponse> tagStrategy)`
+- `public static AsyncRestTemplate createTracingEnabledAsyncRestTemplate(HttpTagStrategy<HttpRequest, ClientHttpResponse> tagStrategy)`
+
+The tagStrategy provided will be used to append tags for the requests made with the returned rest template. 
+
+#### Example: Use Zipkin tags with RestTemplates
+
+```java
+// Example use of a RestTemplate
+private String getQuoteFromApi() {
+	RestTemplate restTemplate = createTracedRestTemplate();
+	Quote quote = restTemplate.getForObject("http://gturnquist-quoters.cfapps.io/api/random", Quote.class);
+	return quote.toString();
+}
+
+// Get a tracing-enabled RestTemplate
+private RestTemplate createTracedRestTemplate() {
+    // Tag the subspan with Zipkin tags
+	return WingtipsSpringUtil.createTracingEnabledRestTemplate(getZipkinTagStrategy());
+}
+ 
+private HttpTagStrategy<HttpRequest, ClientHttpResponse> getZipkinTagStrategy() {
+	return new ZipkinTagStrategy<HttpRequest, ClientHttpResponse>(new SpringHttpClientTagAdapter());
+}
+```
+
+### Changing the logic for an `error` response
+
+It may be desirable to change the logic that determines which spans are tagged with `error`=`true`. By default only responses that 
+have a response code >= `500` or have a server-side  exception trying to execute will be flagged as having an error.
+
+The following example generates a `RestTemplate` that will tag any response with a response code >= 400 as having an error while still
+maintaining the `OpenTracingTagStrategy`.
+
+```java 
+SpringHttpClientTagAdapter errorAdapter = new SpringHttpClientTagAdapter() {
+    @Override
+    public boolean isErrorResponse(ClientHttpResponse response) {
+        try {
+            return response.getRawStatusCode() >= 400;
+        } catch (IOException ioe) {
+            return true;
+        }
+    }
+};
+AsyncRestTemplate asyncTemplate = WingtipsSpringUtil.createTracingEnabledAsyncRestTemplate(new OpenTracingTagStrategy<HttpRequest, ClientHttpResponse>(errorAdapter));
+```
 
 ## Usage Examples
 

@@ -12,7 +12,8 @@ in and completing it when the request finishes. This filter automatically uses `
 information from the incoming request headers for the new span if available. Sets the `X-B3-TraceId` response header to 
 the Trace ID for each request. Supports Servlet 3 environments (including asynchronous requests) as well as Servlet 2.x 
 environments. You can set the `user-id-header-keys-list` servlet filter param if you expect your service to receive any 
-request headers that represent a user ID (if you don't have any user ID headers then this can be ignored).
+request headers that represent a user ID (if you don't have any user ID headers then this can be ignored). By default, 
+this filter will tag spans with metadata from the request and response using the [OpenTracingTagStrategy](../wingtips-core/src/main/java/com/nike/wingtips/tags/OpenTracingTagStrategy.java). 
 
 Please make sure you have read the [base project README.md](../README.md). This readme assumes you understand the 
 principles and usage instructions described there.
@@ -32,6 +33,10 @@ header keys that represent the user ID of the user making the call: `userid` or 
         <param-name>user-id-header-keys-list</param-name>
         <param-value>userid,altuserid</param-value>
     </init-param>
+    <init-param>
+        <param-name>server-side-span-tag-strategy</param-name>
+        <param-value>OPENTRACING</param-value>
+    </init-param>
 </filter>
 
 <filter-mapping>
@@ -42,6 +47,8 @@ header keys that represent the user ID of the user making the call: `userid` or 
 
 If your service does not have any user ID headers you can remove the `<init-param>` element entirely or set the 
 `<param-value>` to be empty.
+
+The filter will use `OPENTRACING` tag strategy by default if you remove the `<init-param>` for `server-side-span-tag-strategy`.  
 
 That's it for incoming requests. This Filter will do the right thing and start a root span or child span for incoming 
 requests (depending on whether or not the caller included tracing headers), add the trace ID to the response as a 
@@ -86,6 +93,55 @@ unintentional information leakage.
 See the [base project readme's section on propagation](../README.md#propagating_traces) for further details on 
 propagating tracing information. You may also want to consider
 [wrapping downstream calls in a subspan](../README.md#sub_spans_for_downstream_calls).
+
+### Server Request Span Tagging
+
+`HttpServletRequests` and `HttpServletResponses` handled by the `RequestTracingFilter` are passed to a `HttpTagStrategy`
+to add metadata to a Span in the form of tags. The [OpenTracingTagStrategy](../wingtips-core/src/main/java/com/nike/wingtips/tags/OpenTracingTagStrategy.java)
+is default.
+
+#### Using a pre-defined tag strategy
+
+The `HttpTagStrategy` is defined by the init param `server-side-span-tag-strategy`.  Valid values are:
+- `OPENTRACING` **default** - Uses the [OpenTracingTagStrategy](../wingtips-core/src/main/java/com/nike/wingtips/tags/OpenTracingTagStrategy.java)
+- `WINGTIPS` Uses the [WingtipsTagStrategy](../wingtips-core/src/main/java/com/nike/wingtips/tags/WingtipsTagStrategy.java)
+- `NONE` Uses the [NoOpTagStrategy](../wingtips-core/src/main/java/com/nike/wingtips/tags/NoOpTagStrategy.java)
+
+#### Providing your own tag strategy
+
+##### 1. Extend the `RequestTracingFilter` class
+
+To provide a custom tag strategy, extend the `RequestTracingFilter` and override
+`protected void initializeTagStrategy(FilterConfig filterConfig)` to return your
+tag strategy.  
+
+In this example, the provided strategy extends the OpenTracing implementation to 
+add a tag for the exception name:
+
+```java
+public class ErrorTaggingRequestTracingFilter extends RequestTracingFilter {
+    @Override
+    protected HttpTagStrategy<HttpServletRequest, HttpServletResponse> initializeTagStrategy(FilterConfig filterConfig)  {
+    		return new OpenTracingTagStrategy<HttpServletRequest, HttpServletResponse> (new ServletRequestTagAdapter()) {
+
+				@Override public void handleErroredRequest(Span span, Throwable throwable) {
+					super.handleErroredRequest(span, throwable);
+					span.putTag("error.class", throwable.getClass().getName());
+				}
+    		};
+    }    
+}
+```
+
+##### 2. Use your class in the servlet configuration
+
+``` xml
+<filter>
+    <filter-name>traceFilter</filter-name>
+    <filter-class>com.example.org.filter.ErrorTaggingRequestTracingFilter</filter-class>
+    <init-param>
+    ...
+```
 
 <a name="servlet_api_required_at_runtime"></a>
 ## NOTE - Servlet API dependency required at runtime

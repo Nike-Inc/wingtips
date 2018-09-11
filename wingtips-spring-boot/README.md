@@ -31,7 +31,8 @@ And (optionally) specify configuration from your Spring Boot app's `application.
 ``` ini
 wingtips.wingtips-disabled=false
 wingtips.user-id-header-keys=userid,altuserid
-wingtips.span-logging-format=KEY_VALUE 
+wingtips.span-logging-format=KEY_VALUE
+wingtips.server-side-span-tag-strategy=ZIPKIN
 ```
 
 ## Feature details
@@ -49,6 +50,10 @@ features:
     `WingtipsSpringBootConfiguration` will use that one instead of creating a new default one.
     - Sets the span logging representation used by Wingtips to whatever you specify in your 
     `wingtips.span-logging-format` application property (see `WingtipsSpringBootProperties` description below).
+    - The `RequestTracingFilter` uses a `ServletRequestTagStrategy` to implement `OpenTracing` tags for `SERVER` 
+    requests.  To modify the tag strategy, supply a `@Bean` of type 
+    `HttpRequestResponseTagStrategy<HttpServletRequest, HttpServletResponse>` and it will be injected into the 
+    	`RequestTracingFilter`. 
 * **`WingtipsSpringBootProperties`** - The Spring Boot 
 [@ConfigurationProperties](https://docs.spring.io/spring-boot/docs/current/reference/html/boot-features-external-config.html#boot-features-external-config-typesafe-configuration-properties) 
 companion for `WingtipsSpringBootConfiguration` (described above) that allows you to customize some Wingtips behaviors 

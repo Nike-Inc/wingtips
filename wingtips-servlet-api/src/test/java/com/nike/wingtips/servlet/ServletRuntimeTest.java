@@ -1,16 +1,12 @@
 package com.nike.wingtips.servlet;
 
-import com.nike.wingtips.servlet.ServletRuntime.Servlet2Runtime;
-import com.nike.wingtips.servlet.ServletRuntime.Servlet3Runtime;
-import com.nike.wingtips.util.TracingState;
-
-import com.tngtech.java.junit.dataprovider.DataProvider;
-import com.tngtech.java.junit.dataprovider.DataProviderRunner;
-
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.mockito.ArgumentCaptor;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import java.io.IOException;
 import java.util.List;
@@ -22,13 +18,17 @@ import javax.servlet.DispatcherType;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.catchThrowable;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
+
+import com.nike.wingtips.servlet.ServletRuntime.Servlet2Runtime;
+import com.nike.wingtips.servlet.ServletRuntime.Servlet3Runtime;
+import com.nike.wingtips.tags.HttpTagStrategy;
+import com.nike.wingtips.util.TracingState;
+import com.tngtech.java.junit.dataprovider.DataProvider;
+import com.tngtech.java.junit.dataprovider.DataProviderRunner;
 
 /**
  * Tests the functionality of {@link ServletRuntime}.
@@ -118,7 +118,7 @@ public class ServletRuntimeTest {
     ) throws ServletException, IOException {
         // when
         Throwable ex = catchThrowable(
-            () -> servlet2Runtime.setupTracingCompletionWhenAsyncRequestCompletes(requestMock, mock(TracingState.class))
+            () -> servlet2Runtime.setupTracingCompletionWhenAsyncRequestCompletes(requestMock, mock(TracingState.class), mock(HttpTagStrategy.class))
         );
 
         // then
@@ -174,7 +174,7 @@ public class ServletRuntimeTest {
         ArgumentCaptor<AsyncListener> listenerCaptor = ArgumentCaptor.forClass(AsyncListener.class);
 
         // when
-        servlet3Runtime.setupTracingCompletionWhenAsyncRequestCompletes(requestMock, tracingStateMock);
+        servlet3Runtime.setupTracingCompletionWhenAsyncRequestCompletes(requestMock, tracingStateMock, null);
 
         // then
         verify(asyncContextMock).addListener(listenerCaptor.capture());

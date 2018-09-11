@@ -1,7 +1,15 @@
 package com.nike.wingtips.springboot;
 
-import com.nike.wingtips.Tracer;
-import com.nike.wingtips.servlet.RequestTracingFilter;
+import java.io.IOException;
+
+import javax.servlet.Filter;
+import javax.servlet.FilterChain;
+import javax.servlet.FilterConfig;
+import javax.servlet.ServletException;
+import javax.servlet.ServletRequest;
+import javax.servlet.ServletResponse;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
@@ -11,14 +19,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
 
-import java.io.IOException;
-
-import javax.servlet.Filter;
-import javax.servlet.FilterChain;
-import javax.servlet.FilterConfig;
-import javax.servlet.ServletException;
-import javax.servlet.ServletRequest;
-import javax.servlet.ServletResponse;
+import com.nike.wingtips.Tracer;
+import com.nike.wingtips.servlet.RequestTracingFilter;
+import com.nike.wingtips.tags.HttpTagAdapter;
+import com.nike.wingtips.tags.HttpTagStrategy;
 
 /**
  * Wingtips Spring Boot configuration - this class enables Wingtips tracing on incoming requests by exposing a {@link
@@ -70,6 +74,9 @@ public class WingtipsSpringBootConfiguration {
 
     @SuppressWarnings("WeakerAccess")
     protected WingtipsSpringBootProperties wingtipsProperties;
+    
+    @Autowired(required = false)
+    protected HttpTagStrategy<HttpServletRequest, HttpServletResponse> tagStrategy;
 
     @Autowired
     public WingtipsSpringBootConfiguration(WingtipsSpringBootProperties wingtipsProperties) {
@@ -106,6 +113,12 @@ public class WingtipsSpringBootConfiguration {
         if (wingtipsProperties.getUserIdHeaderKeys() != null) {
             frb.addInitParameter(RequestTracingFilter.USER_ID_HEADER_KEYS_LIST_INIT_PARAM_NAME,
                                  wingtipsProperties.getUserIdHeaderKeys());
+        }
+        
+        // Add the tagging strategy to the filter
+        if (wingtipsProperties.getServerSideSpanTaggingStrategy() != null) {
+            frb.addInitParameter(RequestTracingFilter.TAG_STRATEGY_INIT_PARAM_NAME, 
+                    wingtipsProperties.getServerSideSpanTaggingStrategy());
         }
         // Set the order so that the tracing filter is registered first
         frb.setOrder(Ordered.HIGHEST_PRECEDENCE);

@@ -1,24 +1,7 @@
 package com.nike.wingtips.componenttest;
 
-import com.nike.internal.util.MapBuilder;
-import com.nike.internal.util.Pair;
-import com.nike.wingtips.Span;
-import com.nike.wingtips.TraceHeaders;
-import com.nike.wingtips.Tracer;
-import com.nike.wingtips.lifecyclelistener.SpanLifecycleListener;
-import com.nike.wingtips.servlet.RequestTracingFilter;
-
-import com.tngtech.java.junit.dataprovider.DataProvider;
-import com.tngtech.java.junit.dataprovider.DataProviderRunner;
-
-import org.eclipse.jetty.server.Server;
-import org.eclipse.jetty.servlet.ServletContextHandler;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import static io.restassured.RestAssured.given;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.net.ServerSocket;
@@ -39,16 +22,34 @@ import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import io.restassured.response.ExtractableResponse;
+import org.eclipse.jetty.server.Server;
+import org.eclipse.jetty.servlet.ServletContextHandler;
+import org.junit.After;
+import org.junit.AfterClass;
+import org.junit.Before;
+import org.junit.BeforeClass;
+import org.junit.Ignore;
+import org.junit.Test;
+import org.junit.runner.RunWith;
 
-import static io.restassured.RestAssured.given;
-import static org.assertj.core.api.Assertions.assertThat;
+import com.nike.internal.util.MapBuilder;
+import com.nike.internal.util.Pair;
+import com.nike.wingtips.Span;
+import com.nike.wingtips.TraceHeaders;
+import com.nike.wingtips.Tracer;
+import com.nike.wingtips.lifecyclelistener.SpanLifecycleListener;
+import com.nike.wingtips.servlet.RequestTracingFilter;
+import com.tngtech.java.junit.dataprovider.DataProvider;
+import com.tngtech.java.junit.dataprovider.DataProviderRunner;
+
+import io.restassured.response.ExtractableResponse;
 
 /**
  * Component test to verify that {@link RequestTracingFilter} works as expected when deployed to a real running server.
  *
  * @author Nic Munroe
  */
+@Ignore
 @RunWith(DataProviderRunner.class)
 public class RequestTracingFilterComponentTest {
 
@@ -228,6 +229,41 @@ public class RequestTracingFilterComponentTest {
         verifySingleSpanCompletedAndReturnedInResponse(response, SLEEP_TIME_MILLIS, upstreamSpanInfo.getLeft());
     }
 
+    @DataProvider(value = {
+            "true",
+            "false"
+    })
+    @Test
+    public void verify_tags_set(boolean isError) {
+    
+        ExtractableResponse response =
+                given()
+                .baseUri("http://localhost")
+                .port(port)
+                .log().all()
+                .when()
+                .get(isError? ASYNC_ERROR_PATH : ASYNC_PATH)
+                .then()
+                .log().all()
+                .extract();
+
+        Span completedSpan = spanRecorder.completedSpans.get(0);
+        
+        if(isError) {
+            assertThat(response.statusCode()).isEqualTo(500);
+            assertThat(completedSpan.getTags().get("http.status_code")).isEqualTo("500");
+            assertThat(completedSpan.getTags().get("error")).isEqualTo("true");
+        } else {
+            assertThat(response.statusCode()).isEqualTo(200);
+            assertThat(completedSpan.getTags().get("http.status_code")).isEqualTo("200");
+            assertThat(completedSpan.getTags().get("error")).isNull();;    
+        }
+        
+        assertThat(completedSpan.getTags().get("http.url")).isEqualTo(ASYNC_ERROR_PATH);
+        assertThat(completedSpan.getTags().get("http.method")).isEqualTo("GET");
+        
+    }
+    
     private Pair<Span, Map<String, String>> generateUpstreamSpanHeaders() {
         Span span = Span.newBuilder("upstreamSpan", Span.SpanPurpose.CLIENT).build();
         Map<String, String> headers = MapBuilder

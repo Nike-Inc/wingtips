@@ -1,12 +1,14 @@
 package com.nike.wingtips.servlet;
 
-import com.nike.wingtips.util.TracingState;
+import javax.servlet.ServletRequest;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.servlet.ServletRequest;
-import javax.servlet.http.HttpServletRequest;
+import com.nike.wingtips.tags.HttpTagStrategy;
+import com.nike.wingtips.util.TracingState;
 
 /**
  * A class for abstracting out bits of the Servlet API that are version-dependent, e.g. async request support
@@ -56,7 +58,8 @@ abstract class ServletRuntime {
      * which should be completed when the given async servlet request finishes.
      */
     abstract void setupTracingCompletionWhenAsyncRequestCompletes(HttpServletRequest asyncRequest,
-                                                                  TracingState originalRequestTracingState);
+                                                                  TracingState originalRequestTracingState,
+                                                                  HttpTagStrategy<HttpServletRequest,HttpServletResponse> tagStrategy);
 
     /**
      * The dispatcher type {@code javax.servlet.DispatcherType.ASYNC} introduced in Servlet 3.0 means a filter can be
@@ -114,7 +117,8 @@ abstract class ServletRuntime {
 
         @Override
         public void setupTracingCompletionWhenAsyncRequestCompletes(HttpServletRequest asyncRequest,
-                                                                    TracingState originalRequestTracingState) {
+                                                                    TracingState originalRequestTracingState,
+                                                                    HttpTagStrategy<HttpServletRequest,HttpServletResponse> tagStrategy) {
             throw new IllegalStateException("This method should never be called in a pre-Servlet-3.0 environment.");
         }
 
@@ -136,10 +140,11 @@ abstract class ServletRuntime {
 
         @Override
         public void setupTracingCompletionWhenAsyncRequestCompletes(HttpServletRequest asyncRequest,
-                                                                    TracingState originalRequestTracingState) {
+                                                                    TracingState originalRequestTracingState,
+                                                                    HttpTagStrategy<HttpServletRequest,HttpServletResponse> tagStrategy) {
             // Async processing was started, so we have to complete it with a listener.
             asyncRequest.getAsyncContext().addListener(
-                new WingtipsRequestSpanCompletionAsyncListener(originalRequestTracingState)
+                new WingtipsRequestSpanCompletionAsyncListener(originalRequestTracingState, tagStrategy)
             );
         }
 

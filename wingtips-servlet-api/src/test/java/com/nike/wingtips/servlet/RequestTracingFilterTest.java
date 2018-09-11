@@ -1,38 +1,5 @@
 package com.nike.wingtips.servlet;
 
-import com.nike.wingtips.Span;
-import com.nike.wingtips.Span.SpanPurpose;
-import com.nike.wingtips.TraceAndSpanIdGenerator;
-import com.nike.wingtips.TraceHeaders;
-import com.nike.wingtips.Tracer;
-import com.nike.wingtips.util.TracingState;
-
-import com.tngtech.java.junit.dataprovider.DataProvider;
-import com.tngtech.java.junit.dataprovider.DataProviderRunner;
-import com.tngtech.java.junit.dataprovider.UseDataProvider;
-
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.slf4j.MDC;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-
-import javax.servlet.AsyncContext;
-import javax.servlet.AsyncListener;
-import javax.servlet.FilterChain;
-import javax.servlet.FilterConfig;
-import javax.servlet.ServletException;
-import javax.servlet.ServletRequest;
-import javax.servlet.ServletResponse;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-
 import static com.nike.wingtips.servlet.ServletRuntime.ASYNC_LISTENER_CLASSNAME;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
@@ -50,6 +17,44 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
+import java.io.IOException;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+
+import javax.servlet.AsyncContext;
+import javax.servlet.AsyncListener;
+import javax.servlet.FilterChain;
+import javax.servlet.FilterConfig;
+import javax.servlet.ServletException;
+import javax.servlet.ServletRequest;
+import javax.servlet.ServletResponse;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.slf4j.MDC;
+
+import com.nike.wingtips.Span;
+import com.nike.wingtips.Span.SpanPurpose;
+import com.nike.wingtips.TraceAndSpanIdGenerator;
+import com.nike.wingtips.TraceHeaders;
+import com.nike.wingtips.Tracer;
+import com.nike.wingtips.servlet.tag.ServletRequestTagAdapter;
+import com.nike.wingtips.tags.HttpTagStrategy;
+import com.nike.wingtips.tags.NoOpTagStrategy;
+import com.nike.wingtips.tags.OpenTracingTagStrategy;
+import com.nike.wingtips.tags.ZipkinTagStrategy;
+import com.nike.wingtips.util.TracingState;
+import com.tngtech.java.junit.dataprovider.DataProvider;
+import com.tngtech.java.junit.dataprovider.DataProviderRunner;
+import com.tngtech.java.junit.dataprovider.UseDataProvider;
+
 /**
  * Tests the functionality of {@link RequestTracingFilter}
  */
@@ -65,6 +70,7 @@ public class RequestTracingFilterTest {
     private List<AsyncListener> capturedAsyncListeners;
     private FilterConfig filterConfigMock;
     private ServletRuntime servletRuntimeMock;
+    HttpTagStrategy<HttpServletRequest, HttpServletResponse> tagStrategy;
 
     private static final String USER_ID_HEADER_KEY = "userId";
     private static final String ALT_USER_ID_HEADER_KEY = "altUserId";
@@ -75,6 +81,21 @@ public class RequestTracingFilterTest {
     private RequestTracingFilter getBasicFilter() {
         RequestTracingFilter filter = new RequestTracingFilter();
 
+        try {
+            filter.init(filterConfigMock);
+        } catch (ServletException e) {
+            throw new RuntimeException(e);
+        }
+
+        return filter;
+    }
+    
+    private RequestTracingFilter getBasicFilterWithNoTagging() {
+        RequestTracingFilter filter = new RequestTracingFilter();
+
+        doReturn("NONE")
+            .when(filterConfigMock)
+            .getInitParameter(RequestTracingFilter.TAG_STRATEGY_INIT_PARAM_NAME);
         try {
             filter.init(filterConfigMock);
         } catch (ServletException e) {
@@ -103,11 +124,17 @@ public class RequestTracingFilterTest {
         responseMock = mock(HttpServletResponse.class);
         filterChainMock = mock(FilterChain.class);
         spanCapturingFilterChain = new SpanCapturingFilterChain();
-
+        tagStrategy = new OpenTracingTagStrategy(new ServletRequestTagAdapter());
+        doReturn(new StringBuffer("http://example.com/endpoint")).when(requestMock).getRequestURL();
+        
         filterConfigMock = mock(FilterConfig.class);
         doReturn(USER_ID_HEADER_KEYS_INIT_PARAM_VALUE_STRING)
             .when(filterConfigMock)
             .getInitParameter(RequestTracingFilter.USER_ID_HEADER_KEYS_LIST_INIT_PARAM_NAME);
+        
+        doReturn("OPENTRACING")
+            .when(filterConfigMock)
+            .getInitParameter(RequestTracingFilter.TAG_STRATEGY_INIT_PARAM_NAME);
 
         servletRuntimeMock = mock(ServletRuntime.class);
 
@@ -205,7 +232,7 @@ public class RequestTracingFilterTest {
     @Test
     public void doFilter_should_not_explode_if_request_and_response_are_HttpServletRequests_and_HttpServletResponses() throws IOException, ServletException {
         // expect
-        getBasicFilter().doFilter(mock(HttpServletRequest.class), mock(HttpServletResponse.class), mock(FilterChain.class));
+        getBasicFilterWithNoTagging().doFilter(mock(HttpServletRequest.class), mock(HttpServletResponse.class), mock(FilterChain.class));
         // No explosion no problem
     }
 
@@ -400,7 +427,7 @@ public class RequestTracingFilterTest {
         if (isAsyncRequest) {
             assertThat(filterChainExploded).isTrue();
             verify(filterSpy).isAsyncRequest(requestMock);
-            verify(filterSpy).setupTracingCompletionWhenAsyncRequestCompletes(eq(requestMock), any(TracingState.class));
+            verify(filterSpy).setupTracingCompletionWhenAsyncRequestCompletes(eq(requestMock), any(TracingState.class), any(HttpTagStrategy.class));
             assertThat(spanContextHolder).hasSize(1);
             // The span should not be *completed* for an async request, but the
             //      setupTracingCompletionWhenAsyncRequestCompletes verification above represents the equivalent for
@@ -587,7 +614,7 @@ public class RequestTracingFilterTest {
         // then
         assertThat(spanCapturingFilterChain.capturedSpan).isNotNull();
         assertThat(spanCapturingFilterChain.capturedSpan.isCompleted()).isFalse();
-        verify(filterSpy).setupTracingCompletionWhenAsyncRequestCompletes(eq(requestMock), any(TracingState.class));
+        verify(filterSpy).setupTracingCompletionWhenAsyncRequestCompletes(eq(requestMock), any(TracingState.class), any(HttpTagStrategy.class));
     }
 
     @Test
@@ -604,7 +631,7 @@ public class RequestTracingFilterTest {
         assertThat(spanCapturingFilterChain.capturedSpan).isNotNull();
         assertThat(spanCapturingFilterChain.capturedSpan.isCompleted()).isTrue();
         verify(filterSpy, never()).setupTracingCompletionWhenAsyncRequestCompletes(
-            any(HttpServletRequest.class), any(TracingState.class)
+            any(HttpServletRequest.class), any(TracingState.class), eq(tagStrategy)
         );
     }
 
@@ -623,7 +650,7 @@ public class RequestTracingFilterTest {
         assertThat(spanCapturingFilterChain.capturedSpan.isCompleted()).isFalse();
         assertThat(capturedAsyncListeners).hasSize(1);
         assertThat(capturedAsyncListeners.get(0)).isInstanceOf(WingtipsRequestSpanCompletionAsyncListener.class);
-        verify(filterSpy).setupTracingCompletionWhenAsyncRequestCompletes(eq(requestMock), any(TracingState.class));
+        verify(filterSpy).setupTracingCompletionWhenAsyncRequestCompletes(eq(requestMock), any(TracingState.class), any(HttpTagStrategy.class));
     }
 
     @Test
@@ -642,7 +669,7 @@ public class RequestTracingFilterTest {
         assertThat(spanCapturingFilterChain.capturedSpan.isCompleted()).isTrue();
         assertThat(capturedAsyncListeners).hasSize(0);
         verify(filterSpy, never()).setupTracingCompletionWhenAsyncRequestCompletes(
-            any(HttpServletRequest.class), any(TracingState.class)
+            any(HttpServletRequest.class), any(TracingState.class), eq(tagStrategy)
         );
     }
 
@@ -711,12 +738,12 @@ public class RequestTracingFilterTest {
         TracingState tracingStateMock = mock(TracingState.class);
 
         // when
-        filterSpy.setupTracingCompletionWhenAsyncRequestCompletes(requestMock, tracingStateMock);
+        filterSpy.setupTracingCompletionWhenAsyncRequestCompletes(requestMock, tracingStateMock, tagStrategy);
 
         // then
-        verify(filterSpy).setupTracingCompletionWhenAsyncRequestCompletes(requestMock, tracingStateMock);
+        verify(filterSpy).setupTracingCompletionWhenAsyncRequestCompletes(requestMock, tracingStateMock, tagStrategy);
         verify(filterSpy).getServletRuntime(requestMock);
-        verify(servletRuntimeMock).setupTracingCompletionWhenAsyncRequestCompletes(requestMock, tracingStateMock);
+        verify(servletRuntimeMock).setupTracingCompletionWhenAsyncRequestCompletes(requestMock, tracingStateMock, tagStrategy);
         verifyNoMoreInteractions(filterSpy, servletRuntimeMock, requestMock, tracingStateMock);
     }
 
@@ -755,6 +782,70 @@ public class RequestTracingFilterTest {
 
         // then: the result should be false
         assertThat(result).isFalse();
+    }
+    
+ // VERIFY initializeTagStrategy ==============================
+
+    @DataProvider(value = {
+            "opentracing",
+            "OpenTracing",
+            "ZIPKIN",
+            "NONE",
+            "NoNe",
+            "NOOP",
+            "null",
+            "strategyWontBeFound"
+        })
+    @Test
+    public void initializeTagStrategy_returns_expected_strategies(String strategyFromConfig) {
+        
+            // Given
+            RequestTracingFilter filter = new RequestTracingFilter();
+        FilterConfig filterConfig = mock(FilterConfig.class);
+        doReturn(strategyFromConfig)
+            .when(filterConfig)
+            .getInitParameter(RequestTracingFilter.TAG_STRATEGY_INIT_PARAM_NAME);
+        
+        // when
+        HttpTagStrategy<HttpServletRequest, HttpServletResponse> tagStrategy = filter.initializeTagStrategy(filterConfig);
+
+        // then
+
+        // Default is OpenTracing
+        if (strategyFromConfig == null || "opentracing".equalsIgnoreCase(strategyFromConfig) || "strategyWontBeFound".equalsIgnoreCase(strategyFromConfig)) {
+                assertThat(tagStrategy).isInstanceOf(OpenTracingTagStrategy.class);
+        
+        } else if("zipkin".equalsIgnoreCase(strategyFromConfig)) {
+                assertThat(tagStrategy).isInstanceOf(ZipkinTagStrategy.class);
+        
+        } else if("none".equalsIgnoreCase(strategyFromConfig) || "noop".equalsIgnoreCase(strategyFromConfig)) {
+            assertThat(tagStrategy).isInstanceOf(NoOpTagStrategy.class); 
+        }
+    }
+    
+    @Test
+    public void error_from_tagstrategy_doesnt_impact_anything_else() throws ServletException, IOException {
+        // given
+        RequestTracingFilter filter = new RequestTracingFilter() {
+            @Override
+            protected HttpTagStrategy<HttpServletRequest, HttpServletResponse> initializeTagStrategy(FilterConfig filterConfig) {
+                return new HttpTagStrategy<HttpServletRequest, HttpServletResponse>() {
+                    @Override public void tagSpanWithRequestAttributes(Span span, HttpServletRequest requestObj) { throw new RuntimeException("boom"); }
+                    @Override public void tagSpanWithResponseAttributes(Span span, HttpServletResponse responseObj) { throw new RuntimeException("boom"); }
+                    @Override public void handleErroredRequest(Span span, Throwable throwable) { throw new RuntimeException("boom"); }
+                };
+            }
+        };
+
+        filter.init(filterConfigMock);
+        RequestTracingFilter filterSpy = spy(filter);
+        
+        //when 
+        filterSpy.doFilterInternal(requestMock, responseMock, spanCapturingFilterChain);
+
+        // then
+        assertThat(spanCapturingFilterChain.capturedSpan).isNotNull();
+        assertThat(spanCapturingFilterChain.capturedSpan.isCompleted()).isTrue();
     }
 
 }

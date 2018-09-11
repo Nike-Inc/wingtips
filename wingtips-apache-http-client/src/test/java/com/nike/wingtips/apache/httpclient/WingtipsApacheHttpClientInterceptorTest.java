@@ -1,34 +1,5 @@
 package com.nike.wingtips.apache.httpclient;
 
-import com.nike.wingtips.Span;
-import com.nike.wingtips.Span.SpanPurpose;
-import com.nike.wingtips.Tracer;
-
-import com.tngtech.java.junit.dataprovider.DataProvider;
-import com.tngtech.java.junit.dataprovider.DataProviderRunner;
-
-import org.apache.http.HttpException;
-import org.apache.http.HttpHost;
-import org.apache.http.HttpRequest;
-import org.apache.http.HttpRequestInterceptor;
-import org.apache.http.HttpResponse;
-import org.apache.http.HttpResponseInterceptor;
-import org.apache.http.RequestLine;
-import org.apache.http.client.methods.HttpRequestWrapper;
-import org.apache.http.impl.client.HttpClientBuilder;
-import org.apache.http.protocol.BasicHttpContext;
-import org.apache.http.protocol.HttpContext;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.mockito.internal.util.reflection.Whitebox;
-import org.slf4j.MDC;
-
-import java.io.IOException;
-import java.util.List;
-import java.util.UUID;
-
 import static com.nike.wingtips.TraceHeaders.PARENT_SPAN_ID;
 import static com.nike.wingtips.TraceHeaders.SPAN_ID;
 import static com.nike.wingtips.TraceHeaders.TRACE_ID;
@@ -39,13 +10,47 @@ import static com.nike.wingtips.apache.httpclient.WingtipsApacheHttpClientInterc
 import static com.nike.wingtips.apache.httpclient.WingtipsApacheHttpClientInterceptor.addTracingInterceptors;
 import static com.nike.wingtips.http.HttpRequestTracingUtils.convertSampleableBooleanToExpectedB3Value;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyString;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyZeroInteractions;
+
+import java.io.IOException;
+import java.util.List;
+import java.util.UUID;
+
+import org.apache.http.HttpException;
+import org.apache.http.HttpHost;
+import org.apache.http.HttpRequest;
+import org.apache.http.HttpRequestInterceptor;
+import org.apache.http.HttpResponse;
+import org.apache.http.HttpResponseInterceptor;
+import org.apache.http.RequestLine;
+import org.apache.http.StatusLine;
+import org.apache.http.client.methods.HttpRequestWrapper;
+import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.protocol.BasicHttpContext;
+import org.apache.http.protocol.HttpContext;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.internal.util.reflection.Whitebox;
+import org.slf4j.MDC;
+import org.springframework.http.client.ClientHttpResponse;
+
+import com.nike.wingtips.Span;
+import com.nike.wingtips.Span.SpanPurpose;
+import com.nike.wingtips.Tracer;
+import com.nike.wingtips.tags.HttpTagStrategy;
+import com.nike.wingtips.tags.KnownOpenTracingTags;
+import com.tngtech.java.junit.dataprovider.DataProvider;
+import com.tngtech.java.junit.dataprovider.DataProviderRunner;
 
 /**
  * Tests the functionality of {@link WingtipsApacheHttpClientInterceptor}.
@@ -61,9 +66,11 @@ public class WingtipsApacheHttpClientInterceptorTest {
     private HttpResponse responseMock;
     private HttpContext httpContext;
     private RequestLine requestLineMock;
+    private StatusLine statusLineMock;
 
     private String method;
     private String uri;
+    private int responseCode;
 
     @Before
     public void beforeMethod() {
@@ -75,13 +82,19 @@ public class WingtipsApacheHttpClientInterceptorTest {
         responseMock = mock(HttpResponse.class);
         httpContext = new BasicHttpContext();
         requestLineMock = mock(RequestLine.class);
+        statusLineMock = mock(StatusLine.class);
 
         method = "GET";
         uri = "http://localhost:4242/foo/bar";
+        
+        responseCode = 200;
 
         doReturn(requestLineMock).when(requestMock).getRequestLine();
         doReturn(method).when(requestLineMock).getMethod();
         doReturn(uri).when(requestLineMock).getUri();
+        
+        doReturn(statusLineMock).when(responseMock).getStatusLine();
+        doReturn(responseCode).when(statusLineMock).getStatusCode();
     }
 
     @After
@@ -117,23 +130,63 @@ public class WingtipsApacheHttpClientInterceptorTest {
     }
 
     @DataProvider(value = {
-        "true   |   true",
-        "false  |   true",
-        "true   |   false",
-        "false  |   false",
+        "true   |   true  | 200",
+        "true   |   true  | 500",
+        "false  |   true  | 200",
+        "false  |   true  | 500",
+        "true   |   false | 200",
+        "true   |   false | 500",
+        "false  |   false | 200",
+        "false  |   false | 500"
     }, splitBy = "\\|")
     @Test
     public void process_request_works_as_expected(
-        boolean subspanOptionOn, boolean parentSpanExists
+        boolean subspanOptionOn, boolean parentSpanExists, int responseCode
     ) throws IOException, HttpException {
 
         // given
-        WingtipsApacheHttpClientInterceptor interceptor = new WingtipsApacheHttpClientInterceptor(subspanOptionOn);
+        boolean tagsExpected = true;
+        
+        // when 
+        WingtipsApacheHttpClientInterceptor defaultInterceptor = new WingtipsApacheHttpClientInterceptor(subspanOptionOn);
+        
+        // then
+        execute_and_validate_request_works_as_expected(defaultInterceptor, subspanOptionOn, parentSpanExists, responseCode, tagsExpected);
+    }
+    
+    @DataProvider(value = {
+            "true  | 200",
+            "true  | 500",
+            "false | 200",
+            "false | 500",
+        }, splitBy = "\\|")
+    @Test
+    public void process_request_works_as_expected_when_tagstrategy_explodes(boolean parentSpanExists, int responseCode) throws IOException, HttpException {
+
+        // given
+        boolean subspanOptionOn = true;
+        boolean tagsExpected = false; // With all calls exploding we don't expect anything to be tagged
+        HttpTagStrategy<HttpRequest, HttpResponse> explodingTagStrategy = mock(HttpTagStrategy.class);
+        doThrow(new RuntimeException("boom")).when(explodingTagStrategy).tagSpanWithRequestAttributes(any(Span.class), any(HttpRequest.class));
+        doThrow(new RuntimeException("boom")).when(explodingTagStrategy).tagSpanWithResponseAttributes(any(Span.class), any(HttpResponse.class));
+        doThrow(new RuntimeException("boom")).when(explodingTagStrategy).handleErroredRequest(any(Span.class), any(Throwable.class));
+        
+        // when 
+        WingtipsApacheHttpClientInterceptor interceptor = new WingtipsApacheHttpClientInterceptor(subspanOptionOn, explodingTagStrategy);
+        
+        // then
+        execute_and_validate_request_works_as_expected(interceptor, subspanOptionOn, parentSpanExists, responseCode, tagsExpected);
+    }
+        
+    public void execute_and_validate_request_works_as_expected(WingtipsApacheHttpClientInterceptor interceptor,
+            boolean subspanOptionOn, boolean parentSpanExists, int responseCode, boolean tagsExpected
+        ) throws IOException, HttpException {
         Span parentSpan = null;
         if (parentSpanExists) {
             parentSpan = Tracer.getInstance().startRequestWithRootSpan("someParentSpan");
         }
-
+        this.responseCode = responseCode;
+        
         // when
         interceptor.process(requestMock, httpContext);
 
@@ -150,6 +203,12 @@ public class WingtipsApacheHttpClientInterceptorTest {
 
             assertThat(spanSetOnHttpContext.getSpanPurpose()).isEqualTo(SpanPurpose.CLIENT);
             assertThat(spanSetOnHttpContext.getSpanName()).isEqualTo(interceptor.getSubspanSpanName(requestMock));
+            
+            if (tagsExpected) {
+                //Validate open tracing tags are set
+                assertThat(spanSetOnHttpContext.getTags()).containsEntry(KnownOpenTracingTags.HTTP_METHOD, method);
+                assertThat(spanSetOnHttpContext.getTags()).containsEntry(KnownOpenTracingTags.HTTP_URL, uri);
+            }
         }
 
         Span expectedSpanToPropagate = (subspanOptionOn)
@@ -196,9 +255,12 @@ public class WingtipsApacheHttpClientInterceptorTest {
         // then
         if (subspanIsAvailableInHttpContext) {
             verify(spanMock).close();
+            verify(spanMock).putTag(KnownOpenTracingTags.HTTP_STATUS, String.valueOf(responseCode));
+            if(responseCode >= 500) {
+                verify(spanMock).putTag(KnownOpenTracingTags.ERROR, "true");
+            }
         }
 
-        verifyZeroInteractions(responseMock);
     }
 
     @DataProvider(value = {

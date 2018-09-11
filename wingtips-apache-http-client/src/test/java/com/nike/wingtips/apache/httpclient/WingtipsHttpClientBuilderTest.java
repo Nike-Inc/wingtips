@@ -1,36 +1,5 @@
 package com.nike.wingtips.apache.httpclient;
 
-import com.nike.wingtips.Span;
-import com.nike.wingtips.Tracer;
-import com.nike.wingtips.lifecyclelistener.SpanLifecycleListener;
-
-import com.tngtech.java.junit.dataprovider.DataProvider;
-import com.tngtech.java.junit.dataprovider.DataProviderRunner;
-
-import org.apache.http.HttpException;
-import org.apache.http.HttpHost;
-import org.apache.http.HttpRequest;
-import org.apache.http.HttpResponse;
-import org.apache.http.RequestLine;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpExecutionAware;
-import org.apache.http.client.methods.HttpRequestWrapper;
-import org.apache.http.client.protocol.HttpClientContext;
-import org.apache.http.conn.routing.HttpRoute;
-import org.apache.http.impl.execchain.ClientExecChain;
-import org.apache.http.protocol.BasicHttpContext;
-import org.apache.http.protocol.HttpContext;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.slf4j.MDC;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
-
 import static com.nike.wingtips.TraceHeaders.PARENT_SPAN_ID;
 import static com.nike.wingtips.TraceHeaders.SPAN_ID;
 import static com.nike.wingtips.TraceHeaders.TRACE_ID;
@@ -46,6 +15,39 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+import org.apache.http.HttpException;
+import org.apache.http.HttpHost;
+import org.apache.http.HttpRequest;
+import org.apache.http.HttpResponse;
+import org.apache.http.RequestLine;
+import org.apache.http.StatusLine;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpExecutionAware;
+import org.apache.http.client.methods.HttpRequestWrapper;
+import org.apache.http.client.protocol.HttpClientContext;
+import org.apache.http.conn.routing.HttpRoute;
+import org.apache.http.impl.execchain.ClientExecChain;
+import org.apache.http.protocol.BasicHttpContext;
+import org.apache.http.protocol.HttpContext;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.slf4j.MDC;
+
+import com.nike.wingtips.Span;
+import com.nike.wingtips.Tracer;
+import com.nike.wingtips.lifecyclelistener.SpanLifecycleListener;
+import com.nike.wingtips.tags.HttpTagStrategy;
+import com.nike.wingtips.tags.KnownOpenTracingTags;
+import com.tngtech.java.junit.dataprovider.DataProvider;
+import com.tngtech.java.junit.dataprovider.DataProviderRunner;
+
 /**
  * Tests the functionality of {@link WingtipsHttpClientBuilder}.
  *
@@ -60,9 +62,12 @@ public class WingtipsHttpClientBuilderTest {
     private HttpResponse responseMock;
     private HttpContext httpContext;
     private RequestLine requestLineMock;
+    private StatusLine statusLineMock;
 
     private String method;
     private String uri;
+    
+    private int responseCode;
 
     private SpanRecorder spanRecorder;
 
@@ -79,14 +84,19 @@ public class WingtipsHttpClientBuilderTest {
         responseMock = mock(HttpResponse.class);
         httpContext = new BasicHttpContext();
         requestLineMock = mock(RequestLine.class);
+        statusLineMock = mock(StatusLine.class);
 
         method = "GET";
         uri = "http://localhost:4242/foo/bar";
+        responseCode = 500;
 
         doReturn(requestLineMock).when(requestMock).getRequestLine();
         doReturn(method).when(requestLineMock).getMethod();
         doReturn(uri).when(requestLineMock).getUri();
         doReturn(HTTP_1_1).when(requestLineMock).getProtocolVersion();
+        
+        doReturn(statusLineMock).when(responseMock).getStatusLine();
+        doReturn(responseCode).when(statusLineMock).getStatusCode();
     }
 
     @After
@@ -139,6 +149,26 @@ public class WingtipsHttpClientBuilderTest {
         // then
         assertThat(impl.surroundCallsWithSubspan).isTrue();
     }
+    
+    @Test
+    public void error_with_tag_strategy_doesnt_affect_execution() throws IOException, HttpException {
+        
+        //given
+        HttpTagStrategy<HttpRequest, HttpResponse> explosiveTagStrategy = new HttpTagStrategy<HttpRequest, HttpResponse>() {
+            @Override public void tagSpanWithRequestAttributes(Span span, HttpRequest requestObj) { throw new RuntimeException("boom"); }
+            @Override public void tagSpanWithResponseAttributes(Span span, HttpResponse responseObj) { throw new RuntimeException("boom"); }
+            @Override public void handleErroredRequest(Span span, Throwable throwable) { throw new RuntimeException("boom"); }
+        };
+        
+        builder = WingtipsHttpClientBuilder.create(true, explosiveTagStrategy);
+        SpanCapturingClientExecChain origCec = spy(new SpanCapturingClientExecChain());
+        
+        // when
+        ClientExecChain decoratedCec = builder.decorateProtocolExec(origCec);
+
+        // then make sure the span got closed anyway
+        verifyDecoratedClientExecChainPerformsTracingLogic(decoratedCec, origCec, null, true, false); 
+    }
 
     @DataProvider(value = {
         "true",
@@ -183,7 +213,7 @@ public class WingtipsHttpClientBuilderTest {
 
         // then
         verifyDecoratedClientExecChainPerformsTracingLogic(
-            result, origCec, parentSpan, subspanOptionOn
+            result, origCec, parentSpan, subspanOptionOn, true
         );
     }
 
@@ -210,12 +240,12 @@ public class WingtipsHttpClientBuilderTest {
         // Even though the *builder's* subspan option has been flipped, the ClientExecChain should still execute with
         //      the subspan option value from when the ClientExecChain was originally decorated.
         verifyDecoratedClientExecChainPerformsTracingLogic(
-            result, origCec, parentSpan, subspanOptionOn
+            result, origCec, parentSpan, subspanOptionOn, true
         );
     }
 
     private void verifyDecoratedClientExecChainPerformsTracingLogic(
-        ClientExecChain decoratedCec, SpanCapturingClientExecChain origCecSpy, Span parentSpan, boolean expectSubspan
+        ClientExecChain decoratedCec, SpanCapturingClientExecChain origCecSpy, Span parentSpan, boolean expectSubspan, boolean expectTags
     ) throws IOException, HttpException {
         // given
         HttpRoute httpRoute = new HttpRoute(new HttpHost("localhost"));
@@ -272,6 +302,25 @@ public class WingtipsHttpClientBuilderTest {
         // If we have a subspan, then it should have been completed. Otherwise, no spans should have been completed.
         if (expectSubspan) {
             assertThat(spanRecorder.completedSpans).containsExactly(origCecSpy.capturedSpan);
+            Span completedSpan = spanRecorder.completedSpans.get(0);
+            
+            if(expectTags) {
+                // Verify the request tags were set prior to execution
+                assertThat(completedSpan.getTags().get(KnownOpenTracingTags.HTTP_METHOD)).isEqualTo(method);
+                assertThat(completedSpan.getTags().get(KnownOpenTracingTags.HTTP_URL)).isEqualTo(uri);
+                
+                if(exFromChain != null) {
+                        // Verify there isn't a response code (since there was a code level exception the response object shouldn't have been created)
+                        assertThat(completedSpan.getTags().get(KnownOpenTracingTags.HTTP_STATUS)).isNull();
+                        // The span should still be tagged as an error
+                        assertThat(completedSpan.getTags().get(KnownOpenTracingTags.ERROR)).isEqualTo(Boolean.TRUE.toString());
+                } else {
+                        // We got a valid reply with a 500 response code
+                        assertThat(completedSpan.getTags().get(KnownOpenTracingTags.HTTP_STATUS)).isEqualTo("500");
+                    // 500 response is an error condition
+                    assertThat(completedSpan.getTags().get(KnownOpenTracingTags.ERROR)).isEqualTo(Boolean.TRUE.toString());
+                }
+            }
         }
         else {
             assertThat(spanRecorder.completedSpans).isEmpty();
@@ -281,6 +330,8 @@ public class WingtipsHttpClientBuilderTest {
     private static class SpanCapturingClientExecChain implements ClientExecChain {
 
         public final CloseableHttpResponse response = mock(CloseableHttpResponse.class);
+        public final StatusLine statusLineMock = mock(StatusLine.class);
+        
         public final RuntimeException exceptionToThrow;
         public Span capturedSpan;
 
@@ -297,9 +348,14 @@ public class WingtipsHttpClientBuilderTest {
                                              HttpClientContext clientContext,
                                              HttpExecutionAware execAware) throws IOException, HttpException {
             capturedSpan = Tracer.getInstance().getCurrentSpan();
+            
+            doReturn(statusLineMock).when(response).getStatusLine();
+            
             if (exceptionToThrow != null) {
                 throw exceptionToThrow;
             }
+            // Return a graceful 500 from the response
+            doReturn(500).when(statusLineMock).getStatusCode();
             return response;
         }
     }

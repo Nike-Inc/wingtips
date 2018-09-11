@@ -404,45 +404,100 @@ or `AsyncWingtipsHelperStatic` rather than `AsyncWingtipsHelperJava7`.
 <a name="using_dtracing_for_errors"></a>
 ## Using Distributed Tracing to Help with Debugging Issues/Errors/Problems
 
-If an application is setup to fully utilize the functionality of Wingtips then all log messages will include the TraceID for the distributed trace associated with that request. The TraceID should also be returned as a response header, so if you get the TraceID for a given request you can go log diving to find all log messages associated with that request and potentially discover where things went wrong. There are some potential drawbacks to using distributed tracing as a debugging tool:
+If an application is setup to fully utilize the functionality of Wingtips then 
+all log messages will include the TraceID for the distributed trace associated 
+with that request. The TraceID should also be returned as a response header, so 
+if you get the TraceID for a given request you can go log diving to find all log
+ messages associated with that request and potentially discover where things 
+ went wrong. There are some potential drawbacks to using distributed tracing as 
+ a debugging tool:
 
-* Not all requests are guaranteed to be traced. Depending on a service's throughput, SLA requirements, etc, it may need to implement trace sampling where only a percentage of requests are traced. Distributed tracing was primarily designed as a monitoring tool so sampling tradeoffs may need to be made to keep the overhead to an acceptable level. Google went as low as 0.01% sampling for some of their most high traffic and latency-sensitive services.
-* Even if a given request is sampled it is not guaranteed that the logs will contain any messages that are helpful to the investigation.
-* The trace IDs are pseudorandomly generated 64-bit long numbers. Therefore they are not guaranteed to be 100% unique. They are *probabilistically* unique but not guaranteed. The likelihood of collisions goes up quickly the more traces you're considering (see the [Birthday Paradox/Problem](http://en.wikipedia.org/wiki/Birthday_problem)), so you have to be careful to limit your searches to a reasonable amount of time and keep in mind that while collisions for a specific ID are very low it is technically possible.
+* Not all requests are guaranteed to be traced. Depending on a service's 
+throughput, SLA requirements, etc, it may need to implement trace sampling where
+ only a percentage of requests are traced. Distributed tracing was primarily 
+ designed as a monitoring tool so sampling tradeoffs may need to be made to keep
+  the overhead to an acceptable level. Google went as low as 0.01% sampling for 
+  some of their most high traffic and latency-sensitive services.
+* Even if a given request is sampled it is not guaranteed that the logs will 
+contain any messages that are helpful to the investigation.
+* The trace IDs are pseudorandomly generated 64-bit long numbers. Therefore they
+ are not guaranteed to be 100% unique. They are *probabilistically* unique but 
+ not guaranteed. The likelihood of collisions goes up quickly the more traces 
+ you're considering (see the [Birthday Paradox/Problem](http://en.wikipedia.org/wiki/Birthday_problem)), 
+ so you have to be careful to limit your searches to a reasonable amount of time
+  and keep in mind that while collisions for a specific ID are very low it is 
+  technically possible.
 
-That said, it can be extremely helpful in many cases for debugging or error investigation and is a benefit that should not be overlooked.
+That said, it can be extremely helpful in many cases for debugging or error 
+investigation and is a benefit that should not be overlooked.
  
 <a name="span_tags"></a>
 ## Span Tags
 
-Tags allow for key-value pairs to be associated with a span as metadata, often useful for filtering or grouping trace 
-information. For example, say you've instrumented retry logic. It may be desireable to be able to distinguish between a 
-span/trace that contains retries and those that didn't. Or you may want to tag your spans based on an attribute of the 
-request, like user type or an authenticated flag. 
+Tags allow for key-value pairs to be associated with a span as metadata, often 
+useful for filtering or grouping trace information. For example, say you've 
+instrumented retry logic. It may be desireable to be able to distinguish between
+ a span/trace that contains retries and those that didn't. Or you may want to 
+ tag your spans based on an attribute of the request, like user type or an 
+ authenticated flag. 
 
 ```
 Tracer.getInstance().getCurrentSpan().putTag("UserType", user.getType());
 ```
 
-Both keys and values are stored as strings. Calling `Span.putTag(...)` will replace any existing value for the key, or 
-add the new key value pair if one with that key doesn't already exist. 
+Both keys and values are stored as strings. Calling `Span.putTag(...)` will 
+replace any existing value for the key, or add the new key value pair if one 
+with that key doesn't already exist. 
 
-If you're integrating with Zipkin, there are some known Zipkin tags that you may want to take advantage of. 
-See the [Zipkin Thrift docs](https://zipkin.io/public/thrift/v1/zipkinCore.html), which contain many of the common tags.
-In particular for HTTP, 
-[this Zipkin documentation about Span data policy in HTTP instrumentation](https://github.com/openzipkin/brave/tree/master/instrumentation/http#span-data-policy)
-is important. You can reference Wingtips' `KnownZipkinTags` class to access constants for these without having to pull 
-in Zipkin dependencies. 
+### Default Tag Strategies
 
-If you're integrating with an OpenTracing environment, there are some known OpenTracing tags that you may want to take
-advantage of. See [the OpenTracing Tags class](https://github.com/opentracing/opentracing-java/blob/master/opentracing-api/src/main/java/io/opentracing/tag/Tags.java).
-You can reference Wingtips' `KnownOpenTracingTags` class to access constants for these without having to pull in
+Tag Strategies are a set of classes that apply consistent tagging to every span
+based on data extracted from the HTTP request and response. There are several 
+[HttpTagStrategy](wingtips-core/src/main/java/com/nike/wingtips/tags/HttpTagStrategy.java) 
+implementations:
+- [OpenTracingTagStrategy](wingtips-core/src/main/java/com/nike/wingtips/tags/OpenTracingTagStrategy.java)
+- [ZipkinTagStrategy](wingtips-core/src/main/java/com/nike/wingtips/tags/ZipkinTagStrategy.java)
+
+Note that both of these implementations instrument a subset of the total known tags.
+
+Tag strategies are used for tagging requests that are handled (server side) and for
+tagging outbound requests (client side).  You can read more about each here:
+- [Server Side Request Tagging](wingtips-servlet-api/README.md#server_request_span_tagging)
+- [Client Request Tagging](wingtips-spring/README.md#client_request_span_tagging)
+
+If you're integrating with Zipkin, there are some known Zipkin tags that you may
+ want to take advantage of. See the [Zipkin Thrift docs](https://zipkin.io/public/thrift/v1/zipkinCore.html), 
+ which contain many of the common tags. 
+
+The [ZipkinTagStrategy](wingtips-core/src/main/java/com/nike/wingtips/tags/ZipkinTagStrategy.java) is based
+on  
+[this Zipkin documentation about Span data policy in HTTP instrumentation](https://github.com/openzipkin/brave/tree/master/instrumentation/http#span-data-policy). 
+You can reference Wingtips' `KnownZipkinTags` class to access 
+constants for these without having to pull in Zipkin dependencies for additional tags
+you wish to implement. 
+
+If you're integrating with an OpenTracing environment, there are some known 
+OpenTracing tags that you may want to take advantage of. See [the OpenTracing Tags class](https://github.com/opentracing/opentracing-java/blob/master/opentracing-api/src/main/java/io/opentracing/tag/Tags.java).
+You can reference Wingtips' `KnownOpenTracingTags` class to access constants for 
+these without having to pull in
 OpenTracing dependencies. 
  
 <a name="custom_annotations"></a>
 ## Custom Annotations
 
-The Google Dapper paper describes how the Dapper tools allow them to associate arbitrary timestamped notes called "annotations" with any span. Wingtips does not currently support annotations, but the most important use case for annotations - knowing when a client sent a request vs when the server received it (and vice versa on the response) - is simulated in Wingtips by surrounding a client request with a sub-span and making sure the called service creates an overall request span for itself as well. This technique is described in the "[using sub-spans to surround downstream calls](#sub_spans_for_downstream_calls)" section. Even if Wingtips supported Dapper-style annotations this technique would likely still be required unless you instrumented your HTTP and/or RPC caller libraries at a very low level - a task that made sense for Google with their relatively homogenous ecosystem and developer resources, but not necessarily realistic for wider audiences.
+The Google Dapper paper describes how the Dapper tools allow them to associate 
+arbitrary timestamped notes called "annotations" with any span. Wingtips does 
+not currently support annotations, but the most important use case for 
+annotations - knowing when a client sent a request vs when the server received 
+it (and vice versa on the response) - is simulated in Wingtips by surrounding a 
+client request with a sub-span and making sure the called service creates an 
+overall request span for itself as well. This technique is described in the 
+"[using sub-spans to surround downstream calls](#sub_spans_for_downstream_calls)" 
+section. Even if Wingtips supported Dapper-style annotations this technique 
+would likely still be required unless you instrumented your HTTP and/or RPC 
+caller libraries at a very low level - a task that made sense for Google with 
+their relatively homogenous ecosystem and developer resources, but not 
+necessarily realistic for wider audiences.
 
 Arbitrary application-specific annotations could be a useful addition however, so this feature may be added in the future. Until then you can output log messages tagged with tracing and timestamp information to approximate the functionality.
 

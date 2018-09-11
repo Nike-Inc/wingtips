@@ -1,11 +1,14 @@
 package com.nike.wingtips.spring.interceptor;
 
-import com.nike.wingtips.Span;
-import com.nike.wingtips.Tracer;
-import com.nike.wingtips.http.HttpRequestTracingUtils;
-import com.nike.wingtips.spring.util.HttpRequestWrapperWithModifiableHeaders;
-import com.nike.wingtips.util.TracingState;
+import static com.nike.wingtips.spring.util.WingtipsSpringUtil.getRequestMethodAsString;
+import static com.nike.wingtips.spring.util.WingtipsSpringUtil.propagateTracingHeaders;
+import static com.nike.wingtips.util.AsyncWingtipsHelperJava7.runnableWithTracing;
+import static com.nike.wingtips.util.AsyncWingtipsHelperJava7.unlinkTracingFromCurrentThread;
 
+import java.io.IOException;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpRequest;
 import org.springframework.http.client.AsyncClientHttpRequestExecution;
 import org.springframework.http.client.AsyncClientHttpRequestInterceptor;
@@ -14,12 +17,14 @@ import org.springframework.util.concurrent.ListenableFuture;
 import org.springframework.util.concurrent.ListenableFutureCallback;
 import org.springframework.web.client.AsyncRestTemplate;
 
-import java.io.IOException;
-
-import static com.nike.wingtips.spring.util.WingtipsSpringUtil.getRequestMethodAsString;
-import static com.nike.wingtips.spring.util.WingtipsSpringUtil.propagateTracingHeaders;
-import static com.nike.wingtips.util.AsyncWingtipsHelperJava7.runnableWithTracing;
-import static com.nike.wingtips.util.AsyncWingtipsHelperJava7.unlinkTracingFromCurrentThread;
+import com.nike.wingtips.Span;
+import com.nike.wingtips.Tracer;
+import com.nike.wingtips.http.HttpRequestTracingUtils;
+import com.nike.wingtips.spring.interceptor.tag.SpringHttpClientTagAdapter;
+import com.nike.wingtips.spring.util.HttpRequestWrapperWithModifiableHeaders;
+import com.nike.wingtips.tags.HttpTagStrategy;
+import com.nike.wingtips.tags.OpenTracingTagStrategy;
+import com.nike.wingtips.util.TracingState;
 
 /**
  * A {@link AsyncClientHttpRequestInterceptor} which propagates Wingtips tracing information on a downstream {@link
@@ -47,12 +52,14 @@ import static com.nike.wingtips.util.AsyncWingtipsHelperJava7.unlinkTracingFromC
 @SuppressWarnings("WeakerAccess")
 public class WingtipsAsyncClientHttpRequestInterceptor implements AsyncClientHttpRequestInterceptor {
 
+    private static final Logger logger = LoggerFactory.getLogger(WingtipsAsyncClientHttpRequestInterceptor.class);
+    
     /**
      * The default implementation of this class. Since this class is thread-safe you can reuse this rather than creating
      * a new object.
      */
     public static final WingtipsAsyncClientHttpRequestInterceptor DEFAULT_IMPL =
-        new WingtipsAsyncClientHttpRequestInterceptor();
+            new WingtipsAsyncClientHttpRequestInterceptor();
 
     /**
      * If this is true then all downstream calls that this interceptor intercepts will be surrounded by a
@@ -60,6 +67,8 @@ public class WingtipsAsyncClientHttpRequestInterceptor implements AsyncClientHtt
      */
     protected final boolean surroundCallsWithSubspan;
 
+    protected final HttpTagStrategy<HttpRequest, ClientHttpResponse> tagStrategy;
+    
     /**
      * Default constructor - sets {@link #surroundCallsWithSubspan} to true.
      */
@@ -74,7 +83,19 @@ public class WingtipsAsyncClientHttpRequestInterceptor implements AsyncClientHtt
      * propagate the current span's info downstream (no subspan).
      */
     public WingtipsAsyncClientHttpRequestInterceptor(boolean surroundCallsWithSubspan) {
+        this(surroundCallsWithSubspan, new OpenTracingTagStrategy<HttpRequest, ClientHttpResponse>(new SpringHttpClientTagAdapter()));
+    }
+    
+    /**
+     * Constuctor that lets you define whether downstream calls will be surrounded with a subspan and provide
+     * a different span tag strategy. 
+     * @param surroundCallsWithSubspan pass in true to have downstream calls surrounded with a new span, false to only
+     * @param tagStrategy set the strategy by which to tag the span
+     */
+    public WingtipsAsyncClientHttpRequestInterceptor(boolean surroundCallsWithSubspan, 
+            HttpTagStrategy<HttpRequest, ClientHttpResponse> tagStrategy) {
         this.surroundCallsWithSubspan = surroundCallsWithSubspan;
+        this.tagStrategy = tagStrategy;
     }
 
     @Override
@@ -84,48 +105,54 @@ public class WingtipsAsyncClientHttpRequestInterceptor implements AsyncClientHtt
     ) throws IOException {
         HttpRequest wrapperRequest = new HttpRequestWrapperWithModifiableHeaders(request);
 
+        if (surroundCallsWithSubspan) {
+            return createAsyncSubSpanAndExecute(wrapperRequest, body, execution);
+        }
+        return propagateTracingHeadersAndExecute(wrapperRequest, body, execution);
+    }
+    
+    public ListenableFuture<ClientHttpResponse> propagateTracingHeadersAndExecute(
+            HttpRequest request, byte[] body, AsyncClientHttpRequestExecution execution
+        ) throws IOException {
+        // Whether we created a subspan or not we want to add the tracing headers with the current span's info.
+        propagateTracingHeaders(request, Tracer.getInstance().getCurrentSpan());
+
+        // Execute the request/interceptor chain, and add the callback to finish the subspan (if one exists).
+        return execution.executeAsync(request, body);
+    }
+    
+    public ListenableFuture<ClientHttpResponse> createAsyncSubSpanAndExecute(
+            HttpRequest request, byte[] body, AsyncClientHttpRequestExecution execution
+            ) throws IOException {
+
         Tracer tracer = Tracer.getInstance();
 
-        // Handle subspan stuff if desired.
-        SpanAroundAsyncCallFinisher subspanFinisher = null;
-        TracingState originalThreadInfo = null;
-        if (surroundCallsWithSubspan) {
-            originalThreadInfo = TracingState.getCurrentThreadTracingState();
+        // Handle subspan stuff
+        TracingState originalThreadInfo = TracingState.getCurrentThreadTracingState();
 
-            // This will start a new trace if necessary, or a subspan if a trace is already in progress.
-            tracer.startSpanInCurrentContext(getSubspanSpanName(request), Span.SpanPurpose.CLIENT);
+        // This will start a new trace if necessary, or a subspan if a trace is already in progress.
+        tracer.startSpanInCurrentContext(getSubspanSpanName(request), Span.SpanPurpose.CLIENT);
 
-            // Create the callback that will complete the subspan when the request finishes.
-            subspanFinisher = new SpanAroundAsyncCallFinisher(TracingState.getCurrentThreadTracingState());
-        }
+        // Tag the new span with request meta data.  Response meta data is tagged by the finisher.
+        tagSpanWithRequestAttributes(tracer.getCurrentSpan(), request);
+        
+        // Create the callback that will complete the subspan when the request finishes.
+        SpanAroundAsyncCallFinisher subspanFinisher = 
+                new SpanAroundAsyncCallFinisher(TracingState.getCurrentThreadTracingState(), tagStrategy);
 
         try {
-            // Whether we created a subspan or not we want to add the tracing headers with the current span's info.
-            propagateTracingHeaders(wrapperRequest, tracer.getCurrentSpan());
-
-            // Execute the request/interceptor chain, and add the callback to finish the subspan (if one exists).
-            ListenableFuture<ClientHttpResponse> result = execution.executeAsync(wrapperRequest, body);
-            if (subspanFinisher != null) {
-                result.addCallback(subspanFinisher);
-            }
-
+            ListenableFuture<ClientHttpResponse> result = propagateTracingHeadersAndExecute(request, body, execution);
+            result.addCallback(subspanFinisher);
             return result;
         }
         catch(Throwable t) {
-            // Something went wrong in the execution.executeAsync(...) call so we complete the subspan now (if one
-            //      exists)
-            if (subspanFinisher != null) {
-                subspanFinisher.finishCallSpan();
-            }
-
+            // Something went wrong in the execution.executeAsync(...) call so we complete the subspan now
+            subspanFinisher.tagCurrentSpanAsErrdAndFinish(t);
             throw t;
         }
         finally {
-            // Reset back to the original tracing state that was on this thread when this method began (only relevant
-            //      if surroundCallsWithSubspan is true).
-            if (surroundCallsWithSubspan) {
-                unlinkTracingFromCurrentThread(originalThreadInfo);
-            }
+            // Reset back to the original tracing state that was on this thread when this method began
+            unlinkTracingFromCurrentThread(originalThreadInfo);
         }
     }
 
@@ -144,7 +171,21 @@ public class WingtipsAsyncClientHttpRequestInterceptor implements AsyncClientHtt
             "asyncresttemplate_downstream_call", getRequestMethodAsString(request.getMethod()), request.getURI().toString()
         );
     }
-
+    
+    /**
+     * Broken out as a separate method so we can surround it in a try{} to ensure we don't break the overall
+     * span handling with exceptions from the {@code tagStrategy}.
+     * @param span The span to be tagged
+     * @param requestObj The request context to use for tag values
+     */
+    private void tagSpanWithRequestAttributes(Span span, HttpRequest requestObj) {
+        try {
+            tagStrategy.tagSpanWithRequestAttributes(span, requestObj);
+        } catch(Throwable taggingException) {
+            logger.warn("Unable to tag span with request attributes", taggingException);
+        }
+    }
+    
     /**
      * A {@link ListenableFutureCallback} that will complete the given {@link TracingState} (e.g. tracing state
      * representing a subspan) when executed. This should be attached as a callback to the result of {@link
@@ -154,37 +195,97 @@ public class WingtipsAsyncClientHttpRequestInterceptor implements AsyncClientHtt
     protected static class SpanAroundAsyncCallFinisher implements ListenableFutureCallback<ClientHttpResponse> {
 
         protected final TracingState spanAroundCallTracingState;
+        protected final HttpTagStrategy<HttpRequest, ClientHttpResponse> tagStrategy;
 
-        protected SpanAroundAsyncCallFinisher(TracingState spanAroundCallTracingState) {
+        protected SpanAroundAsyncCallFinisher(TracingState spanAroundCallTracingState, HttpTagStrategy<HttpRequest, ClientHttpResponse> tagStrategy) {
             this.spanAroundCallTracingState = spanAroundCallTracingState;
+            this.tagStrategy = tagStrategy;
         }
 
         @Override
         public void onFailure(Throwable ex) {
-            finishCallSpan();
+            tagCurrentSpanAsErrdAndFinish(ex);
         }
 
         @Override
         public void onSuccess(ClientHttpResponse result) {
-            finishCallSpan();
+            tagSpanWithResponseAttributesAndFinish(result);
         }
 
         @SuppressWarnings("deprecation")
-        protected void finishCallSpan() {
+        protected void tagSpanWithResponseAttributesAndFinish(final ClientHttpResponse response) {
             if (spanAroundCallTracingState != null) {
-                // Span.close() contains the logic we want - if the spanAroundCall was an overall span (new trace)
-                //      then tracer.completeRequestSpan() will be called, otherwise it's a subspan and
-                //      tracer.completeSubSpan() will be called.
                 runnableWithTracing(
-                    new Runnable() {
-                        @Override
-                        public void run() {
-                            Tracer.getInstance().getCurrentSpan().close();
-                        }
-                    },
-                    spanAroundCallTracingState
-                ).run();
+                        new Runnable() {
+                            @Override
+                            public void run() {
+                                Span span = Tracer.getInstance().getCurrentSpan();
+                                // Add the tags from the response
+                                tagSpanWithResponseAttributes(span, response);
+                                // Span.close() contains the logic we want - if the spanAroundCall was an overall span (new trace)
+                                //      then tracer.completeRequestSpan() will be called, otherwise it's a subspan and
+                                //      tracer.completeSubSpan() will be called.
+                                span.close();
+                                
+                            }
+                            
+                            /**
+                             * Broken out as a separate method so we can surround it in a try{} to ensure we don't break the overall
+                             * span handling with exceptions from the {@code tagStrategy}.
+                             * @param span The span to be tagged
+                             * @param responseObj The response context to be used for tag values
+                             */
+                            private void tagSpanWithResponseAttributes(Span span, ClientHttpResponse responseObj) {
+                                try {
+                                    tagStrategy.tagSpanWithResponseAttributes(span, responseObj);
+                                } catch(Throwable taggingException) {
+                                    logger.warn("Unable to tag span with response attributes", taggingException);
+                                }
+                            }
+                        },
+                        spanAroundCallTracingState
+                        ).run();
+
+            }
+        }
+        
+        @SuppressWarnings("deprecation")
+        private void tagCurrentSpanAsErrdAndFinish(final Throwable throwable) {
+            if (spanAroundCallTracingState != null) {
+                runnableWithTracing(
+                        new Runnable() {
+                            @Override
+                            public void run() {
+                                Span span = Tracer.getInstance().getCurrentSpan();
+
+                                // Add the tags based on the exception
+                                handleErroredRequestTags(span, throwable);
+
+                                // Span.close() contains the logic we want - if the spanAroundCall was an overall span (new trace)
+                                //      then tracer.completeRequestSpan() will be called, otherwise it's a subspan and
+                                //      tracer.completeSubSpan() will be called.
+                                span.close();
+                            }
+                            
+                            /**
+                             * Broken out as a separate method so we can surround it in a try{} to ensure we don't break the overall
+                             * span handling with exceptions from the {@code tagStrategy}.
+                             * @param span The span to be tagged
+                             * @param throwable The exception context to use for tag values
+                             */
+                            private void handleErroredRequestTags(Span span, Throwable throwable) {
+                                try {
+                                    tagStrategy.handleErroredRequest(span, throwable);
+                                } catch(Throwable taggingException) {
+                                    logger.warn("Unable to tag errored span with exception", taggingException);
+                                }
+                            }
+                        },
+                        spanAroundCallTracingState
+                        ).run();
             }
         }
     }
+
+    
 }
