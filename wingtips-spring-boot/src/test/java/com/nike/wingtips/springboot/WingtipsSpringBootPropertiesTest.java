@@ -72,6 +72,26 @@ public class WingtipsSpringBootPropertiesTest {
             props.setSpanLoggingFormat(null);
             assertThat(props.getSpanLoggingFormat()).isNull();
         }
+        
+        // serverSideSpanTaggingStrategy getter/setter
+        {
+            String strategyValue = UUID.randomUUID().toString();
+            props.setServerSideSpanTaggingStrategy(strategyValue);
+            assertThat(props.getServerSideSpanTaggingStrategy()).isEqualTo(strategyValue);
+
+            props.setServerSideSpanTaggingStrategy(null);
+            assertThat(props.getServerSideSpanTaggingStrategy()).isNull();
+        }
+
+        // serverSideSpanTaggingAdapter getter/setter
+        {
+            String adapterValue = UUID.randomUUID().toString();
+            props.setServerSideSpanTaggingAdapter(adapterValue);
+            assertThat(props.getServerSideSpanTaggingAdapter()).isEqualTo(adapterValue);
+
+            props.setServerSideSpanTaggingAdapter(null);
+            assertThat(props.getServerSideSpanTaggingAdapter()).isNull();
+        }
     }
 
 }

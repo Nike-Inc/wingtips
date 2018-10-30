@@ -21,6 +21,7 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.net.ServerSocket;
+import java.util.Random;
 import java.util.UUID;
 
 import javax.servlet.FilterChain;
@@ -29,6 +30,8 @@ import javax.servlet.ServletException;
 import javax.servlet.ServletRequest;
 import javax.servlet.ServletResponse;
 
+import static com.nike.wingtips.servlet.RequestTracingFilter.TAG_AND_SPAN_NAMING_ADAPTER_INIT_PARAM_NAME;
+import static com.nike.wingtips.servlet.RequestTracingFilter.TAG_AND_SPAN_NAMING_STRATEGY_INIT_PARAM_NAME;
 import static com.nike.wingtips.servlet.RequestTracingFilter.USER_ID_HEADER_KEYS_LIST_INIT_PARAM_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -44,13 +47,19 @@ import static org.mockito.Mockito.verifyZeroInteractions;
 @RunWith(DataProviderRunner.class)
 public class WingtipsSpringBootConfigurationTest {
 
-    private WingtipsSpringBootProperties generateProps(boolean disabled,
-                                                       String userIdHeaderKeys,
-                                                       SpanLoggingRepresentation spanLoggingFormat) {
+    private WingtipsSpringBootProperties generateProps(
+        boolean disabled,
+        String userIdHeaderKeys,
+        SpanLoggingRepresentation spanLoggingFormat,
+        String tagAndNamingStrategy,
+        String tagAndNamingAdapter
+    ) {
         WingtipsSpringBootProperties props = new WingtipsSpringBootProperties();
         props.setWingtipsDisabled(String.valueOf(disabled));
         props.setUserIdHeaderKeys(userIdHeaderKeys);
         props.setSpanLoggingFormat(spanLoggingFormat);
+        props.setServerSideSpanTaggingStrategy(tagAndNamingStrategy);
+        props.setServerSideSpanTaggingAdapter(tagAndNamingAdapter);
         return props;
     }
 
@@ -62,7 +71,9 @@ public class WingtipsSpringBootConfigurationTest {
     @Test
     public void constructor_works_as_expected(SpanLoggingRepresentation spanLoggingFormat) {
         // given
-        WingtipsSpringBootProperties props = generateProps(false, UUID.randomUUID().toString(), spanLoggingFormat);
+        WingtipsSpringBootProperties props = generateProps(
+            false, UUID.randomUUID().toString(), spanLoggingFormat, "someTagStrategy", "someTagAdapter"
+        );
         SpanLoggingRepresentation existingSpanLoggingFormat = Tracer.getInstance().getSpanLoggingRepresentation();
         SpanLoggingRepresentation expectedSpanLoggingFormat = (spanLoggingFormat == null)
                                                               ? existingSpanLoggingFormat
@@ -76,21 +87,55 @@ public class WingtipsSpringBootConfigurationTest {
         assertThat(Tracer.getInstance().getSpanLoggingRepresentation()).isEqualTo(expectedSpanLoggingFormat);
     }
 
+    private enum PropertiesScenario {
+        USER_ID_HEADER_KEYS_PROP_IS_SET(nonNullUserIdHeaderKeysProp(), null, null),
+        TAG_AND_NAMING_STRATEGY_PROP_IS_SET(null, nonNullStrategyProp(), null),
+        TAG_AND_NAMING_ADAPTER_PROP_IS_SET(null, null, nonNullAdapterProp()),
+        ALL_PROPS_ARE_SET(nonNullUserIdHeaderKeysProp(), nonNullStrategyProp(), nonNullAdapterProp());
+
+        public final String userIdHeaderKeys;
+        public final String tagAndNamingStrategy;
+        public final String tagAndNamingAdapter;
+
+        PropertiesScenario(String userIdHeaderKeys, String tagAndNamingStrategy, String tagAndNamingAdapter) {
+            this.userIdHeaderKeys = userIdHeaderKeys;
+            this.tagAndNamingStrategy = tagAndNamingStrategy;
+            this.tagAndNamingAdapter = tagAndNamingAdapter;
+        }
+
+        private static String nonNullUserIdHeaderKeysProp() {
+            return "user-id-hk-1-" + UUID.randomUUID().toString() + ",user-id-hk-2-" + UUID.randomUUID().toString();
+        }
+
+        private static String nonNullStrategyProp() {
+            return "TagAndNamingStrategy-" + UUID.randomUUID().toString();
+        }
+
+        private static String nonNullAdapterProp() {
+            return "TagAndNamingAdapter-" + UUID.randomUUID().toString();
+        }
+    }
+
     @DataProvider(value = {
-        "true   |   true",
-        "true   |   false",
-        "false  |   true",
-        "false  |   false"
+        "true   |   USER_ID_HEADER_KEYS_PROP_IS_SET",
+        "true   |   TAG_AND_NAMING_STRATEGY_PROP_IS_SET",
+        "true   |   TAG_AND_NAMING_ADAPTER_PROP_IS_SET",
+        "true   |   ALL_PROPS_ARE_SET",
+        "false  |   USER_ID_HEADER_KEYS_PROP_IS_SET",
+        "false  |   TAG_AND_NAMING_STRATEGY_PROP_IS_SET",
+        "false  |   TAG_AND_NAMING_ADAPTER_PROP_IS_SET",
+        "false  |   ALL_PROPS_ARE_SET"
     }, splitBy = "\\|")
     @Test
     public void wingtipsRequestTracingFilter_returns_FilterRegistrationBean_with_expected_values(
-        boolean appFilterOverrideIsNull, boolean userIdHeaderKeysIsNull
+        boolean appFilterOverrideIsNull, PropertiesScenario scenario
     ) {
         // given
         RequestTracingFilter appFilterOverride = (appFilterOverrideIsNull) ? null : mock(RequestTracingFilter.class);
-        String userIdHeaderKeys = (userIdHeaderKeysIsNull) ? null : UUID.randomUUID().toString();
 
-        WingtipsSpringBootProperties props = generateProps(false, userIdHeaderKeys, null);
+        WingtipsSpringBootProperties props = generateProps(
+            false, scenario.userIdHeaderKeys, null, scenario.tagAndNamingStrategy, scenario.tagAndNamingAdapter
+        );
         WingtipsSpringBootConfiguration conf = new WingtipsSpringBootConfiguration(props);
         conf.requestTracingFilter = appFilterOverride;
 
@@ -109,13 +154,14 @@ public class WingtipsSpringBootConfigurationTest {
 
         String userIdHeaderKeysFilterInitParam =
             filterRegistrationBean.getInitParameters().get(USER_ID_HEADER_KEYS_LIST_INIT_PARAM_NAME);
+        String tagAndNamingStrategyFilterInitParam =
+            filterRegistrationBean.getInitParameters().get(TAG_AND_SPAN_NAMING_STRATEGY_INIT_PARAM_NAME);
+        String tagAndNamingAdapterFilterInitParam =
+            filterRegistrationBean.getInitParameters().get(TAG_AND_SPAN_NAMING_ADAPTER_INIT_PARAM_NAME);
 
-        if (userIdHeaderKeys == null) {
-            assertThat(userIdHeaderKeysFilterInitParam).isNull();
-        }
-        else {
-            assertThat(userIdHeaderKeysFilterInitParam).isEqualTo(userIdHeaderKeys);
-        }
+        assertThat(userIdHeaderKeysFilterInitParam).isEqualTo(scenario.userIdHeaderKeys);
+        assertThat(tagAndNamingStrategyFilterInitParam).isEqualTo(scenario.tagAndNamingStrategy);
+        assertThat(tagAndNamingAdapterFilterInitParam).isEqualTo(scenario.tagAndNamingAdapter);
 
         assertThat(filterRegistrationBean.getOrder()).isEqualTo(Ordered.HIGHEST_PRECEDENCE);
     }
@@ -123,7 +169,7 @@ public class WingtipsSpringBootConfigurationTest {
     @Test
     public void wingtipsRequestTracingFilter_returns_DoNothingServletFilter_if_WingtipsSpringBootProperties_indicates_disabled() {
         // given
-        WingtipsSpringBootProperties props = generateProps(true, null, null);
+        WingtipsSpringBootProperties props = generateProps(true, null, null, null, null);
         WingtipsSpringBootConfiguration conf = new WingtipsSpringBootConfiguration(props);
 
         // when
@@ -177,6 +223,19 @@ public class WingtipsSpringBootConfigurationTest {
             this.mainClass = mainClass;
             this.expectComponentScannedObjects = expectComponentScannedObjects;
         }
+    }
+
+    String dictionary = "abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+    private String generateRandomString(int size) {
+        Random random = new Random(System.nanoTime());
+        StringBuilder sb = new StringBuilder(size);
+        for (int i = 0; i < size; i++) {
+            char nextChar = dictionary.charAt(random.nextInt(dictionary.length()));
+            sb.append(nextChar);
+        }
+
+        return sb.toString();
     }
 
     // This component test verifies that a Spring Boot application successfully utilizes WingtipsSpringBootConfiguration

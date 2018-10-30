@@ -4,6 +4,7 @@ import com.nike.wingtips.Span;
 import com.nike.wingtips.Span.SpanPurpose;
 import com.nike.wingtips.TraceAndSpanIdGenerator;
 import com.nike.wingtips.TraceHeaders;
+import com.nike.wingtips.tags.HttpTagAndSpanNamingAdapter;
 
 import com.tngtech.java.junit.dataprovider.DataProvider;
 import com.tngtech.java.junit.dataprovider.DataProviderRunner;
@@ -28,12 +29,15 @@ import static com.nike.wingtips.TraceHeaders.TRACE_SAMPLED;
 import static com.nike.wingtips.http.HttpRequestTracingUtils.convertSampleableBooleanToExpectedB3Value;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Matchers.anyObject;
 import static org.mockito.Matchers.anyString;
 import static org.mockito.Matchers.eq;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyZeroInteractions;
 
 /**
@@ -544,48 +548,121 @@ public class HttpRequestTracingUtilsTest {
     }
 
     @DataProvider(value = {
-        "true   |   true",
-        "false  |   true",
-        "true   |   false",
-        "false  |   false"
+        "someHttpMethod |   /some/path/tmplt    |   null    |   someHttpMethod /some/path/tmplt",
+        "someHttpMethod |   /some/path/tmplt    |   299     |   someHttpMethod /some/path/tmplt",
+        "someHttpMethod |   /some/path/tmplt    |   300     |   someHttpMethod redirected",
+        "someHttpMethod |   /some/path/tmplt    |   399     |   someHttpMethod redirected",
+        "someHttpMethod |   /some/path/tmplt    |   400     |   someHttpMethod /some/path/tmplt",
+        "someHttpMethod |   /some/path/tmplt    |   404     |   someHttpMethod not_found",
+        "someHttpMethod |   /some/path/tmplt    |   500     |   someHttpMethod /some/path/tmplt",
+        "someHttpMethod |   null                |   null    |   someHttpMethod",
+        "someHttpMethod |   null                |   300     |   someHttpMethod redirected",
+        "someHttpMethod |   null                |   404     |   someHttpMethod not_found",
+        "someHttpMethod |                       |   null    |   someHttpMethod",
+        "someHttpMethod |                       |   300     |   someHttpMethod redirected",
+        "someHttpMethod |                       |   404     |   someHttpMethod not_found",
+        "someHttpMethod |   [whitespace]        |   null    |   someHttpMethod",
+        "someHttpMethod |   [whitespace]        |   300     |   someHttpMethod redirected",
+        "someHttpMethod |   [whitespace]        |   404     |   someHttpMethod not_found",
+        "null           |   /some/path/tmplt    |   null    |   UNKNOWN_HTTP_METHOD /some/path/tmplt",
+        "null           |   /some/path/tmplt    |   300     |   UNKNOWN_HTTP_METHOD redirected",
+        "null           |   /some/path/tmplt    |   404     |   UNKNOWN_HTTP_METHOD not_found",
+        "               |   /some/path/tmplt    |   null    |   UNKNOWN_HTTP_METHOD /some/path/tmplt",
+        "               |   /some/path/tmplt    |   300     |   UNKNOWN_HTTP_METHOD redirected",
+        "               |   /some/path/tmplt    |   404     |   UNKNOWN_HTTP_METHOD not_found",
+        "[whitespace]   |   /some/path/tmplt    |   null    |   UNKNOWN_HTTP_METHOD /some/path/tmplt",
+        "[whitespace]   |   /some/path/tmplt    |   300     |   UNKNOWN_HTTP_METHOD redirected",
+        "[whitespace]   |   /some/path/tmplt    |   404     |   UNKNOWN_HTTP_METHOD not_found",
+        "null           |   null                |   null    |   UNKNOWN_HTTP_METHOD",
+        "null           |   null                |   300     |   UNKNOWN_HTTP_METHOD redirected",
+        "null           |   null                |   404     |   UNKNOWN_HTTP_METHOD not_found",
+        "               |                       |   null    |   UNKNOWN_HTTP_METHOD",
+        "               |                       |   300     |   UNKNOWN_HTTP_METHOD redirected",
+        "               |                       |   404     |   UNKNOWN_HTTP_METHOD not_found",
+        "[whitespace]   |   [whitespace]        |   null    |   UNKNOWN_HTTP_METHOD",
+        "[whitespace]   |   [whitespace]        |   300     |   UNKNOWN_HTTP_METHOD redirected",
+        "[whitespace]   |   [whitespace]        |   404     |   UNKNOWN_HTTP_METHOD not_found"
     }, splitBy = "\\|")
     @Test
-    public void getSubspanSpanNameForHttpRequest_works_as_expected(boolean prefixIsNull, boolean includeQueryString) {
+    public void generateSafeSpanName_works_as_expected(
+        String httpMethod, String pathTemplate, Integer statusCode, String expectedResult
+    ) {
         // given
-        String prefix = (prefixIsNull) ? null : "prefix" + UUID.randomUUID().toString();
-        String method = UUID.randomUUID().toString();
-        String noQueryStringUri = "http://localhost:4242/foo/bar";
-        String uri = (includeQueryString)
-                     ? noQueryStringUri + "?a=b&c=d"
-                     : noQueryStringUri;
+        if ("[whitespace]".equals(httpMethod)) {
+            httpMethod = "  \r\n\t  ";
+        }
 
-        String expectedSuffix = method + "_" + noQueryStringUri;
-        String expectedResult = (prefixIsNull)
-                                ? expectedSuffix
-                                : prefix + "-" + expectedSuffix;
+        if ("[whitespace]".equals(pathTemplate)) {
+            pathTemplate = "  \r\n\t  ";
+        }
+
+        Object requestMock = mock(Object.class);
+        Object responseMock = mock(Object.class);
+        HttpTagAndSpanNamingAdapter<Object, Object> adapterMock = mock(HttpTagAndSpanNamingAdapter.class);
+
+        doReturn(httpMethod).when(adapterMock).getRequestHttpMethod(anyObject());
+        doReturn(pathTemplate).when(adapterMock).getRequestUriPathTemplate(anyObject(), anyObject());
+        doReturn(statusCode).when(adapterMock).getResponseHttpStatus(anyObject());
 
         // when
-        String result = HttpRequestTracingUtils.getSubspanSpanNameForHttpRequest(prefix, method, uri);
+        // The version of the method that takes the request/response/adapter args and the version that takes direct
+        //      args should return exactly the same result, so we'll test them at the same time.
+        String adapterArgsResult = HttpRequestTracingUtils.generateSafeSpanName(requestMock, responseMock, adapterMock);
+        String directArgsResult = HttpRequestTracingUtils.generateSafeSpanName(httpMethod, pathTemplate, statusCode);
 
         // then
-        assertThat(result).isEqualTo(expectedResult);
+        assertThat(adapterArgsResult).isEqualTo(directArgsResult);
+        assertThat(adapterArgsResult).isEqualTo(expectedResult);
+        assertThat(directArgsResult).isEqualTo(expectedResult);
+
+        verify(adapterMock).getRequestHttpMethod(requestMock);
+        verify(adapterMock).getRequestUriPathTemplate(requestMock, responseMock);
+        verify(adapterMock).getResponseHttpStatus(responseMock);
+        verifyNoMoreInteractions(adapterMock);
+        verifyZeroInteractions(requestMock, responseMock);
+    }
+
+    @Test
+    public void generateSafeSpanName_adapter_args_works_as_expected_if_passed_null_adapter() {
+        // given
+        Object requestMock = mock(Object.class);
+        Object responseMock = mock(Object.class);
+
+        // when
+        String result = HttpRequestTracingUtils.generateSafeSpanName(requestMock, responseMock, null);
+
+        // then
+        assertThat(result).isEqualTo("UNKNOWN_HTTP_METHOD");
+        verifyZeroInteractions(requestMock, responseMock);
     }
 
     @DataProvider(value = {
-        "true",
-        "false"
-    })
+        "somePrefix     |   someHttpMethod  |   somePrefix-someHttpMethod",
+        "somePrefix     |   null            |   somePrefix-UNKNOWN_HTTP_METHOD",
+        "somePrefix     |                   |   somePrefix-UNKNOWN_HTTP_METHOD",
+        "somePrefix     |   [whitespace]    |   somePrefix-UNKNOWN_HTTP_METHOD",
+        "null           |   someHttpMethod  |   someHttpMethod",
+        "               |   someHttpMethod  |   someHttpMethod",
+        "[whitespace]   |   someHttpMethod  |   someHttpMethod",
+        "null           |   null            |   UNKNOWN_HTTP_METHOD",
+        "               |                   |   UNKNOWN_HTTP_METHOD",
+        "[whitespace]   |   [whitespace]    |   UNKNOWN_HTTP_METHOD",
+    }, splitBy = "\\|")
     @Test
-    public void getSubspanSpanNameForHttpRequest_handles_null_values_without_exploding(boolean prefixIsNull) {
+    public void getFallbackSpanNameForHttpRequest_works_as_expected(
+        String prefix, String httpMethod, String expectedResult
+    ) {
         // given
-        String prefix = (prefixIsNull) ? null : "prefix" + UUID.randomUUID().toString();
-        String expectedSuffix = "null_null";
-        String expectedResult = (prefixIsNull)
-                                ? expectedSuffix
-                                : prefix + "-" + expectedSuffix;
+        if ("[whitespace]".equals(prefix)) {
+            prefix = "  \n\r\t  ";
+        }
+
+        if ("[whitespace]".equals(httpMethod)) {
+            httpMethod = "  \n\r\t  ";
+        }
 
         // when
-        String result = HttpRequestTracingUtils.getSubspanSpanNameForHttpRequest(prefix, null, null);
+        String result = HttpRequestTracingUtils.getFallbackSpanNameForHttpRequest(prefix, httpMethod);
 
         // then
         assertThat(result).isEqualTo(expectedResult);

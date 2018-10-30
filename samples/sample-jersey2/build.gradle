@@ -10,6 +10,7 @@ ext {
 dependencies {
     compile(
             project(":wingtips-servlet-api"),
+            project(":wingtips-jersey2"),
             "ch.qos.logback:logback-classic:$logbackVersion",
             "org.glassfish.jersey.core:jersey-server:$jersey2Version",
             "org.glassfish.jersey.containers:jersey-container-servlet:$jersey2Version",

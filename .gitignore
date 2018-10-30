@@ -2,6 +2,7 @@
 .gradle
 build/
 gradle-app.setting
+bin/
 
 ### IntelliJ stuff
 .idea/
@@ -11,3 +12,11 @@ gradle-app.setting
 out/
 classes/
 .idea_modules/
+
+### Eclipse
+.classpath
+.project
+.settings
+
+# Mac stuff
+.DS_Store

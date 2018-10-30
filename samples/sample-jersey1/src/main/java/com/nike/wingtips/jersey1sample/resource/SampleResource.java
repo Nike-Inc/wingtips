@@ -49,6 +49,7 @@ public class SampleResource {
 
     public static final String BLOCKING_FORWARD_PATH = SAMPLE_PATH_BASE + "/blocking-forward";
     public static final String ASYNC_FORWARD_PATH = SAMPLE_PATH_BASE + "/async-forward";
+    public static final String ASYNC_TIMEOUT_PATH = SAMPLE_PATH_BASE + "/async-timeout";
     public static final String ASYNC_ERROR_PATH = SAMPLE_PATH_BASE + "/async-error";
 
     public static final long SLEEP_TIME_MILLIS = 100;
@@ -143,7 +144,23 @@ public class SampleResource {
 
     }
 
+    public static class SampleAsyncTimeoutServlet extends HttpServlet {
+
+        public void doGet(HttpServletRequest request, HttpServletResponse response) {
+            if (DispatcherType.ERROR.equals(request.getDispatcherType()))
+                return;
+
+            logger.info("Async timeout endpoint hit");
+
+            AsyncContext asyncContext = request.startAsync(request, response);
+            asyncContext.setTimeout(SLEEP_TIME_MILLIS);
+        }
+
+    }
+
     public static class SampleAsyncErrorServlet extends HttpServlet {
+
+        public static final String EXCEPTION_MESSAGE = "Intentional exception by asyncError endpoint";
 
         public void doGet(HttpServletRequest request, HttpServletResponse response) {
             if (DispatcherType.ERROR.equals(request.getDispatcherType()))
@@ -151,8 +168,9 @@ public class SampleResource {
 
             logger.info("Async error endpoint hit");
             
-            AsyncContext asyncContext = request.startAsync(request, response);
-            asyncContext.setTimeout(SLEEP_TIME_MILLIS);
+            request.startAsync(request, response);
+            sleepThread(SLEEP_TIME_MILLIS);
+            throw new RuntimeException(EXCEPTION_MESSAGE);
         }
 
     }

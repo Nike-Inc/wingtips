@@ -11,6 +11,7 @@ include "wingtips-core",
         "wingtips-zipkin-spring-boot",
         "wingtips-zipkin2-spring-boot",
         "wingtips-apache-http-client",
+        "wingtips-jersey2",
         // Test-only modules (not published)
         "testonly:testonly-old-servlet",
         // Sample modules (not published)

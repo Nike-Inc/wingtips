@@ -31,6 +31,7 @@ import static com.nike.wingtips.TestSpanCompleter.completeSpan;
 import static com.nike.wingtips.util.parser.SpanParserTest.deserializeKeyValueSpanString;
 import static java.util.Collections.singletonList;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.assertj.core.api.Fail.fail;
 
 /**
@@ -221,6 +222,33 @@ public class SpanTest {
         verifySpanDeepEquals(result,
                              new Span(placeholderValue, null, placeholderValue, placeholderValue, false, null, SpanPurpose.UNKNOWN, -1, -1L, -1L, null),
                              false);
+    }
+
+    @Test
+    public void setSpanName_works_as_expected() {
+        // given
+        Span span = Span.newBuilder("origSpanName", SpanPurpose.SERVER).build();
+        String newSpanName = UUID.randomUUID().toString();
+
+        assertThat(span.getSpanName()).isNotEqualTo(newSpanName);
+
+        // when
+        span.setSpanName(newSpanName);
+
+        // then
+        assertThat(span.getSpanName()).isEqualTo(newSpanName);
+    }
+
+    @Test
+    public void setSpanName_throws_IllegalArgumentException_if_passed_null() {
+        // given
+        Span span = Span.newBuilder("origSpanName", SpanPurpose.SERVER).build();
+
+        // when
+        Throwable ex = catchThrowable(() -> span.setSpanName(null));
+
+        // then
+        assertThat(ex).isInstanceOf(IllegalArgumentException.class);
     }
 
     @DataProvider(value = {

@@ -11,6 +11,7 @@ import java.util.concurrent.TimeUnit;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
+import javax.ws.rs.PathParam;
 import javax.ws.rs.container.AsyncResponse;
 import javax.ws.rs.container.Suspended;
 
@@ -42,7 +43,15 @@ public class SampleResource {
     public static final String ASYNC_PATH = SAMPLE_PATH_BASE + "/async";
     public static final String ASYNC_RESULT = "async endpoint hit - check logs for distributed tracing info";
 
+    public static final String ASYNC_TIMEOUT_PATH = SAMPLE_PATH_BASE + "/async-timeout";
     public static final String ASYNC_ERROR_PATH = SAMPLE_PATH_BASE + "/async-error";
+
+    public static final String PATH_PARAM_ENDPOINT_PATH_PREFIX = SAMPLE_PATH_BASE + "/path-param";
+    public static final String PATH_PARAM_ENDPOINT_RESULT =
+        "path param endpoint hit - check logs for distributed tracing info";
+
+    public static final String WILDCARD_PATH_PREFIX = SAMPLE_PATH_BASE + "/wildcard";
+    public static final String WILDCARD_RESULT = "wildcard endpoint hit - check logs for distributed tracing info";
 
     public static final long SLEEP_TIME_MILLIS = 100;
 
@@ -67,6 +76,24 @@ public class SampleResource {
     }
 
     @GET
+    @Path(PATH_PARAM_ENDPOINT_PATH_PREFIX + "/{somePathParam}")
+    public String getPathParam(@PathParam("somePathParam") String somePathParam) {
+        logger.info("Path param endpoint hit - somePathParam: {}", somePathParam);
+        sleepThread(SLEEP_TIME_MILLIS);
+
+        return PATH_PARAM_ENDPOINT_RESULT;
+    }
+
+    @GET
+    @Path(WILDCARD_PATH_PREFIX + "/{restOfPath:.+}")
+    public String getWildcard() {
+        logger.info("Wildcard endpoint hit");
+        sleepThread(SLEEP_TIME_MILLIS);
+
+        return WILDCARD_RESULT;
+    }
+
+    @GET
     @Path(ASYNC_PATH)
     public void getAsync(@Suspended AsyncResponse asyncResponse) {
         logger.info("Async endpoint hit");
@@ -79,11 +106,20 @@ public class SampleResource {
     }
 
     @GET
+    @Path(ASYNC_TIMEOUT_PATH)
+    public void getAsyncTimeout(@Suspended AsyncResponse asyncResponse) {
+        logger.info("Async timeout endpoint hit");
+
+        asyncResponse.setTimeout(SLEEP_TIME_MILLIS, TimeUnit.MILLISECONDS);
+    }
+
+    @GET
     @Path(ASYNC_ERROR_PATH)
     public void getAsyncError(@Suspended AsyncResponse asyncResponse) {
         logger.info("Async error endpoint hit");
 
-        asyncResponse.setTimeout(SLEEP_TIME_MILLIS, TimeUnit.MILLISECONDS);
+        sleepThread(SLEEP_TIME_MILLIS);
+        asyncResponse.resume(new RuntimeException("Intentional exception by asyncError endpoint"));
     }
 
     private static void sleepThread(long sleepMillis) {

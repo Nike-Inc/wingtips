@@ -6,9 +6,13 @@ import com.nike.wingtips.Span.SpanPurpose;
 import com.nike.wingtips.Tracer;
 import com.nike.wingtips.spring.interceptor.WingtipsAsyncClientHttpRequestInterceptor;
 import com.nike.wingtips.spring.interceptor.WingtipsClientHttpRequestInterceptor;
+import com.nike.wingtips.spring.interceptor.tag.SpringHttpClientTagAdapter;
 import com.nike.wingtips.spring.util.asynchelperwrapper.FailureCallbackWithTracing;
 import com.nike.wingtips.spring.util.asynchelperwrapper.ListenableFutureCallbackWithTracing;
 import com.nike.wingtips.spring.util.asynchelperwrapper.SuccessCallbackWithTracing;
+import com.nike.wingtips.tags.HttpTagAndSpanNamingAdapter;
+import com.nike.wingtips.tags.HttpTagAndSpanNamingStrategy;
+import com.nike.wingtips.tags.ZipkinHttpTagStrategy;
 
 import com.tngtech.java.junit.dataprovider.DataProvider;
 import com.tngtech.java.junit.dataprovider.DataProviderRunner;
@@ -22,6 +26,8 @@ import org.slf4j.MDC;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMessage;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpRequest;
+import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.util.concurrent.FailureCallback;
 import org.springframework.util.concurrent.ListenableFutureCallback;
 import org.springframework.util.concurrent.SuccessCallback;
@@ -66,6 +72,9 @@ public class WingtipsSpringUtilTest {
     private FailureCallback failureCallbackMock;
     private ListenableFutureCallback listenableFutureCallbackMock;
 
+    private HttpTagAndSpanNamingStrategy<HttpRequest, ClientHttpResponse> tagStrategyMock;
+    private HttpTagAndSpanNamingAdapter<HttpRequest, ClientHttpResponse> tagAdapterMock;
+
     @Before
     public void beforeMethod() {
         resetTracing();
@@ -77,6 +86,9 @@ public class WingtipsSpringUtilTest {
         successCallbackMock = mock(SuccessCallback.class);
         failureCallbackMock = mock(FailureCallback.class);
         listenableFutureCallbackMock = mock(ListenableFutureCallback.class);
+
+        tagStrategyMock = mock(HttpTagAndSpanNamingStrategy.class);
+        tagAdapterMock = mock(HttpTagAndSpanNamingAdapter.class);
     }
 
     @After
@@ -84,9 +96,18 @@ public class WingtipsSpringUtilTest {
         resetTracing();
     }
 
-    private void verifySubspanOptionValue(Object wingtipsInterceptor, boolean expectedSubspanOptionValue) {
+    private void verifyInterceptorFieldValues(
+        Object wingtipsInterceptor,
+        boolean expectedSubspanOptionValue,
+        HttpTagAndSpanNamingStrategy<HttpRequest, ClientHttpResponse> expectedTagStrategy,
+        HttpTagAndSpanNamingAdapter<HttpRequest, ClientHttpResponse> expectedTagAdapter
+    ) {
         assertThat(Whitebox.getInternalState(wingtipsInterceptor, "surroundCallsWithSubspan"))
             .isEqualTo(expectedSubspanOptionValue);
+        assertThat(Whitebox.getInternalState(wingtipsInterceptor, "tagAndNamingStrategy"))
+            .isSameAs(expectedTagStrategy);
+        assertThat(Whitebox.getInternalState(wingtipsInterceptor, "tagAndNamingAdapter"))
+            .isSameAs(expectedTagAdapter);
     }
 
     @Test
@@ -97,14 +118,19 @@ public class WingtipsSpringUtilTest {
     }
 
     @Test
-    public void createTracingEnabledRestTemplate_no_args_returns_RestTemplate_with_wingtips_interceptor_added_with_subspan_option_on() {
+    public void createTracingEnabledRestTemplate_no_args_returns_RestTemplate_with_wingtips_interceptor_added_with_expected_fields() {
         // when
         RestTemplate result = WingtipsSpringUtil.createTracingEnabledRestTemplate();
 
         // then
         assertThat(result.getInterceptors()).hasSize(1);
         assertThat(result.getInterceptors().get(0)).isInstanceOf(WingtipsClientHttpRequestInterceptor.class);
-        verifySubspanOptionValue(result.getInterceptors().get(0), true);
+        verifyInterceptorFieldValues(
+            result.getInterceptors().get(0),
+            true,
+            ZipkinHttpTagStrategy.getDefaultInstance(),
+            SpringHttpClientTagAdapter.getDefaultInstance()
+        );
     }
 
     @DataProvider(value = {
@@ -112,7 +138,7 @@ public class WingtipsSpringUtilTest {
         "false"
     })
     @Test
-    public void createTracingEnabledRestTemplate_single_arg_returns_RestTemplate_with_wingtips_interceptor_added_with_subspan_option_set_to_expected_value(
+    public void createTracingEnabledRestTemplate_single_arg_returns_RestTemplate_with_wingtips_interceptor_added_with_expected_fields(
         boolean subspanOptionOn
     ) {
         // when
@@ -121,18 +147,12 @@ public class WingtipsSpringUtilTest {
         // then
         assertThat(result.getInterceptors()).hasSize(1);
         assertThat(result.getInterceptors().get(0)).isInstanceOf(WingtipsClientHttpRequestInterceptor.class);
-        verifySubspanOptionValue(result.getInterceptors().get(0), subspanOptionOn);
-    }
-
-    @Test
-    public void createTracingEnabledAsyncRestTemplate_no_args_returns_AsyncRestTemplate_with_wingtips_interceptor_added_with_subspan_option_on() {
-        // when
-        AsyncRestTemplate result = WingtipsSpringUtil.createTracingEnabledAsyncRestTemplate();
-
-        // then
-        assertThat(result.getInterceptors()).hasSize(1);
-        assertThat(result.getInterceptors().get(0)).isInstanceOf(WingtipsAsyncClientHttpRequestInterceptor.class);
-        verifySubspanOptionValue(result.getInterceptors().get(0), true);
+        verifyInterceptorFieldValues(
+            result.getInterceptors().get(0),
+            subspanOptionOn,
+            ZipkinHttpTagStrategy.getDefaultInstance(),
+            SpringHttpClientTagAdapter.getDefaultInstance()
+        );
     }
 
     @DataProvider(value = {
@@ -140,7 +160,93 @@ public class WingtipsSpringUtilTest {
         "false"
     })
     @Test
-    public void createTracingEnabledAsyncRestTemplate_single_arg_returns_AsyncRestTemplate_with_wingtips_interceptor_added_with_subspan_option_set_to_expected_value(
+    public void createTracingEnabledRestTemplate_with_tag_and_span_naming_args_returns_RestTemplate_with_wingtips_interceptor_added_with_expected_fields(
+        boolean subspanOptionOn
+    ) {
+        // when
+        RestTemplate result = WingtipsSpringUtil.createTracingEnabledRestTemplate(
+            subspanOptionOn, tagStrategyMock, tagAdapterMock
+        );
+
+        // then
+        assertThat(result.getInterceptors()).hasSize(1);
+        assertThat(result.getInterceptors().get(0)).isInstanceOf(WingtipsClientHttpRequestInterceptor.class);
+        verifyInterceptorFieldValues(
+            result.getInterceptors().get(0),
+            subspanOptionOn,
+            tagStrategyMock,
+            tagAdapterMock
+        );
+    }
+
+    private enum NullConstructorArgsScenario {
+        NULL_STRATEGY_ARG(
+            null,
+            mock(HttpTagAndSpanNamingAdapter.class),
+            "tagAndNamingStrategy cannot be null - if you really want no strategy, use NoOpHttpTagStrategy"
+        ),
+        NULL_ADAPTER_ARG(
+            mock(HttpTagAndSpanNamingStrategy.class),
+            null,
+            "tagAndNamingAdapter cannot be null - if you really want no adapter, use NoOpHttpTagAdapter"
+        );
+
+        public final HttpTagAndSpanNamingStrategy<HttpRequest, ClientHttpResponse> strategy;
+        public final HttpTagAndSpanNamingAdapter<HttpRequest, ClientHttpResponse> adapter;
+        public final String expectedExceptionMessage;
+
+        NullConstructorArgsScenario(
+            HttpTagAndSpanNamingStrategy<HttpRequest, ClientHttpResponse> strategy,
+            HttpTagAndSpanNamingAdapter<HttpRequest, ClientHttpResponse> adapter,
+            String expectedExceptionMessage
+        ) {
+            this.strategy = strategy;
+            this.adapter = adapter;
+            this.expectedExceptionMessage = expectedExceptionMessage;
+        }
+    }
+
+    @DataProvider(value = {
+        "NULL_STRATEGY_ARG",
+        "NULL_ADAPTER_ARG"
+    })
+    @Test
+    public void createTracingEnabledRestTemplate_with_tag_and_span_naming_args_throws_IllegalArgumentException_if_passed_null_args(
+        NullConstructorArgsScenario scenario
+    ) {
+        // when
+        Throwable ex = catchThrowable(
+            () -> WingtipsSpringUtil.createTracingEnabledRestTemplate(true, scenario.strategy, scenario.adapter)
+        );
+
+        // then
+        assertThat(ex)
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage(scenario.expectedExceptionMessage);
+    }
+
+    @Test
+    public void createTracingEnabledAsyncRestTemplate_no_args_returns_AsyncRestTemplate_with_wingtips_interceptor_added_with_expected_fields() {
+        // when
+        AsyncRestTemplate result = WingtipsSpringUtil.createTracingEnabledAsyncRestTemplate();
+
+        // then
+        assertThat(result.getInterceptors()).hasSize(1);
+        assertThat(result.getInterceptors().get(0)).isInstanceOf(WingtipsAsyncClientHttpRequestInterceptor.class);
+        verifyInterceptorFieldValues(
+            result.getInterceptors().get(0),
+            true,
+            ZipkinHttpTagStrategy.getDefaultInstance(),
+            SpringHttpClientTagAdapter.getDefaultInstance()
+        );
+    }
+
+    @DataProvider(value = {
+        "true",
+        "false"
+    })
+    @Test
+    public void createTracingEnabledAsyncRestTemplate_single_arg_returns_AsyncRestTemplate_with_wingtips_interceptor_added_with_expected_fields(
         boolean subspanOptionOn
     ) {
         // when
@@ -149,7 +255,55 @@ public class WingtipsSpringUtilTest {
         // then
         assertThat(result.getInterceptors()).hasSize(1);
         assertThat(result.getInterceptors().get(0)).isInstanceOf(WingtipsAsyncClientHttpRequestInterceptor.class);
-        verifySubspanOptionValue(result.getInterceptors().get(0), subspanOptionOn);
+        verifyInterceptorFieldValues(
+            result.getInterceptors().get(0),
+            subspanOptionOn,
+            ZipkinHttpTagStrategy.getDefaultInstance(),
+            SpringHttpClientTagAdapter.getDefaultInstance()
+        );
+    }
+
+    @DataProvider(value = {
+        "true",
+        "false"
+    })
+    @Test
+    public void createTracingEnabledAsyncRestTemplate_with_tag_and_span_naming_args_returns_AsyncRestTemplate_with_wingtips_interceptor_added_with_expected_fields(
+        boolean subspanOptionOn
+    ) {
+        // when
+        AsyncRestTemplate result = WingtipsSpringUtil.createTracingEnabledAsyncRestTemplate(
+            subspanOptionOn, tagStrategyMock, tagAdapterMock
+        );
+
+        // then
+        assertThat(result.getInterceptors()).hasSize(1);
+        assertThat(result.getInterceptors().get(0)).isInstanceOf(WingtipsAsyncClientHttpRequestInterceptor.class);
+        verifyInterceptorFieldValues(
+            result.getInterceptors().get(0),
+            subspanOptionOn,
+            tagStrategyMock,
+            tagAdapterMock
+        );
+    }
+
+    @DataProvider(value = {
+        "NULL_STRATEGY_ARG",
+        "NULL_ADAPTER_ARG"
+    })
+    @Test
+    public void createTracingEnabledAsyncRestTemplate_with_tag_and_span_naming_args_throws_IllegalArgumentException_if_passed_null_args(
+        NullConstructorArgsScenario scenario
+    ) {
+        // when
+        Throwable ex = catchThrowable(
+            () -> WingtipsSpringUtil.createTracingEnabledAsyncRestTemplate(true, scenario.strategy, scenario.adapter)
+        );
+
+        // then
+        assertThat(ex)
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage(scenario.expectedExceptionMessage);
     }
 
     @DataProvider(value = {
@@ -250,7 +404,7 @@ public class WingtipsSpringUtilTest {
         HttpMethod method
     ) {
         // given
-        String expectedResult = (method == null) ? "UNKNOWN" : method.name();
+        String expectedResult = (method == null) ? "UNKNOWN_HTTP_METHOD" : method.name();
 
         // when
         String result = WingtipsSpringUtil.getRequestMethodAsString(method);

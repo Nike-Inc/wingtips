@@ -5,10 +5,8 @@ import com.nike.wingtips.Span;
 import com.tngtech.java.junit.dataprovider.DataProvider;
 import com.tngtech.java.junit.dataprovider.DataProviderRunner;
 
-import org.apache.http.HttpHost;
 import org.apache.http.HttpRequest;
 import org.apache.http.RequestLine;
-import org.apache.http.client.methods.HttpRequestWrapper;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -144,62 +142,23 @@ public class WingtipsApacheHttpClientUtilTest {
     }
 
     @DataProvider(value = {
-        "true",
-        "false"
+        "someHttpMethod  |   apachehttpclient_downstream_call-someHttpMethod",
+        "null            |   apachehttpclient_downstream_call-UNKNOWN_HTTP_METHOD",
+        "                |   apachehttpclient_downstream_call-UNKNOWN_HTTP_METHOD",
+        "[whitespace]    |   apachehttpclient_downstream_call-UNKNOWN_HTTP_METHOD",
     }, splitBy = "\\|")
     @Test
-    public void getSubspanSpanName_works_as_expected(boolean includeQueryString) {
+    public void getFallbackSubspanSpanName_works_as_expected(String httpMethod, String expectedResult) {
         // given
-        String method = UUID.randomUUID().toString();
-        String noQueryStringUri = "http://localhost:4242/foo/bar";
-        String uri = (includeQueryString)
-                     ? noQueryStringUri + "?a=b&c=d"
-                     : noQueryStringUri;
-
-        doReturn(method).when(requestLineMock).getMethod();
-        doReturn(uri).when(requestLineMock).getUri();
-
-        String expectedResult = "apachehttpclient_downstream_call-" + method + "_" + noQueryStringUri;
+        if ("[whitespace]".equals(httpMethod)) {
+            httpMethod = "  \n\r\t  ";
+        }
+        doReturn(httpMethod).when(requestLineMock).getMethod();
 
         // when
-        String result = WingtipsApacheHttpClientUtil.getSubspanSpanName(requestMock);
+        String result = WingtipsApacheHttpClientUtil.getFallbackSubspanSpanName(requestMock);
 
         // then
         assertThat(result).isEqualTo(expectedResult);
     }
-
-    @DataProvider(value = {
-        "true",
-        "false"
-    }, splitBy = "\\|")
-    @Test
-    public void getSubspanSpanName_works_as_expected_for_HttpRequestWrapper_with_relative_path(
-        boolean includeQueryString
-    ) {
-        // given
-        HttpRequestWrapper reqWrapperMock = mock(HttpRequestWrapper.class);
-
-        String host = "http://localhost:4242";
-        String method = UUID.randomUUID().toString();
-        String noQueryStringRelativeUri = "/foo/bar";
-        String relativeUri = (includeQueryString)
-                             ? noQueryStringRelativeUri + "?a=b&c=d"
-                             : noQueryStringRelativeUri;
-
-        HttpHost httpHost = HttpHost.create(host);
-        doReturn(requestLineMock).when(reqWrapperMock).getRequestLine();
-        doReturn(httpHost).when(reqWrapperMock).getTarget();
-
-        doReturn(method).when(requestLineMock).getMethod();
-        doReturn(relativeUri).when(requestLineMock).getUri();
-
-        String expectedResult = "apachehttpclient_downstream_call-" + method + "_" + host + noQueryStringRelativeUri;
-
-        // when
-        String result = WingtipsApacheHttpClientUtil.getSubspanSpanName(reqWrapperMock);
-
-        // then
-        assertThat(result).isEqualTo(expectedResult);
-    }
-
 }

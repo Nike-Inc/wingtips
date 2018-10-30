@@ -4,10 +4,10 @@ import com.nike.wingtips.Span;
 import com.nike.wingtips.apache.httpclient.WingtipsApacheHttpClientInterceptor;
 import com.nike.wingtips.apache.httpclient.WingtipsHttpClientBuilder;
 import com.nike.wingtips.http.HttpRequestTracingUtils;
+import com.nike.wingtips.tags.HttpTagAndSpanNamingAdapter;
 
 import org.apache.http.HttpRequest;
 import org.apache.http.RequestLine;
-import org.apache.http.client.methods.HttpRequestWrapper;
 import org.apache.http.impl.client.HttpClientBuilder;
 
 /**
@@ -51,25 +51,21 @@ public class WingtipsApacheHttpClientUtil {
     }
 
     /**
-     * Returns the name that should be used for the subspan surrounding the given request. This method returns {@code
-     * apachehttpclient_downstream_call-[HTTP_METHOD]_[REQUEST_URI]} with any query string stripped, e.g. for a GET
-     * call to https://foo.bar/baz?stuff=things, this would return {@code
-     * "apachehttpclient_downstream_call-GET_https://foo.bar/baz"}.
+     * Returns span name that should be used for the subspan surrounding the given request when {@link
+     * com.nike.wingtips.tags.HttpTagAndSpanNamingStrategy#getInitialSpanName(Object, HttpTagAndSpanNamingAdapter)}
+     * returns null and you need a fallback.
+     *
+     * <p>This method returns {@code apachehttpclient_downstream_call-[HTTP_METHOD]}, e.g. for a GET
+     * call, this would return {@code "apachehttpclient_downstream_call-GET"}.
      *
      * @param request The request that is about to be executed.
-     * @return The name that should be used for the subspan surrounding the request.
+     * @return The fallback span name that should be used for the subspan surrounding the request.
      */
-    public static String getSubspanSpanName(HttpRequest request) {
+    public static String getFallbackSubspanSpanName(HttpRequest request) {
         RequestLine requestLine = request.getRequestLine();
-        String uri = requestLine.getUri();
 
-        if (request instanceof HttpRequestWrapper && uri.startsWith("/")) {
-            HttpRequestWrapper wrapper = (HttpRequestWrapper) request;
-            uri = wrapper.getTarget().toURI() + uri;
-        }
-
-        return HttpRequestTracingUtils.getSubspanSpanNameForHttpRequest(
-            "apachehttpclient_downstream_call", requestLine.getMethod(), uri
+        return HttpRequestTracingUtils.getFallbackSpanNameForHttpRequest(
+            "apachehttpclient_downstream_call", requestLine.getMethod()
         );
     }
 

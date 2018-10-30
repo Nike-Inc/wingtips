@@ -6,14 +6,22 @@ import com.nike.wingtips.Tracer;
 import com.nike.wingtips.http.HttpRequestTracingUtils;
 import com.nike.wingtips.spring.interceptor.WingtipsAsyncClientHttpRequestInterceptor;
 import com.nike.wingtips.spring.interceptor.WingtipsClientHttpRequestInterceptor;
+import com.nike.wingtips.spring.interceptor.tag.SpringHttpClientTagAdapter;
 import com.nike.wingtips.spring.util.asynchelperwrapper.FailureCallbackWithTracing;
 import com.nike.wingtips.spring.util.asynchelperwrapper.ListenableFutureCallbackWithTracing;
 import com.nike.wingtips.spring.util.asynchelperwrapper.SuccessCallbackWithTracing;
+import com.nike.wingtips.tags.HttpTagAndSpanNamingAdapter;
+import com.nike.wingtips.tags.HttpTagAndSpanNamingStrategy;
+import com.nike.wingtips.tags.NoOpHttpTagAdapter;
+import com.nike.wingtips.tags.NoOpHttpTagStrategy;
+import com.nike.wingtips.tags.ZipkinHttpTagStrategy;
 import com.nike.wingtips.util.TracingState;
 
 import org.slf4j.MDC;
 import org.springframework.http.HttpMessage;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpRequest;
+import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.util.concurrent.FailureCallback;
 import org.springframework.util.concurrent.ListenableFutureCallback;
 import org.springframework.util.concurrent.SuccessCallback;
@@ -43,7 +51,9 @@ public class WingtipsSpringUtil {
 
     /**
      * @return A new {@link RestTemplate} instance with a {@link WingtipsClientHttpRequestInterceptor} already added
-     * and configured to surround downstream calls with a subspan.
+     * and configured to surround downstream calls with a subspan, and using the default
+     * {@link HttpTagAndSpanNamingStrategy} and {@link HttpTagAndSpanNamingAdapter} ({@link ZipkinHttpTagStrategy} and
+     * {@link SpringHttpClientTagAdapter}).
      */
     public static RestTemplate createTracingEnabledRestTemplate() {
         return createTracingEnabledRestTemplate(true);
@@ -54,7 +64,9 @@ public class WingtipsSpringUtil {
      * a subspan and propagate the subspan's tracing info, or false to have only the current span propagated at the
      * time of the call (no subspan).
      * @return A new {@link RestTemplate} instance with a {@link WingtipsClientHttpRequestInterceptor} already added
-     * and with the subspan option on or off depending on the value of the {@code surroundCallsWithSubspan} argument.
+     * and with the subspan option on or off depending on the value of the {@code surroundCallsWithSubspan} argument,
+     * and using the default {@link HttpTagAndSpanNamingStrategy} and {@link HttpTagAndSpanNamingAdapter}
+     * ({@link ZipkinHttpTagStrategy} and {@link SpringHttpClientTagAdapter}).
      */
     public static RestTemplate createTracingEnabledRestTemplate(boolean surroundCallsWithSubspan) {
         RestTemplate restTemplate = new RestTemplate();
@@ -65,8 +77,34 @@ public class WingtipsSpringUtil {
     }
 
     /**
+     * @param tagAndNamingStrategy The span tag and naming strategy to use - cannot be null. If you really want no
+     * tag and naming strategy, then pass in {@link NoOpHttpTagStrategy#getDefaultInstance()}.
+     * @param tagAndNamingAdapter The tag and naming adapter to use - cannot be null. If you really want no tag and
+     * naming adapter, then pass in {@link NoOpHttpTagAdapter#getDefaultInstance()}.
+     * @return A new {@link RestTemplate} instance with a {@link WingtipsClientHttpRequestInterceptor}
+     * already added, and with the subspan option and tag/naming strategy and adapter set to the given arguments.
+     */
+    public static RestTemplate createTracingEnabledRestTemplate(
+        boolean surroundCallsWithSubspan,
+        HttpTagAndSpanNamingStrategy<HttpRequest, ClientHttpResponse> tagAndNamingStrategy,
+        HttpTagAndSpanNamingAdapter<HttpRequest, ClientHttpResponse> tagAndNamingAdapter
+    ) {
+        RestTemplate restTemplate = new RestTemplate();
+        restTemplate.getInterceptors().add(
+            new WingtipsClientHttpRequestInterceptor(
+                surroundCallsWithSubspan,
+                tagAndNamingStrategy,
+                tagAndNamingAdapter
+            )
+        );
+        return restTemplate;
+    }
+
+    /**
      * @return A new {@link AsyncRestTemplate} instance with a {@link WingtipsAsyncClientHttpRequestInterceptor}
-     * already added and configured to surround downstream calls with a subspan.
+     * already added and configured to surround downstream calls with a subspan, and using the default
+     * {@link HttpTagAndSpanNamingStrategy} and {@link HttpTagAndSpanNamingAdapter} ({@link ZipkinHttpTagStrategy} and
+     * {@link SpringHttpClientTagAdapter}).
      */
     public static AsyncRestTemplate createTracingEnabledAsyncRestTemplate() {
         return createTracingEnabledAsyncRestTemplate(true);
@@ -78,12 +116,37 @@ public class WingtipsSpringUtil {
      * the time of the call (no subspan).
      * @return A new {@link AsyncRestTemplate} instance with a {@link WingtipsAsyncClientHttpRequestInterceptor}
      * already added and with the subspan option on or off depending on the value of the {@code
-     * surroundCallsWithSubspan} argument.
+     * surroundCallsWithSubspan} argument, and using the default {@link HttpTagAndSpanNamingStrategy} and
+     * {@link HttpTagAndSpanNamingAdapter} ({@link ZipkinHttpTagStrategy} and {@link SpringHttpClientTagAdapter}).
      */
     public static AsyncRestTemplate createTracingEnabledAsyncRestTemplate(boolean surroundCallsWithSubspan) {
         AsyncRestTemplate asyncRestTemplate = new AsyncRestTemplate();
         asyncRestTemplate.getInterceptors().add(
             new WingtipsAsyncClientHttpRequestInterceptor(surroundCallsWithSubspan)
+        );
+        return asyncRestTemplate;
+    }
+    
+    /**
+     * @param tagAndNamingStrategy The span tag and naming strategy to use - cannot be null. If you really want no
+     * tag and naming strategy, then pass in {@link NoOpHttpTagStrategy#getDefaultInstance()}.
+     * @param tagAndNamingAdapter The tag and naming adapter to use - cannot be null. If you really want no tag and
+     * naming adapter, then pass in {@link NoOpHttpTagAdapter#getDefaultInstance()}.
+     * @return A new {@link AsyncRestTemplate} instance with a {@link WingtipsAsyncClientHttpRequestInterceptor}
+     * already added, and with the subspan option and tag/naming strategy and adapter set to the given arguments.
+     */
+    public static AsyncRestTemplate createTracingEnabledAsyncRestTemplate(
+        boolean surroundCallsWithSubspan,
+        HttpTagAndSpanNamingStrategy<HttpRequest, ClientHttpResponse> tagAndNamingStrategy,
+        HttpTagAndSpanNamingAdapter<HttpRequest, ClientHttpResponse> tagAndNamingAdapter
+    ) {
+        AsyncRestTemplate asyncRestTemplate = new AsyncRestTemplate();
+        asyncRestTemplate.getInterceptors().add(
+            new WingtipsAsyncClientHttpRequestInterceptor(
+                surroundCallsWithSubspan,
+                tagAndNamingStrategy,
+                tagAndNamingAdapter
+            )
         );
         return asyncRestTemplate;
     }
@@ -111,11 +174,11 @@ public class WingtipsSpringUtil {
 
     /**
      * @param method The HTTP method.
-     * @return "UNKNOWN" if the method is null, otherwise {@link HttpMethod#name()}.
+     * @return "UNKNOWN_HTTP_METHOD" if the method is null, otherwise {@link HttpMethod#name()}.
      */
     public static String getRequestMethodAsString(HttpMethod method) {
         if (method == null) {
-            return "UNKNOWN";
+            return "UNKNOWN_HTTP_METHOD";
         }
 
         return method.name();

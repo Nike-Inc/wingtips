@@ -7,6 +7,8 @@ import com.nike.wingtips.TraceHeaders;
 import com.nike.wingtips.Tracer;
 import com.nike.wingtips.lifecyclelistener.SpanLifecycleListener;
 import com.nike.wingtips.servlet.RequestTracingFilter;
+import com.nike.wingtips.tags.KnownZipkinTags;
+import com.nike.wingtips.tags.WingtipsTags;
 
 import com.tngtech.java.junit.dataprovider.DataProvider;
 import com.tngtech.java.junit.dataprovider.DataProviderRunner;
@@ -54,7 +56,7 @@ public class RequestTracingFilterComponentTest {
 
     private static int port;
     private static Server server;
-
+    
     private SpanRecorder spanRecorder;
 
     @BeforeClass
@@ -100,9 +102,10 @@ public class RequestTracingFilterComponentTest {
     })
     @Test
     public void verify_blocking_endpoint_traced_correctly(boolean upstreamSendsSpan) {
-        Pair<Span, Map<String, String>> upstreamSpanInfo = (upstreamSendsSpan)
-                                                           ? generateUpstreamSpanHeaders()
-                                                           : Pair.of((Span)null, Collections.<String, String>emptyMap());
+        Pair<Span, Map<String, String>> upstreamSpanInfo =
+            (upstreamSendsSpan)
+            ? generateUpstreamSpanHeaders()
+            : Pair.of((Span) null, Collections.<String, String>emptyMap());
 
         ExtractableResponse response =
             given()
@@ -118,7 +121,19 @@ public class RequestTracingFilterComponentTest {
 
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.asString()).isEqualTo(BLOCKING_RESULT);
-        verifySingleSpanCompletedAndReturnedInResponse(response, SLEEP_TIME_MILLIS, upstreamSpanInfo.getLeft());
+        Span completedSpan =
+            verifySingleSpanCompletedAndReturnedInResponse(response, SLEEP_TIME_MILLIS, upstreamSpanInfo.getLeft());
+        verifySpanNameAndTags(
+            completedSpan,
+            "GET",
+            "GET",
+            BLOCKING_PATH,
+            "http://localhost:" + port + BLOCKING_PATH,
+            null,
+            response.statusCode(),
+            null,
+            "servlet"
+        );
     }
 
     @DataProvider(value = {
@@ -127,9 +142,10 @@ public class RequestTracingFilterComponentTest {
     })
     @Test
     public void verify_async_endpoint_traced_correctly(boolean upstreamSendsSpan) {
-        Pair<Span, Map<String, String>> upstreamSpanInfo = (upstreamSendsSpan)
-                                                           ? generateUpstreamSpanHeaders()
-                                                           : Pair.of((Span)null, Collections.<String, String>emptyMap());
+        Pair<Span, Map<String, String>> upstreamSpanInfo =
+            (upstreamSendsSpan)
+            ? generateUpstreamSpanHeaders()
+            : Pair.of((Span) null, Collections.<String, String>emptyMap());
 
         ExtractableResponse response =
             given()
@@ -145,7 +161,19 @@ public class RequestTracingFilterComponentTest {
 
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.asString()).isEqualTo(ASYNC_RESULT);
-        verifySingleSpanCompletedAndReturnedInResponse(response, SLEEP_TIME_MILLIS, upstreamSpanInfo.getLeft());
+        Span completedSpan =
+            verifySingleSpanCompletedAndReturnedInResponse(response, SLEEP_TIME_MILLIS, upstreamSpanInfo.getLeft());
+        verifySpanNameAndTags(
+            completedSpan,
+            "GET",
+            "GET",
+            ASYNC_PATH,
+            "http://localhost:" + port + ASYNC_PATH,
+            null,
+            response.statusCode(),
+            null,
+            "servlet"
+        );
     }
 
     @DataProvider(value = {
@@ -154,9 +182,10 @@ public class RequestTracingFilterComponentTest {
     })
     @Test
     public void verify_blocking_forward_endpoint_traced_correctly(boolean upstreamSendsSpan) {
-        Pair<Span, Map<String, String>> upstreamSpanInfo = (upstreamSendsSpan)
-                                                           ? generateUpstreamSpanHeaders()
-                                                           : Pair.of((Span)null, Collections.<String, String>emptyMap());
+        Pair<Span, Map<String, String>> upstreamSpanInfo =
+            (upstreamSendsSpan)
+            ? generateUpstreamSpanHeaders()
+            : Pair.of((Span) null, Collections.<String, String>emptyMap());
 
         ExtractableResponse response =
             given()
@@ -172,7 +201,19 @@ public class RequestTracingFilterComponentTest {
 
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.asString()).isEqualTo(BLOCKING_RESULT);
-        verifySingleSpanCompletedAndReturnedInResponse(response, SLEEP_TIME_MILLIS * 2, upstreamSpanInfo.getLeft());
+        Span completedSpan =
+            verifySingleSpanCompletedAndReturnedInResponse(response, SLEEP_TIME_MILLIS * 2, upstreamSpanInfo.getLeft());
+        verifySpanNameAndTags(
+            completedSpan,
+            "GET",
+            "GET",
+            BLOCKING_FORWARD_PATH,
+            "http://localhost:" + port + BLOCKING_FORWARD_PATH,
+            null,
+            response.statusCode(),
+            null,
+            "servlet"
+        );
     }
 
     @DataProvider(value = {
@@ -181,9 +222,10 @@ public class RequestTracingFilterComponentTest {
     })
     @Test
     public void verify_async_forward_endpoint_traced_correctly(boolean upstreamSendsSpan) {
-        Pair<Span, Map<String, String>> upstreamSpanInfo = (upstreamSendsSpan)
-                                                           ? generateUpstreamSpanHeaders()
-                                                           : Pair.of((Span)null, Collections.<String, String>emptyMap());
+        Pair<Span, Map<String, String>> upstreamSpanInfo =
+            (upstreamSendsSpan)
+            ? generateUpstreamSpanHeaders()
+            : Pair.of((Span) null, Collections.<String, String>emptyMap());
 
         ExtractableResponse response =
             given()
@@ -199,7 +241,59 @@ public class RequestTracingFilterComponentTest {
 
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.asString()).isEqualTo(ASYNC_RESULT);
-        verifySingleSpanCompletedAndReturnedInResponse(response, SLEEP_TIME_MILLIS * 2, upstreamSpanInfo.getLeft());
+        Span completedSpan =
+            verifySingleSpanCompletedAndReturnedInResponse(response, SLEEP_TIME_MILLIS * 2, upstreamSpanInfo.getLeft());
+        verifySpanNameAndTags(
+            completedSpan,
+            "GET",
+            "GET",
+            ASYNC_FORWARD_PATH,
+            "http://localhost:" + port + ASYNC_FORWARD_PATH,
+            null,
+            response.statusCode(),
+            null,
+            "servlet"
+        );
+    }
+
+    @DataProvider(value = {
+        "true",
+        "false"
+    })
+    @Test
+    public void verify_async_timeout_endpoint_traced_correctly(boolean upstreamSendsSpan) {
+        Pair<Span, Map<String, String>> upstreamSpanInfo =
+            (upstreamSendsSpan)
+            ? generateUpstreamSpanHeaders()
+            : Pair.of((Span) null, Collections.<String, String>emptyMap());
+
+        ExtractableResponse response =
+            given()
+                .baseUri("http://localhost")
+                .port(port)
+                .headers(upstreamSpanInfo.getRight())
+                .log().all()
+            .when()
+                .get(ASYNC_TIMEOUT_PATH)
+            .then()
+                .log().all()
+                .extract();
+
+        assertThat(response.statusCode()).isEqualTo(500);
+        Span completedSpan =
+            verifySingleSpanCompletedAndReturnedInResponse(response, SLEEP_TIME_MILLIS, upstreamSpanInfo.getLeft());
+        verifySpanNameAndTags(
+            completedSpan,
+            "GET",
+            "GET",
+            ASYNC_TIMEOUT_PATH,
+            "http://localhost:" + port + ASYNC_TIMEOUT_PATH,
+            null,
+            response.statusCode(),
+            // This is the exception message that Jetty happens to put on the TimeoutException that gets thrown.
+            "Async API violation", 
+            "servlet"
+        );
     }
 
     @DataProvider(value = {
@@ -208,9 +302,10 @@ public class RequestTracingFilterComponentTest {
     })
     @Test
     public void verify_async_error_endpoint_traced_correctly(boolean upstreamSendsSpan) {
-        Pair<Span, Map<String, String>> upstreamSpanInfo = (upstreamSendsSpan)
-                                                           ? generateUpstreamSpanHeaders()
-                                                           : Pair.of((Span)null, Collections.<String, String>emptyMap());
+        Pair<Span, Map<String, String>> upstreamSpanInfo =
+            (upstreamSendsSpan)
+            ? generateUpstreamSpanHeaders()
+            : Pair.of((Span) null, Collections.<String, String>emptyMap());
 
         ExtractableResponse response =
             given()
@@ -225,7 +320,62 @@ public class RequestTracingFilterComponentTest {
                 .extract();
 
         assertThat(response.statusCode()).isEqualTo(500);
-        verifySingleSpanCompletedAndReturnedInResponse(response, SLEEP_TIME_MILLIS, upstreamSpanInfo.getLeft());
+        Span completedSpan =
+            verifySingleSpanCompletedAndReturnedInResponse(response, SLEEP_TIME_MILLIS, upstreamSpanInfo.getLeft());
+        verifySpanNameAndTags(
+            completedSpan,
+            "GET",
+            "GET",
+            ASYNC_ERROR_PATH,
+            "http://localhost:" + port + ASYNC_ERROR_PATH,
+            null,
+            response.statusCode(),
+            AsyncErrorServlet.EXCEPTION_MESSAGE,
+            "servlet"
+        );
+    }
+
+    @DataProvider(value = {
+        "true",
+        "false"
+    })
+    @Test
+    public void verify_wildcard_endpoint_traced_correctly(boolean upstreamSendsSpan) {
+        Pair<Span, Map<String, String>> upstreamSpanInfo =
+            (upstreamSendsSpan)
+            ? generateUpstreamSpanHeaders()
+            : Pair.of((Span) null, Collections.<String, String>emptyMap());
+
+        String path = WILDCARD_PATH_PREFIX + "/" + UUID.randomUUID().toString();
+        String pathWithQueryString = path + "?foo=" + UUID.randomUUID().toString();
+
+        ExtractableResponse response =
+            given()
+                .baseUri("http://localhost")
+                .port(port)
+                .headers(upstreamSpanInfo.getRight())
+                .log().all()
+            .when()
+                .get(pathWithQueryString)
+            .then()
+                .log().all()
+                .extract();
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.asString()).isEqualTo(WILDCARD_RESULT);
+        Span completedSpan =
+            verifySingleSpanCompletedAndReturnedInResponse(response, SLEEP_TIME_MILLIS, upstreamSpanInfo.getLeft());
+        verifySpanNameAndTags(
+            completedSpan,
+            "GET " + WILDCARD_PATH_TEMPLATE,
+            "GET",
+            path,
+            "http://localhost:" + port + pathWithQueryString,
+            WILDCARD_PATH_TEMPLATE,
+            response.statusCode(),
+            null,
+            "servlet"
+        );
     }
 
     private Pair<Span, Map<String, String>> generateUpstreamSpanHeaders() {
@@ -240,14 +390,16 @@ public class RequestTracingFilterComponentTest {
         return Pair.of(span, headers);
     }
 
-    private void verifySingleSpanCompletedAndReturnedInResponse(ExtractableResponse response,
-                                                                long expectedMinSpanDurationMillis,
-                                                                Span expectedUpstreamSpan) {
+    private Span verifySingleSpanCompletedAndReturnedInResponse(
+        ExtractableResponse response,
+        long expectedMinSpanDurationMillis,
+        Span expectedUpstreamSpan
+    ) {
         // We can have a race condition where the response is sent and we try to verify here before the servlet filter
         //      has had a chance to complete the span. Wait a few milliseconds to give the servlet filter time to
         //      finish.
         waitUntilSpanRecorderHasExpectedNumSpans(1);
-        
+
         assertThat(spanRecorder.completedSpans).hasSize(1);
         Span completedSpan = spanRecorder.completedSpans.get(0);
         String traceIdFromResponse = response.header(TraceHeaders.TRACE_ID);
@@ -261,6 +413,30 @@ public class RequestTracingFilterComponentTest {
             assertThat(completedSpan.getTraceId()).isEqualTo(expectedUpstreamSpan.getTraceId());
             assertThat(completedSpan.getParentSpanId()).isEqualTo(expectedUpstreamSpan.getSpanId());
         }
+
+        return completedSpan;
+    }
+
+    private void verifySpanNameAndTags(
+        Span span,
+        String expectedSpanName,
+        String expectedHttpMethodTagValue,
+        String expectedPathTagValue,
+        String expectedUrlTagValue,
+        String expectedHttpRouteTagValue,
+        int expectedStatusCodeTagValue,
+        String expectedErrorTagValue,
+        String expectedSpanHandlerTagValue
+    ) {
+        assertThat(span.getSpanName()).isEqualTo(expectedSpanName);
+        assertThat(span.getTags().get(KnownZipkinTags.HTTP_METHOD)).isEqualTo(expectedHttpMethodTagValue);
+        assertThat(span.getTags().get(KnownZipkinTags.HTTP_PATH)).isEqualTo(expectedPathTagValue);
+        assertThat(span.getTags().get(KnownZipkinTags.HTTP_URL)).isEqualTo(expectedUrlTagValue);
+        assertThat(span.getTags().get(KnownZipkinTags.HTTP_ROUTE)).isEqualTo(expectedHttpRouteTagValue);
+        assertThat(span.getTags().get(KnownZipkinTags.HTTP_STATUS_CODE))
+            .isEqualTo(String.valueOf(expectedStatusCodeTagValue));
+        assertThat(span.getTags().get(KnownZipkinTags.ERROR)).isEqualTo(expectedErrorTagValue);
+        assertThat(span.getTags().get(WingtipsTags.SPAN_HANDLER)).isEqualTo(expectedSpanHandlerTagValue);
     }
 
     private void waitUntilSpanRecorderHasExpectedNumSpans(int expectedNumSpans) {
@@ -284,15 +460,17 @@ public class RequestTracingFilterComponentTest {
         }
     }
 
-    public static class SpanRecorder implements SpanLifecycleListener {
+    public static class SpanRecorder implements SpanLifecycleListener {   
 
         public final List<Span> completedSpans = new ArrayList<>();
 
         @Override
-        public void spanStarted(Span span) { }
+        public void spanStarted(Span span) {
+        }
 
         @Override
-        public void spanSampled(Span span) { }
+        public void spanSampled(Span span) {
+        }
 
         @Override
         public void spanCompleted(Span span) {
@@ -306,7 +484,7 @@ public class RequestTracingFilterComponentTest {
         }
     }
 
-    private static ServletContextHandler generateServletContextHandler() throws IOException {
+    private static ServletContextHandler generateServletContextHandler() {
         ServletContextHandler contextHandler = new ServletContextHandler();
         contextHandler.setContextPath("/");
 
@@ -314,7 +492,9 @@ public class RequestTracingFilterComponentTest {
         contextHandler.addServlet(AsyncServlet.class, ASYNC_PATH);
         contextHandler.addServlet(BlockingForwardServlet.class, BLOCKING_FORWARD_PATH);
         contextHandler.addServlet(AsyncForwardServlet.class, ASYNC_FORWARD_PATH);
+        contextHandler.addServlet(AsyncTimeoutServlet.class, ASYNC_TIMEOUT_PATH);
         contextHandler.addServlet(AsyncErrorServlet.class, ASYNC_ERROR_PATH);
+        contextHandler.addServlet(WildcardServlet.class, WILDCARD_PATH_TEMPLATE);
         contextHandler.addFilter(RequestTracingFilter.class, "/*", EnumSet.allOf(DispatcherType.class));
         return contextHandler;
     }
@@ -324,20 +504,25 @@ public class RequestTracingFilterComponentTest {
 
     private static final String ASYNC_PATH = "/async";
     private static final String ASYNC_RESULT = "async endpoint hit - " + UUID.randomUUID().toString();
-
+    
     private static final String BLOCKING_FORWARD_PATH = "/blockingForward";
     private static final String ASYNC_FORWARD_PATH = "/asyncForward";
+    private static final String ASYNC_TIMEOUT_PATH = "/asyncTimeout";
     private static final String ASYNC_ERROR_PATH = "/asyncError";
+    
+    private static final String WILDCARD_PATH_PREFIX = "/wildcard";
+    private static final String WILDCARD_PATH_TEMPLATE = WILDCARD_PATH_PREFIX + "/*";
+    private static final String WILDCARD_RESULT = "wildcard endpoint hit - " + UUID.randomUUID().toString();
 
     private static final int SLEEP_TIME_MILLIS = 50;
-
+    
     private static final ExecutorService executor = Executors.newCachedThreadPool();
 
     public static class BlockingServlet extends HttpServlet {
 
         public void doGet(
             HttpServletRequest request, HttpServletResponse response
-        ) throws ServletException, IOException {
+        ) throws IOException {
             sleepThread(SLEEP_TIME_MILLIS);
             response.getWriter().print(BLOCKING_RESULT);
             response.flushBuffer();
@@ -350,17 +535,14 @@ public class RequestTracingFilterComponentTest {
         public void doGet(HttpServletRequest request, HttpServletResponse response) {
             final AsyncContext asyncContext = request.startAsync(request, response);
 
-            executor.execute(new Runnable() {
-                @Override
-                public void run() {
-                    try {
-                        sleepThread(SLEEP_TIME_MILLIS);
-                        asyncContext.getResponse().getWriter().print(ASYNC_RESULT);
-                        asyncContext.complete();
-                    }
-                    catch (IOException e) {
-                        throw new RuntimeException(e);
-                    }
+            executor.execute(() -> {
+                try {
+                    sleepThread(SLEEP_TIME_MILLIS);
+                    asyncContext.getResponse().getWriter().print(ASYNC_RESULT);
+                    asyncContext.complete();
+                }
+                catch (IOException e) {
+                    throw new RuntimeException(e);
                 }
             });
         }
@@ -383,25 +565,57 @@ public class RequestTracingFilterComponentTest {
         public void doGet(HttpServletRequest request, HttpServletResponse response) {
             final AsyncContext asyncContext = request.startAsync(request, response);
 
-            executor.execute(new Runnable() {
-                @Override
-                public void run() {
-                    sleepThread(SLEEP_TIME_MILLIS);
-                    asyncContext.dispatch(ASYNC_PATH);
-                }
+            executor.execute(() -> {
+                sleepThread(SLEEP_TIME_MILLIS);
+                asyncContext.dispatch(ASYNC_PATH);
             });
+        }
+
+    }
+
+    public static class AsyncTimeoutServlet extends HttpServlet {
+
+        public void doGet(HttpServletRequest request, final HttpServletResponse response) {
+            if (DispatcherType.ERROR.equals(request.getDispatcherType())) {
+                return;
+            }
+
+            final AsyncContext asyncContext = request.startAsync(request, response);
+            asyncContext.setTimeout(SLEEP_TIME_MILLIS);
         }
 
     }
 
     public static class AsyncErrorServlet extends HttpServlet {
 
-        public void doGet(HttpServletRequest request, final HttpServletResponse response) {
-            if (DispatcherType.ERROR.equals(request.getDispatcherType()))
-                return;
+        public static final String EXCEPTION_MESSAGE = "Intentional error in AsyncErrorServlet";
 
-            final AsyncContext asyncContext = request.startAsync(request, response);
-            asyncContext.setTimeout(SLEEP_TIME_MILLIS);
+        public void doGet(HttpServletRequest request, final HttpServletResponse response) {
+            if (DispatcherType.ERROR.equals(request.getDispatcherType())) {
+                return;
+            }
+
+            // Trigger async for this request.
+            request.startAsync(request, response);
+
+            // Sleep for the expected amount of time.
+            sleepThread(SLEEP_TIME_MILLIS);
+
+            // Throw an exception to trigger the AsyncListener.onError() codepath.
+            throw new RuntimeException(EXCEPTION_MESSAGE);
+        }
+
+    }
+
+    public static class WildcardServlet extends HttpServlet {
+
+        public void doGet(
+            HttpServletRequest request, HttpServletResponse response
+        ) throws IOException {
+            sleepThread(SLEEP_TIME_MILLIS);
+            request.setAttribute(KnownZipkinTags.HTTP_ROUTE, WILDCARD_PATH_TEMPLATE);
+            response.getWriter().print(WILDCARD_RESULT);
+            response.flushBuffer();
         }
 
     }

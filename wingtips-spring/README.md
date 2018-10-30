@@ -8,11 +8,15 @@ This module is a plugin extension module of the core Wingtips library and contai
 
 * **`WingtipsClientHttpRequestInterceptor`** - An interceptor for Spring's synchronous `RestTemplate` HTTP client that
 automatically [propagates](../README.md#propagating_traces) Wingtips tracing information on the downstream call's 
-request headers, with an option to surround the downstream call in a [subspan](../README.md#sub_spans).  
+request headers, with an option to surround the downstream call in a [subspan](../README.md#sub_spans). This interceptor
+uses the `ZipkinHttpTagStrategy` by default to name and tag any created subspans. See the 
+[Default HTTP Tags](../README.md#default_http_tags) section in the main readme for details on what tags you get. You can use a 
+different tag and naming strategy (and/or tag adapter) if desired by passing it in when constructing the interceptor. 
 * **`WingtipsAsyncClientHttpRequestInterceptor`** - An interceptor for Spring's asynchronous `AsyncRestTemplate` HTTP 
 client that automatically [propagates](../README.md#propagating_traces) Wingtips tracing information on the 
 downstream call's request headers, with an option to surround the downstream call in a 
-[subspan](../README.md#sub_spans). 
+[subspan](../README.md#sub_spans). This interceptor uses `ZipkinHttpTagStrategy` by default just like the other
+interceptor. 
 * **`ListenableFutureCallbackWithTracing`, `SuccessCallbackWithTracing`, and `FailureCallbackWithTracing`** - These
 classes wrap their associated class or functional interface from Spring's `org.springframework.util.concurrent`package.
 They can be used to add callbacks to `AsyncRestTemplate` requests (or anywhere else that Spring requires them) so that 

@@ -37,6 +37,9 @@ highly recommended that you also at least specify `wingtips.zipkin.service-name`
 wingtips.wingtips-disabled=false
 wingtips.user-id-header-keys=userid,altuserid
 wingtips.span-logging-format=KEY_VALUE 
+wingtips.server-side-span-tagging-strategy=ZIPKIN
+# Leave tagging adapter property blank to use the default ServletRequestTagAdapter
+wingtips.server-side-span-tagging-adapter=
 
 # Zipkin integration config for Wingtips
 wingtips.zipkin.zipkin-disabled=false

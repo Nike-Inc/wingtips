@@ -11,7 +11,8 @@ dependencies {
             project(":wingtips-core")
     )
     compileOnly(
-            "org.apache.httpcomponents:httpclient:$apacheHttpClientVersion"
+            "org.apache.httpcomponents:httpclient:$apacheHttpClientVersion",
+            "org.jetbrains:annotations:$jetbrainsAnnotationsVersion"
     )
     testCompile(
             project(":wingtips-servlet-api"),
@@ -21,6 +22,7 @@ dependencies {
             "org.assertj:assertj-core:$assertJVersion",
             "com.tngtech.java:junit-dataprovider:$junitDataproviderVersion",
             "io.rest-assured:rest-assured:$restAssuredVersion",
+            "org.jetbrains:annotations:$jetbrainsAnnotationsVersion",
             "commons-io:commons-io:$apacheCommonsIoVersion",
             "org.springframework.boot:spring-boot-starter-web:$springbootVersion"
     )

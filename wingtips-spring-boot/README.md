@@ -31,7 +31,9 @@ And (optionally) specify configuration from your Spring Boot app's `application.
 ``` ini
 wingtips.wingtips-disabled=false
 wingtips.user-id-header-keys=userid,altuserid
-wingtips.span-logging-format=KEY_VALUE 
+wingtips.span-logging-format=KEY_VALUE
+wingtips.server-side-span-tagging-strategy=ZIPKIN
+wingtips.server-side-span-tagging-adapter=com.nike.wingtips.servlet.tag.ServletRequestTagAdapter
 ```
 
 ## Feature details
@@ -49,6 +51,11 @@ features:
     `WingtipsSpringBootConfiguration` will use that one instead of creating a new default one.
     - Sets the span logging representation used by Wingtips to whatever you specify in your 
     `wingtips.span-logging-format` application property (see `WingtipsSpringBootProperties` description below).
+    - The `RequestTracingFilter` uses a `HttpTagAndSpanNamingStrategy` and `HttpTagAndSpanNamingAdapter` to 
+    name spans and tag spans with useful metadata about the request and response. By default it will use 
+    `ZipkinHttpTagStrategy` and `ServletRequestTagAdapter`. To modify the tag strategy and/or adapter, you can
+    set the `wingtips.server-side-span-tagging-strategy` and/or `wingtips.server-side-span-tagging-adapter` application
+    properties (see `WingtipsSpringBootProperties` description below). 
 * **`WingtipsSpringBootProperties`** - The Spring Boot 
 [@ConfigurationProperties](https://docs.spring.io/spring-boot/docs/current/reference/html/boot-features-external-config.html#boot-features-external-config-typesafe-configuration-properties) 
 companion for `WingtipsSpringBootConfiguration` (described above) that allows you to customize some Wingtips behaviors 
@@ -64,6 +71,18 @@ for a concrete example. The following properties are supported (all of them opti
     - **`wingtips.span-logging-format`** - Determines the format Wingtips will use when logging spans. Represents the 
     `Tracer.SpanLoggingRepresentation` enum. Must be either `JSON` or `KEY_VALUE`. If missing then the span logging 
     format will not be changed (defaults to `JSON`).     
+    - **`wingtips.server-side-span-tagging-strategy`** - Determines the `HttpTagAndSpanNamingStrategy` that is used, 
+    which in turn determines the set of tags that will be used to record metadata from the request and response.
+    These standard tags are often used by visualization tools. This can be one of the short names: `ZIPKIN`, 
+    `OPENTRACING`, or `NONE`. You can also specify a fully qualified classname to a custom implementation. Custom 
+    implementations must extend `HttpTagAndSpanNamingStrategy`, and they must have a default no-arg constructor.
+    If this is blank or unset, then `ZIPKIN` will be used as the default.
+    - **`wingtips.server-side-span-tagging-adapter`** - Determines the `HttpTagAndSpanNamingAdapter` that will be used 
+    to extract tag and span name data from the Servlet request/response. This is passed to the 
+    `HttpTagAndSpanNamingStrategy` during span naming and tagging. The value of this property should be a fully 
+    qualified classname to a specific implementation. Implementations must extend `HttpTagAndSpanNamingAdapter`, and 
+    they must have a default no-arg constructor. If this is blank or unset, then 
+    `com.nike.wingtips.servlet.tag.ServletRequestTagAdapter` will be used as the default.
 
 For general Wingtips information please see the [base project README.md](../README.md).
 

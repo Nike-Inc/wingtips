@@ -1,5 +1,7 @@
 package com.nike.wingtips.servlet;
 
+import com.nike.wingtips.tags.HttpTagAndSpanNamingAdapter;
+import com.nike.wingtips.tags.HttpTagAndSpanNamingStrategy;
 import com.nike.wingtips.util.TracingState;
 
 import org.slf4j.Logger;
@@ -7,6 +9,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.servlet.ServletRequest;
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 
 /**
  * A class for abstracting out bits of the Servlet API that are version-dependent, e.g. async request support
@@ -52,11 +55,21 @@ abstract class ServletRuntime {
      *
      * @param asyncRequest The async servlet request (guaranteed to be async since this method will only be called when
      * {@link #isAsyncRequest(HttpServletRequest)} returns true).
+     * @param asyncResponse The servlet response object - needed for span tagging.
      * @param originalRequestTracingState The {@link TracingState} that was generated when this request started, and
      * which should be completed when the given async servlet request finishes.
+     * @param tagAndNamingStrategy The {@link HttpTagAndSpanNamingStrategy} that should be used for final span name
+     * and tagging.
+     * @param tagAndNamingAdapter The {@link HttpTagAndSpanNamingAdapter} that should be used by
+     * {@code tagAndNamingStrategy} for final span name and tagging.
      */
-    abstract void setupTracingCompletionWhenAsyncRequestCompletes(HttpServletRequest asyncRequest,
-                                                                  TracingState originalRequestTracingState);
+    abstract void setupTracingCompletionWhenAsyncRequestCompletes(
+        HttpServletRequest asyncRequest,
+        HttpServletResponse asyncResponse,
+        TracingState originalRequestTracingState,
+        HttpTagAndSpanNamingStrategy<HttpServletRequest,HttpServletResponse> tagAndNamingStrategy,
+        HttpTagAndSpanNamingAdapter<HttpServletRequest,HttpServletResponse> tagAndNamingAdapter
+    );
 
     /**
      * The dispatcher type {@code javax.servlet.DispatcherType.ASYNC} introduced in Servlet 3.0 means a filter can be
@@ -113,8 +126,13 @@ abstract class ServletRuntime {
         }
 
         @Override
-        public void setupTracingCompletionWhenAsyncRequestCompletes(HttpServletRequest asyncRequest,
-                                                                    TracingState originalRequestTracingState) {
+        public void setupTracingCompletionWhenAsyncRequestCompletes(
+            HttpServletRequest asyncRequest,
+            HttpServletResponse asyncResponse,
+            TracingState originalRequestTracingState,
+            HttpTagAndSpanNamingStrategy<HttpServletRequest,HttpServletResponse> tagAndNamingStrategy,
+            HttpTagAndSpanNamingAdapter<HttpServletRequest,HttpServletResponse> tagAndNamingAdapter
+        ) {
             throw new IllegalStateException("This method should never be called in a pre-Servlet-3.0 environment.");
         }
 
@@ -135,11 +153,20 @@ abstract class ServletRuntime {
         }
 
         @Override
-        public void setupTracingCompletionWhenAsyncRequestCompletes(HttpServletRequest asyncRequest,
-                                                                    TracingState originalRequestTracingState) {
+        public void setupTracingCompletionWhenAsyncRequestCompletes(
+            HttpServletRequest asyncRequest,
+            HttpServletResponse asyncResponse,
+            TracingState originalRequestTracingState,
+            HttpTagAndSpanNamingStrategy<HttpServletRequest,HttpServletResponse> tagAndNamingStrategy,
+            HttpTagAndSpanNamingAdapter<HttpServletRequest,HttpServletResponse> tagAndNamingAdapter
+        ) {
             // Async processing was started, so we have to complete it with a listener.
             asyncRequest.getAsyncContext().addListener(
-                new WingtipsRequestSpanCompletionAsyncListener(originalRequestTracingState)
+                new WingtipsRequestSpanCompletionAsyncListener(
+                    originalRequestTracingState, tagAndNamingStrategy, tagAndNamingAdapter
+                ),
+                asyncRequest,
+                asyncResponse
             );
         }
 

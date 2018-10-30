@@ -11,7 +11,8 @@ dependencies {
             project(":wingtips-core")
     )
     compileOnly(
-            "javax.servlet:javax.servlet-api:$servletApiVersion"
+            "javax.servlet:javax.servlet-api:$servletApiVersion",
+            "org.jetbrains:annotations:$jetbrainsAnnotationsVersion"
     )
     testCompile(
             "junit:junit-dep:$junitVersion",
@@ -20,6 +21,7 @@ dependencies {
             "org.assertj:assertj-core:$assertJVersion",
             "com.tngtech.java:junit-dataprovider:$junitDataproviderVersion",
             "io.rest-assured:rest-assured:$restAssuredVersion",
+            "org.jetbrains:annotations:$jetbrainsAnnotationsVersion",
             "org.eclipse.jetty:jetty-webapp:$jettyVersion"
     )
 }
