@@ -8,6 +8,7 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 
 #### 0.x Releases
 
+- `0.17.x` Releases - [0.17.0](#0170)
 - `0.16.x` Releases - [0.16.0](#0160)
 - `0.15.x` Releases - [0.15.0](#0150) 
 - `0.14.x` Releases - [0.14.2](#0142), [0.14.1](#0141), [0.14.0](#0140)
@@ -16,6 +17,61 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 - `0.11.x` Releases - [0.11.2](#0112), [0.11.1](#0111), [0.11.0](#0110)
 - `0.10.x` Releases - [0.10.0](#0100)
 - `0.9.x` Releases - [0.9.0.1](#0901), [0.9.0](#090)
+
+## [0.17.0](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.17.0)
+
+Released on 2018-10-30.
+
+### Added
+
+* Added automatic Span tagging to HTTP server and client Wingtips instrumentation. 
+    - Affects Servlet instrumentation (`RequestTracingFilter`), Apache HttpClient instrumentation 
+    (`WingtipsHttpClientBuilder` and `WingtipsApacheHttpClientInterceptor`), and Spring RestTemplate HTTP client 
+    instrumentation (`WingtipsClientHttpRequestInterceptor` and `WingtipsAsyncClientHttpRequestInterceptor`). 
+    - By default Zipkin tags and conventions are used (`ZipkinHttpTagStrategy`), however you can provide different
+    strategies and adapters if needed.
+    - Added by [Brandon Currie][contrib_brandoncurrie] and [Nic Munroe][contrib_nicmunroe] in pull requests 
+    [#81](https://github.com/Nike-Inc/wingtips/pull/81) and [#82](https://github.com/Nike-Inc/wingtips/pull/82).     
+
+### Changed
+
+* Changed the default span name format for HTTP instrumentation (Servlet, Spring, and Apache) to follow Zipkin
+conventions. In particular, Span names no longer include the full URL. This is because visualization and analytics 
+systems like Zipkin parse the span names in order to identify different logical endpoints, but the full URL can be 
+high cardinality due to unique IDs or query strings (`http://.../some/path/12345?foo=bar67890`), even though they 
+logically point to the same HTTP endpoint (`http://.../some/path/{id}`). Instead, span names now follow the Zipkin 
+convention of `HTTP_METHOD /http/route`, where the HTTP route is the low-cardinality URL "template" that logically 
+identifies the endpoint, e.g.: `GET /foo/bar/{id}`. The full path and/or URL can be found in the span tags now, 
+instead of the span name. Note that the HTTP route/path template is not available for all frameworks and libraries. 
+In those cases the span name will simply be: `HTTP_METHOD` (you'll still be able to extract the full path/URL from the 
+span tags).  
+    - Changed by [Nic Munroe][contrib_nicmunroe] in pull request [#82](https://github.com/Nike-Inc/wingtips/pull/82). 
+
+
+### Breaking Changes
+
+* The span name format change (described above) is breaking if you were relying on seeing the full URL/path in the span 
+name for any reason, i.e. automated parsing.
+
+Code-level breaking changes:
+
+* The `getSubspanSpanName()` method signature for several classes was adjusted to take in two new args for the
+span-tag-and-naming strategy and adapter. Classes affected: (Apache) `WingtipsApacheHttpClientInterceptor`, (Apache) 
+`WingtipsHttpClientBuilder`, (Spring) `WingtipsClientHttpRequestInterceptor`, and (Spring) 
+`WingtipsAsyncClientHttpRequestInterceptor`.
+* `WingtipsApacheHttpClientUtil.getSubspanSpanName()` changed to `getFallbackSubspanSpanName()` to better reflect its
+purpose as a fallback rather than primary span namer.
+* `HttpRequestTracingUtils.getSubspanSpanNameForHttpRequest()` changed to `generateSafeSpanName()` with adjusted
+arguments to match the new span naming format.
+* `RequestTracingFilter.setupTracingCompletionWhenAsyncRequestCompletes(...)` method signature adjusted to also take 
+in the response and span-tag-and-naming strategy and adapter. Same with 
+`ServletRuntime.setupTracingCompletionWhenAsyncRequestCompletes(...)`.
+* `WingtipsRequestSpanCompletionAsyncListener.completeRequestSpan(...)` method signature adjusted to take `AsyncEvent`
+arg.
+
+Most of the breaking changes are to protected methods or methods that aren't likely to be used by end-users, so
+these code-level breaking changes should hopefully be invisible to many (most?) Wingtips users. 
+   
 
 ## [0.16.0](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.16.0)
 
