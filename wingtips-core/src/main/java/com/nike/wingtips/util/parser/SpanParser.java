@@ -2,11 +2,14 @@ package com.nike.wingtips.util.parser;
 
 import com.nike.wingtips.Span;
 import com.nike.wingtips.Span.SpanPurpose;
+import com.nike.wingtips.Span.TimestampedAnnotation;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -49,8 +52,8 @@ public class SpanParser {
      */
     public static final String USER_ID_FIELD = "userId";
     /**
-     * The name of the span purpose field when serializing to JSON (see {@link
-     * #convertSpanToJSON(Span)}. Corresponds to {@link Span#getSpanPurpose()}.
+     * The name of the span purpose field when serializing/deserializing to/from JSON (see {@link
+     * #convertSpanToJSON(Span)} and {@link #fromJSON(String)}). Corresponds to {@link Span#getSpanPurpose()}.
      */
     public static final String SPAN_PURPOSE_FIELD = "spanPurpose";
     /**
@@ -59,21 +62,46 @@ public class SpanParser {
      */
     public static final String START_TIME_EPOCH_MICROS_FIELD = "startTimeEpochMicros";
     /**
-     * The name of the duration-in-nanoseconds field when serializing to JSON (see {@link
-     * #convertSpanToJSON(Span)}. Corresponds to {@link Span#getDurationNanos()}.
+     * The name of the duration-in-nanoseconds field when serializing/deserializing to/from JSON (see {@link
+     * #convertSpanToJSON(Span)} and {@link #fromJSON(String)}). Corresponds to {@link Span#getDurationNanos()}.
      */
     public static final String DURATION_NANOS_FIELD = "durationNanos";
     /**
-     * The name of the span tags field when serializing to JSON (see {@link
-     * #convertSpanToJSON(Span)}. Corresponds to {@link Span#getTags()}.
+     * The name of the span tags field when serializing/deserializing to/from JSON (see {@link
+     * #convertSpanToJSON(Span)} and {@link #fromJSON(String)}). Corresponds to {@link Span#getTags()}.
      */
     public static final String TAGS_FIELD = "tags";
+    /**
+     * The name of the field for the list of timestamped annotations when serializing/deserializing to/from JSON (see
+     * {@link #convertSpanToJSON(Span)} and {@link #fromJSON(String)}). Corresponds to
+     * {@link Span#getTimestampedAnnotations()}.
+     */
+    public static final String ANNOTATIONS_LIST_FIELD = "annotations";
+
+    /**
+     * The name of the timestamp-in-epoch-micros field for the annotation JSON object when serializing/deserializing
+     * a span's {@link TimestampedAnnotation} to/from JSON (see {@link #convertSpanToJSON(Span)} and
+     * {@link #fromJSON(String)}). Corresponds to {@link TimestampedAnnotation#getTimestampEpochMicros()}.
+     */
+    public static final String ANNOTATION_SUBOBJECT_TIMESTAMP_FIELD = "timestampEpochMicros";
+    /**
+     * The name of the value field for the annotation JSON object when serializing/deserializing
+     * a span's {@link TimestampedAnnotation} to/from JSON (see {@link #convertSpanToJSON(Span)} and
+     * {@link #fromJSON(String)}). Corresponds to {@link TimestampedAnnotation#getValue()}.
+     */
+    public static final String ANNOTATION_SUBOBJECT_VALUE_FIELD = "value";
 
     /**
      * The prefix that will be added to every {@link Span#getTags()} tag key when serializing a {@link Span} to
      * key/value format. See {@link #convertSpanToKeyValueFormat(Span)}.
      */
     public static final String KEY_VALUE_TAG_PREFIX = "tag_";
+
+    /**
+     * The prefix that will be added to every {@link Span#getTimestampedAnnotations()} tag key when serializing a
+     * {@link Span} to key/value format. See {@link #convertSpanToKeyValueFormat(Span)}.
+     */
+    public static final String KEY_VALUE_TIMESTAMPED_ANNOTATION_PREFIX = "ts_annot_";
 
     /**
      * Calculates and returns the JSON representation of this span instance. We build this manually ourselves to
@@ -99,7 +127,7 @@ public class SpanParser {
         }
 
         if(!span.getTags().isEmpty()) {
-            // Create nested json for the tags
+            // Create nested json for the tags.
             builder.append(",\"").append(TAGS_FIELD).append("\":{");
 
             boolean first = true;
@@ -117,6 +145,30 @@ public class SpanParser {
             }
 
             builder.append("}");
+        }
+
+        if (!span.getTimestampedAnnotations().isEmpty()) {
+            // Create JSON array for the annotations.
+            builder.append(",\"").append(ANNOTATIONS_LIST_FIELD).append("\":[");
+
+            boolean first = true;
+            for (TimestampedAnnotation annotation : span.getTimestampedAnnotations()) {
+                if (!first) {
+                    builder.append(',');
+                }
+
+                String escapedValue = escapeJson(annotation.getValue());
+
+                builder.append("{\"").append(ANNOTATION_SUBOBJECT_TIMESTAMP_FIELD)
+                       .append("\":\"").append(annotation.getTimestampEpochMicros()).append('\"');
+
+                builder.append(",\"").append(ANNOTATION_SUBOBJECT_VALUE_FIELD)
+                       .append("\":\"").append(escapedValue).append("\"}");
+
+                first = false;
+            }
+
+            builder.append("]");
         }
 
         builder.append("}");
@@ -142,16 +194,38 @@ public class SpanParser {
             JsonDeserializationResult tagsResult = mainResult.subObjects.get(TAGS_FIELD);
             Map<String, String> tagsMap = (tagsResult == null) ? null : tagsResult.levelOneKeyValuePairs;
 
-            return fromKeyValueMap(mainMap, tagsMap);
+            List<TimestampedAnnotation> annotationsList = convertToTimestampedAnnotationsList(
+                mainResult.arrays.get(ANNOTATIONS_LIST_FIELD)
+            );
+
+            return fromKeyValueMap(mainMap, tagsMap, annotationsList);
         } catch (Exception e) {
             logger.error("Error extracting Span from JSON. Defaulting to null. bad_span_json={}", json, e);
             return null;
         }
     }
 
+    protected static List<TimestampedAnnotation> convertToTimestampedAnnotationsList(
+        List<JsonDeserializationResult> jdrList
+    ) {
+        if (jdrList == null || jdrList.isEmpty()) {
+            return null;
+        }
+
+        List<TimestampedAnnotation> annotationList = new ArrayList<>(jdrList.size());
+        for (JsonDeserializationResult jdr : jdrList) {
+            long timestamp = Long.parseLong(jdr.levelOneKeyValuePairs.get(ANNOTATION_SUBOBJECT_TIMESTAMP_FIELD));
+            String value = jdr.levelOneKeyValuePairs.get(ANNOTATION_SUBOBJECT_VALUE_FIELD);
+            annotationList.add(new TimestampedAnnotation(timestamp, value));
+        }
+
+        return annotationList;
+    }
+
     protected static class JsonDeserializationResult {
-        final Map<String, String> levelOneKeyValuePairs = new HashMap<>();
-        final Map<String, JsonDeserializationResult> subObjects = new HashMap<>();
+        final Map<String, String> levelOneKeyValuePairs = new LinkedHashMap<>();
+        final Map<String, JsonDeserializationResult> subObjects = new LinkedHashMap<>();
+        final Map<String, List<JsonDeserializationResult>> arrays = new LinkedHashMap<>();
         final AtomicInteger jsonEndObjectIndex = new AtomicInteger(Integer.MAX_VALUE);
     }
 
@@ -223,7 +297,8 @@ public class SpanParser {
             }
             else if (state == ParsingState.EXPECT_VALUE_START_CHAR) {
                 // If the next char is an object-start '{', then we recursively call this method to extract the JSON
-                //      object. Otherwise we expect a quotes char for value-start.
+                //      object. Next, we'll look for an array-start '['. Otherwise we'll expect a quotes char for
+                //      value-start.
                 if (c == '{') {
                     // JSON-object-start. Deserialize this subobject.
                     JsonDeserializationResult subObject = deserializeJsonObject(jsonStr, i);
@@ -244,13 +319,84 @@ public class SpanParser {
                     // Switch state to looking for the comma before the next key.
                     state = ParsingState.EXPECT_COMMA_BEFORE_NEW_KEY;
                 }
+                else if (c == '[') {
+                    // Array-start square bracket. Deserialize all the subobjects.
+                    List<JsonDeserializationResult> arrayObjects = new ArrayList<>();
+
+                    int arrayParsingIndex = i + 1;
+                    if (arrayParsingIndex >= strLen) {
+                        throw new IllegalStateException(
+                            "Span parsing error: JSON string ended after array-start square bracket '[' character "
+                            + "at index " + i
+                        );
+                    }
+                    char nextArrayParsingChar = jsonStr.charAt(arrayParsingIndex);
+                    if (nextArrayParsingChar != '{') {
+                        throw new IllegalStateException(
+                            "Span parsing error: Expected but did not find left curly brace '{' character after "
+                            + "array-start square bracket '['. Instead, found '" + nextArrayParsingChar
+                            + "' at index " + arrayParsingIndex
+                        );
+                    }
+
+                    while (nextArrayParsingChar == ',' || nextArrayParsingChar == '{') {
+                        // Only do something for the object-start curly brace. If it's a comma then we do nothing,
+                        //      and it'll wind forward to the next array parsing character.
+                        if (nextArrayParsingChar == '{') {
+                            // Extract the JSON object at this array parsing index, and add it to our arrayObjects list.
+                            JsonDeserializationResult arrayObject =
+                                deserializeJsonObject(jsonStr, arrayParsingIndex);
+
+                            arrayObjects.add(arrayObject);
+
+                            // Wind the array parsing index forward to wherever the JSON object parsing stopped.
+                            arrayParsingIndex = arrayObject.jsonEndObjectIndex.get();
+                        }
+
+                        arrayParsingIndex++;
+                        if (arrayParsingIndex >= strLen) {
+                            throw new IllegalStateException(
+                                "Span parsing error: JSON string ended before JSON close-array square bracket ']' "
+                                + "could be found. JSON string ended at index " + arrayParsingIndex
+                            );
+                        }
+                        nextArrayParsingChar = jsonStr.charAt(arrayParsingIndex);
+                    }
+
+                    // The array parsing index ran into something that wasn't a comma or start-object left curly brace.
+                    //      At this point it must be the close-array right square bracket.
+                    if (nextArrayParsingChar != ']') {
+                        throw new IllegalStateException(
+                            "Span parsing error: Expected but did not find object-start left curly brace '{' or "
+                            + "comma ',' or array-close right square bracket ']' character while parsing JSON array. "
+                            + "Instead, found '" + nextArrayParsingChar + "' at index " + arrayParsingIndex
+                        );
+                    }
+
+                    // The JSON array has been successfully parsed.
+
+                    // Extract the key associated with the array.
+                    String key = jsonStr.substring(extractKeyStartIndex, extractKeyEndIndex);
+                    key = unescapeJson(key);
+
+                    // Add this key->array info to our result.
+                    result.arrays.put(key, arrayObjects);
+
+                    // Wind the overall parsing index to the next char after the array parsing index.
+                    i = arrayParsingIndex;
+
+                    // Reset the numPrecedingBackslashes counter.
+                    numPrecedingBackslashes = 0;
+
+                    // Switch state to looking for the comma before the next key.
+                    state = ParsingState.EXPECT_COMMA_BEFORE_NEW_KEY;
+                }
                 else if (c == '\"') {
                     // Value-start quotes. The next time the loop iterates it will be pointing at the value. Mark
                     //      the index for value extraction and switch state.
                     extractValueStartIndex = i + 1;
                     state = ParsingState.EXTRACTING_VALUE;
                 }
-                // TODO: We'll need to handle JSON arrays [] here once Span has support for timestamped annotations.
                 else {
                     throw new IllegalStateException(
                         "Span parsing error: Expected but did not find left curly brace '{' or quotes '\"' character "
@@ -333,7 +479,8 @@ public class SpanParser {
      * Calculates and returns the key/value representation of this span instance. Keys are not surrounded by quotes,
      * but values are. Both keys and values are escaped via {@link #escapeJson(String)}, with keys further being
      * escaped to replace equals '=' and spaces ' ' with their escaped-unicode equivalents. Tag keys will be prefixed
-     * with {@link #KEY_VALUE_TAG_PREFIX}.
+     * with {@link #KEY_VALUE_TAG_PREFIX}. Timestamped annotations will be prefixed with {@link
+     * #KEY_VALUE_TIMESTAMPED_ANNOTATION_PREFIX}.
      *
      * <p>NOTE: You should call {@link Span#toKeyValueString()} directly instead of this method, as that {@link
      * Span#toKeyValueString()} instance method caches the result. This can have significant performance impact in some
@@ -363,6 +510,14 @@ public class SpanParser {
             String escapedTagValue = escapeJson(tagEntry.getValue());
             builder.append(",").append(KEY_VALUE_TAG_PREFIX).append(sanitizedTagKey)
                    .append("=\"").append(escapedTagValue).append('\"');
+        }
+
+        // Output timestamped annotations if we have any.
+        for (TimestampedAnnotation annotation : span.getTimestampedAnnotations()) {
+            String escapedAnnotationValue = escapeJson(annotation.getValue());
+            builder.append(",").append(KEY_VALUE_TIMESTAMPED_ANNOTATION_PREFIX)
+                   .append(annotation.getTimestampEpochMicros())
+                   .append("=\"").append(escapedAnnotationValue).append('\"');
         }
 
         return builder.toString();
@@ -408,8 +563,9 @@ public class SpanParser {
      */
     public static Span fromKeyValueString(String keyValueStr) {
         try {
-            Map<String, String> spanFieldsMap = new HashMap<>();
-            Map<String, String> tagsMap = new HashMap<>();
+            Map<String, String> spanFieldsMap = new LinkedHashMap<>();
+            Map<String, String> tagsMap = new LinkedHashMap<>();
+            List<TimestampedAnnotation> annotationsList = new ArrayList<>();
 
             int i = 0;
             int strLen = keyValueStr.length();
@@ -457,13 +613,24 @@ public class SpanParser {
                         value = unescapeJson(value);
 
                         boolean isTag = key.startsWith(KEY_VALUE_TAG_PREFIX);
+                        boolean isAnnotation = false;
                         if (isTag) {
                             String keyNoTagPrefix = key.substring(KEY_VALUE_TAG_PREFIX.length());
                             key = unescapeTagKeyForKeyValueFormatDeserialization(keyNoTagPrefix);
                         }
+                        else {
+                            isAnnotation = key.startsWith(KEY_VALUE_TIMESTAMPED_ANNOTATION_PREFIX);
+                            if (isAnnotation) {
+                                key = key.substring(KEY_VALUE_TIMESTAMPED_ANNOTATION_PREFIX.length());
+                            }
+                        }
 
                         if (isTag) {
                             tagsMap.put(key, value);
+                        }
+                        else if (isAnnotation) {
+                            long timestamp = Long.parseLong(key);
+                            annotationsList.add(TimestampedAnnotation.forEpochMicros(timestamp, value));
                         }
                         else {
                             spanFieldsMap.put(key, value);
@@ -511,31 +678,39 @@ public class SpanParser {
                 );
             }
 
-            return fromKeyValueMap(spanFieldsMap, tagsMap);
+            return fromKeyValueMap(spanFieldsMap, tagsMap, annotationsList);
         } catch (Exception e) {
             logger.error("Error extracting Span from key/value string. Defaulting to null. bad_span_key_value_string={}", keyValueStr, e);
             return null;
         }
     }
 
-    protected static Span fromKeyValueMap(Map<String, String> map, Map<String, String> tags) {
+    protected static Span fromKeyValueMap(
+        Map<String, String> map,
+        Map<String, String> tags,
+        List<TimestampedAnnotation> annotations
+    ) {
         // Use the map to get the field values for the span.
         String traceId = nullSafeGetString(map, TRACE_ID_FIELD);
         String spanId = nullSafeGetString(map, SPAN_ID_FIELD);
         String parentSpanId = nullSafeGetString(map, PARENT_SPAN_ID_FIELD);
         String spanName = nullSafeGetString(map, SPAN_NAME_FIELD);
         Boolean sampleable = nullSafeGetBoolean(map, SAMPLEABLE_FIELD);
-        if (sampleable == null)
+        if (sampleable == null) {
             throw new IllegalStateException("Unable to parse " + SAMPLEABLE_FIELD + " from serialized Span");
+        }
         String userId = nullSafeGetString(map, USER_ID_FIELD);
         Long startTimeEpochMicros = nullSafeGetLong(map, START_TIME_EPOCH_MICROS_FIELD);
-        if (startTimeEpochMicros == null)
-            throw new IllegalStateException("Unable to parse " + START_TIME_EPOCH_MICROS_FIELD + " from serialized Span");
+        if (startTimeEpochMicros == null) {
+            throw new IllegalStateException(
+                "Unable to parse " + START_TIME_EPOCH_MICROS_FIELD + " from serialized Span"
+            );
+        }
         Long durationNanos = nullSafeGetLong(map, DURATION_NANOS_FIELD);
         SpanPurpose spanPurpose = nullSafeGetSpanPurpose(map, SPAN_PURPOSE_FIELD);
         return new Span(
             traceId, parentSpanId, spanId, spanName, sampleable, userId, spanPurpose, startTimeEpochMicros,
-            null, durationNanos, tags
+            null, durationNanos, tags, annotations
         );
     }
 

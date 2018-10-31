@@ -1,6 +1,7 @@
 package com.nike.wingtips.zipkin.util;
 
 import com.nike.wingtips.Span;
+import com.nike.wingtips.Span.TimestampedAnnotation;
 
 import com.tngtech.java.junit.dataprovider.DataProvider;
 import com.tngtech.java.junit.dataprovider.DataProviderRunner;
@@ -10,7 +11,9 @@ import org.assertj.core.api.ThrowableAssert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
@@ -37,42 +40,77 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
     private WingtipsToZipkinSpanConverterDefaultImpl impl = new WingtipsToZipkinSpanConverterDefaultImpl();
     private final Random random = new Random(System.nanoTime());
 
+    private final Endpoint zipkinEndpoint = Endpoint.create(UUID.randomUUID().toString(), 42);
+
     private final String tagOneKey = "tagOneKey";
     private final String tagOneValue = "tagOneValue";
-    private final zipkin.BinaryAnnotation tagOneAsAnnotation = BinaryAnnotation.create(tagOneKey, tagOneValue, null);
+    private final zipkin.BinaryAnnotation tagOneAsAnnotation = BinaryAnnotation.create(
+        tagOneKey, tagOneValue, zipkinEndpoint
+    );
     
     private final String tagTwoKey = "tagTwoKey";
     private final String tagTwoValue = "tagTwoValue";
-    private final zipkin.BinaryAnnotation tagTwoAsAnnotation = BinaryAnnotation.create(tagTwoKey, tagTwoValue, null);
+    private final zipkin.BinaryAnnotation tagTwoAsAnnotation = BinaryAnnotation.create(
+        tagTwoKey, tagTwoValue, zipkinEndpoint
+    );
+
+    private final long annotationOneTimestamp = 12345;
+    private final String annotationOneValue = "annotationOneValue";
+    private final zipkin.Annotation annotationOneAsZipkinAnnotation = Annotation.create(
+        annotationOneTimestamp, annotationOneValue, zipkinEndpoint
+    );
+
+    private final long annotationTwoTimestamp = 67890;
+    private final String annotationTwoValue = "annotationTwoValue";
+    private final zipkin.Annotation annotationTwoAsZipkinAnnotation = Annotation.create(
+        annotationTwoTimestamp, annotationTwoValue, zipkinEndpoint
+    );
     
-    private void verifySpanPurposeRelatedStuff(zipkin.Span zipkinSpan, Span wingtipsSpan, Endpoint zipkinEndpoint, String localComponentNamespace) {
+    private void verifySpanPurposeRelatedStuff(
+        zipkin.Span zipkinSpan,
+        Span wingtipsSpan,
+        Endpoint zipkinEndpoint,
+        String localComponentNamespace
+    ) {
         Span.SpanPurpose spanPurpose = wingtipsSpan.getSpanPurpose();
         long startTimeEpochMicros = wingtipsSpan.getSpanStartTimeEpochMicros();
         long durationMicros = TimeUnit.NANOSECONDS.toMicros(wingtipsSpan.getDurationNanos());
 
+        int numWingtipsAnnotations = wingtipsSpan.getTimestampedAnnotations().size();
+
         switch(spanPurpose) {
             case SERVER:
-                assertThat(zipkinSpan.annotations).hasSize(2);
+                assertThat(zipkinSpan.annotations).hasSize(2 + numWingtipsAnnotations);
                 assertBinaryAnnotationsAreEmptyOrOnlyHaveStringTags(zipkinSpan);
                 
 
-                assertThat(zipkinSpan.annotations.get(0)).isEqualTo(Annotation.create(startTimeEpochMicros, Constants.SERVER_RECV, zipkinEndpoint));
-                assertThat(zipkinSpan.annotations.get(1)).isEqualTo(Annotation.create(startTimeEpochMicros + durationMicros, Constants.SERVER_SEND, zipkinEndpoint));
+                assertThat(zipkinSpan.annotations).contains(
+                    Annotation.create(startTimeEpochMicros, Constants.SERVER_RECV, zipkinEndpoint)
+                );
+                assertThat(zipkinSpan.annotations).contains(
+                    Annotation.create(startTimeEpochMicros + durationMicros, Constants.SERVER_SEND, zipkinEndpoint)
+                );
 
                 break;
             case CLIENT:
-                assertThat(zipkinSpan.annotations).hasSize(2);
+                assertThat(zipkinSpan.annotations).hasSize(2 + numWingtipsAnnotations);
                 assertBinaryAnnotationsAreEmptyOrOnlyHaveStringTags(zipkinSpan);
 
-                assertThat(zipkinSpan.annotations.get(0)).isEqualTo(Annotation.create(startTimeEpochMicros, Constants.CLIENT_SEND, zipkinEndpoint));
-                assertThat(zipkinSpan.annotations.get(1)).isEqualTo(Annotation.create(startTimeEpochMicros + durationMicros, Constants.CLIENT_RECV, zipkinEndpoint));
+                assertThat(zipkinSpan.annotations).contains(
+                    Annotation.create(startTimeEpochMicros, Constants.CLIENT_SEND, zipkinEndpoint)
+                );
+                assertThat(zipkinSpan.annotations).contains(
+                    Annotation.create(startTimeEpochMicros + durationMicros, Constants.CLIENT_RECV, zipkinEndpoint)
+                );
 
                 break;
             case LOCAL_ONLY:
             case UNKNOWN:       // intentional fall-through: local and unknown span purpose are treated the same way
-                assertThat(zipkinSpan.annotations).isEmpty();
+                assertThat(zipkinSpan.annotations).hasSize(numWingtipsAnnotations);
 
-                assertThat(zipkinSpan.binaryAnnotations).contains(BinaryAnnotation.create(Constants.LOCAL_COMPONENT, localComponentNamespace, zipkinEndpoint));
+                assertThat(zipkinSpan.binaryAnnotations).contains(
+                    BinaryAnnotation.create(Constants.LOCAL_COMPONENT, localComponentNamespace, zipkinEndpoint)
+                );
 
                 break;
             default:
@@ -81,7 +119,7 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
     }
     
     private void assertBinaryAnnotationsAreEmptyOrOnlyHaveStringTags(zipkin.Span span) {
-            //Asserts that binary annotations should be empty or only contain tags (string type)
+        //Asserts that binary annotations should be empty or only contain tags (string type)
         Condition<BinaryAnnotation> stringTypeOnly = new Condition<BinaryAnnotation>() {
             public boolean matches(BinaryAnnotation value) {
                 return value.type == BinaryAnnotation.Type.STRING && !Constants.CORE_ANNOTATIONS.contains(value.key);
@@ -106,10 +144,13 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
         long startTimeEpochMicros = Math.abs(random.nextLong());
         long durationNanos = Math.abs(random.nextLong());
         long durationMicros = TimeUnit.NANOSECONDS.toMicros(durationNanos);
-        Endpoint zipkinEndpoint = Endpoint.create(UUID.randomUUID().toString(), 42);
         String localComponentNamespace = UUID.randomUUID().toString();
-        Map<String,String> tags = createSingleTagMap();
-        Span wingtipsSpan = new Span(traceId, parentId, spanId, spanName, true, null, spanPurpose, startTimeEpochMicros, null, durationNanos, tags);
+        Map<String,String> tags = createMultipleTagMap();
+        List<TimestampedAnnotation> annotations = createMultipleTimestampedAnnotationList();
+        Span wingtipsSpan = new Span(
+            traceId, parentId, spanId, spanName, true, null, spanPurpose, startTimeEpochMicros, null, durationNanos,
+            tags, annotations
+        );
 
         // when
         zipkin.Span zipkinSpan = impl.convertWingtipsSpanToZipkinSpan(wingtipsSpan, zipkinEndpoint, localComponentNamespace);
@@ -121,7 +162,8 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
         assertThat(zipkinSpan.timestamp).isEqualTo(wingtipsSpan.getSpanStartTimeEpochMicros());
         assertThat(zipkinSpan.traceId).isEqualTo(unsignedLowerHexStringToLong(wingtipsSpan.getTraceId()));
         assertThat(zipkinSpan.duration).isEqualTo(durationMicros);
-        assertThat(zipkinSpan.binaryAnnotations).contains(tagOneAsAnnotation);
+        assertThat(zipkinSpan.binaryAnnotations).contains(tagOneAsAnnotation, tagTwoAsAnnotation);
+        assertThat(zipkinSpan.annotations).contains(annotationOneAsZipkinAnnotation, annotationTwoAsZipkinAnnotation);
         verifySpanPurposeRelatedStuff(zipkinSpan, wingtipsSpan, zipkinEndpoint, localComponentNamespace);
     }
 
@@ -141,10 +183,11 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
         long startTimeEpochMicros = Math.abs(random.nextLong());
         long durationNanos = Math.abs(random.nextLong());
         long durationMicros = TimeUnit.NANOSECONDS.toMicros(durationNanos);
-        Endpoint zipkinEndpoint = Endpoint.create(UUID.randomUUID().toString(), 42);
         String localComponentNamespace = UUID.randomUUID().toString();
-        Map<String,String> tags = null;
-        Span wingtipsSpan = new Span(traceId, null, spanId, spanName, true, null, spanPurpose, startTimeEpochMicros, null, durationNanos, tags);
+        Span wingtipsSpan = new Span(
+            traceId, null, spanId, spanName, true, null, spanPurpose, startTimeEpochMicros, null, durationNanos, null,
+            null
+        );
 
         // when
         zipkin.Span zipkinSpan = impl.convertWingtipsSpanToZipkinSpan(wingtipsSpan, zipkinEndpoint, localComponentNamespace);
@@ -157,7 +200,9 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
         assertThat(zipkinSpan.traceId).isEqualTo(unsignedLowerHexStringToLong(wingtipsSpan.getTraceId()));
         assertThat(zipkinSpan.duration).isEqualTo(durationMicros);
         assertThat(zipkinSpan.binaryAnnotations).doesNotContain(tagOneAsAnnotation, tagTwoAsAnnotation);
-        
+        assertThat(zipkinSpan.annotations)
+            .doesNotContain(annotationOneAsZipkinAnnotation, annotationTwoAsZipkinAnnotation);
+
         verifySpanPurposeRelatedStuff(zipkinSpan, wingtipsSpan, zipkinEndpoint, localComponentNamespace);
     }
 
@@ -176,7 +221,11 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
         Endpoint zipkinEndpoint = Endpoint.create(UUID.randomUUID().toString(), 42);
         String localComponentNamespace = UUID.randomUUID().toString();
         Map<String,String> tags = createSingleTagMap();
-        Span wingtipsSpan = new Span(traceId, null, spanId, spanName, true, null, Span.SpanPurpose.CLIENT, startTimeEpochMicros, null, durationNanos, tags);
+        List<TimestampedAnnotation> annotations = createSingleTimestampedAnnotationList();
+        Span wingtipsSpan = new Span(
+            traceId, null, spanId, spanName, true, null, Span.SpanPurpose.CLIENT, startTimeEpochMicros, null,
+            durationNanos, tags, annotations
+        );
 
         // when
         zipkin.Span zipkinSpan = impl.convertWingtipsSpanToZipkinSpan(wingtipsSpan, zipkinEndpoint, localComponentNamespace);
@@ -198,6 +247,18 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
         return multipleValues;
     }
 
+    protected List<TimestampedAnnotation> createSingleTimestampedAnnotationList() {
+        List<TimestampedAnnotation> singleAnnotationList = new ArrayList<>();
+        singleAnnotationList.add(TimestampedAnnotation.forEpochMicros(annotationOneTimestamp, annotationOneValue));
+        return singleAnnotationList;
+    }
+
+    protected List<TimestampedAnnotation> createMultipleTimestampedAnnotationList() {
+        List<TimestampedAnnotation> multipleAnnotationList = createSingleTimestampedAnnotationList();
+        multipleAnnotationList.add(TimestampedAnnotation.forEpochMicros(annotationTwoTimestamp, annotationTwoValue));
+        return multipleAnnotationList;
+    }
+
     @DataProvider(value = {
         "                                      ", // empty trace ID
         "123e4567-e89b-12d3-a456-426655440000  "  // UUID format (hyphens and also >32 chars)
@@ -213,7 +274,11 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
         final Endpoint zipkinEndpoint = Endpoint.create(UUID.randomUUID().toString(), 42);
         final String localComponentNamespace = UUID.randomUUID().toString();
         Map<String,String> tags = createSingleTagMap();
-        final Span wingtipsSpan = new Span(traceId, null, spanId, spanName, true, null, Span.SpanPurpose.CLIENT, startTimeEpochMicros, null, durationNanos, tags);
+        List<TimestampedAnnotation> annotations = createSingleTimestampedAnnotationList();
+        final Span wingtipsSpan = new Span(
+            traceId, null, spanId, spanName, true, null, Span.SpanPurpose.CLIENT, startTimeEpochMicros, null,
+            durationNanos, tags, annotations
+        );
 
         // when
         Throwable ex = catchThrowable(new ThrowableAssert.ThrowingCallable() {

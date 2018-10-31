@@ -7,8 +7,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.Closeable;
-import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
@@ -59,7 +61,12 @@ public class Span implements Closeable {
     private final SpanPurpose spanPurpose;
     private final long spanStartTimeEpochMicros;
     private final long spanStartTimeNanos;
-    private final Map<String,String> tags = new LinkedHashMap<>(0);
+    // The default initial capacity (16) and load factor (0.75) is enough space to handle the ZipkinHttpTagStrategy
+    //      tags plus a few extra without any internal rehashing of the map as tags are added.
+    //      This seems about right for most use cases, so we'll leave the default settings.
+    private final Map<String,String> tags = new LinkedHashMap<>();
+    // The default initial capacity (10) seems ok for the annotations list.
+    private final List<TimestampedAnnotation> annotations = new ArrayList<>();
 
     private Long durationNanos;
 
@@ -109,7 +116,7 @@ public class Span implements Closeable {
      */
     public Span(String traceId, String parentSpanId, String spanId, String spanName, boolean sampleable, String userId,
                 SpanPurpose spanPurpose, long spanStartTimeEpochMicros, Long spanStartTimeNanos, Long durationNanos,
-                Map<String,String> tags
+                Map<String,String> tags, List<TimestampedAnnotation> annotations
     ) {
         if (traceId == null)
             throw new IllegalArgumentException("traceId cannot be null");
@@ -146,11 +153,18 @@ public class Span implements Closeable {
         if(tags != null) {
             this.tags.putAll(tags);
         }
+
+        if (annotations != null) {
+            this.annotations.addAll(annotations);
+        }
     }
 
     // For deserialization only - this will create an invalid span object and is only here to support deserializers that need a default constructor but set the fields directly (e.g. Jackson)
     protected Span() {
-        this("PLACEHOLDER", null, "PLACEHOLDER", "PLACEHOLDER", false, null, SpanPurpose.UNKNOWN, -1, -1L, -1L, null);
+        this(
+            "PLACEHOLDER", null, "PLACEHOLDER", "PLACEHOLDER", false, null, SpanPurpose.UNKNOWN, -1, -1L, -1L, null,
+            null
+        );
     }
 
     /**
@@ -177,15 +191,15 @@ public class Span implements Closeable {
      *          method is called. It will share this instance's {@link #getTraceId()}, {@link #isSampleable()}, and {@link #getUserId()} values.
      */
     public Span generateChildSpan(String spanName, SpanPurpose spanPurpose) {
-        return Span.newBuilder(this)
-                   .withParentSpanId(this.spanId)
-                   .withSpanName(spanName)
+        return Span.newBuilder(spanName, spanPurpose)
+                   .withTraceId(this.getTraceId())
+                   .withSampleable(this.isSampleable())
+                   .withUserId(this.getUserId())
+                   .withParentSpanId(this.getSpanId())
                    .withSpanId(TraceAndSpanIdGenerator.generateId())
                    .withSpanStartTimeEpochMicros(TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis()))
                    .withSpanStartTimeNanos(System.nanoTime())
                    .withDurationNanos(null)
-                   .withSpanPurpose(spanPurpose)
-                   .withTags(this.tags)
                    .build();
     }
 
@@ -215,8 +229,8 @@ public class Span implements Closeable {
         builder.spanStartTimeEpochMicros = copy.spanStartTimeEpochMicros;
         builder.spanStartTimeNanos = copy.spanStartTimeNanos;
         builder.durationNanos = copy.durationNanos;
-        builder.tags = new HashMap<>(copy.tags.size());
-        builder.tags.putAll(copy.tags);
+        builder.tags = new LinkedHashMap<>(copy.tags);
+        builder.annotations = new ArrayList<>(copy.annotations);
         return builder;
     }
 
@@ -387,7 +401,45 @@ public class Span implements Closeable {
     public void putTag(String key, String value) {
         tags.put(key, value);
     }
-    
+
+    /**
+     * @return This Span's list of {@link TimestampedAnnotation}s - will never be null.
+     */
+    public List<TimestampedAnnotation> getTimestampedAnnotations() {
+        return annotations;
+    }
+
+    /**
+     * Adds a {@link TimestampedAnnotation} to this Span's {@link #getTimestampedAnnotations()} list, with the current
+     * time in epoch microseconds as the timestamp and the given value.
+     *
+     * <p>NOTE: Since the span keeps track of its duration in nanoseconds, this method results in a
+     * {@link TimestampedAnnotation} with a {@link TimestampedAnnotation#getTimestampEpochMicros()} that is more
+     * accurate than if you created the {@link TimestampedAnnotation} directly (i.e. this method uses {@link
+     * TimestampedAnnotation#forEpochMicrosWithNanoOffset(long, long, String)}). This method should therefore be
+     * used anytime you want to add an annotation to a Span with a timestamp of "right now".
+     *
+     * @param value The desired {@link TimestampedAnnotation#getValue()} for the new annotation.
+     */
+    public void addTimestampedAnnotationForCurrentTime(String value) {
+        addTimestampedAnnotation(
+            TimestampedAnnotation.forEpochMicrosWithNanoOffset(
+                spanStartTimeEpochMicros,
+                System.nanoTime() - spanStartTimeNanos,
+                value
+            )
+        );
+    }
+
+    /**
+     * Adds the given {@link TimestampedAnnotation} to this Span's {@link #getTimestampedAnnotations()} list.
+     *
+     * @param timestampedAnnotation The annotation to add to this Span.
+     */
+    public void addTimestampedAnnotation(TimestampedAnnotation timestampedAnnotation) {
+        this.annotations.add(timestampedAnnotation);
+    }
+
     /**
      * @return The JSON representation of this span. See {@link #toJSON()}.
      */
@@ -410,6 +462,8 @@ public class Span implements Closeable {
      * recalculated.
      */
     public String toKeyValueString() {
+        // Profiling shows this serialization to generate a lot of garbage in certain situations,
+        //      so we should cache the result.
         if (cachedKeyValueRepresentation == null) {
             cachedKeyValueRepresentation = SpanParser.convertSpanToKeyValueFormat(this);
         }
@@ -431,7 +485,8 @@ public class Span implements Closeable {
      * recalculated.
      */
     public String toJSON() {
-        // Profiling shows this JSON creation to generate a lot of garbage in certain situations, so we should cache the result.
+        // Profiling shows this serialization to generate a lot of garbage in certain situations,
+        //      so we should cache the result.
         if (cachedJsonRepresentation == null) {
             cachedJsonRepresentation = SpanParser.convertSpanToJSON(this);
         }
@@ -498,14 +553,15 @@ public class Span implements Closeable {
                Objects.equals(spanName, span.spanName) &&
                Objects.equals(userId, span.userId) &&
                Objects.equals(durationNanos, span.durationNanos) &&
-               Objects.equals(tags, span.tags);
+               Objects.equals(tags, span.tags) &&
+               Objects.equals(annotations, span.annotations);
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(
             traceId, spanId, parentSpanId, spanName, sampleable, userId, spanPurpose, spanStartTimeEpochMicros,
-            durationNanos, tags
+            durationNanos, tags, annotations
         );
     }
 
@@ -554,6 +610,138 @@ public class Span implements Closeable {
     public static final String DURATION_NANOS_FIELD = SpanParser.DURATION_NANOS_FIELD;
 
     /**
+     * Represents a timestamped annotation for a {@link Span}. In other words, this class represents an "event" of
+     * some sort that is related to a {@link Span} and keeps track of the time that event occurred (in epoch microseconds).
+     *
+     * <p>The timestamp is retrieved via {@link #getTimestampEpochMicros()}, and the value associated with that
+     * timestamp is retrieved via {@link #getValue()}.
+     */
+    public static class TimestampedAnnotation {
+
+        private final long timestampEpochMicros;
+        private final String value;
+
+        /**
+         * Creates a new instance with the given arguments.
+         *
+         * <p>NOTE: There are convenience factory methods for creating instances of this class for various use cases:
+         * <ul>
+         *     <li>{@link #forEpochMicros(long, String)}</li>
+         *     <li>{@link #forEpochMillis(long, String)}</li>
+         *     <li>{@link #forCurrentTime(String)}</li>
+         *     <li>{@link #forEpochMicrosWithNanoOffset(long, long, String)}</li>
+         * </ul>
+         * See the javadocs on those methods for details.
+         *
+         * @param timestampEpochMicros The timestamp in epoch microseconds (not milliseconds).
+         * @param value The value to associate with the given timestamp.
+         */
+        public TimestampedAnnotation(long timestampEpochMicros, String value) {
+            this.timestampEpochMicros = timestampEpochMicros;
+            this.value = value;
+        }
+
+        /**
+         * A convenience static factory method that serves the same purpose as the
+         * {@link TimestampedAnnotation#TimestampedAnnotation(long, String)} constructor.
+         *
+         * @param timestampEpochMicros The timestamp in epoch microseconds (not milliseconds).
+         * @param value The value to associate with the given timestamp.
+         * @return A new {@link TimestampedAnnotation} with the given timestamp and value.
+         */
+        public static TimestampedAnnotation forEpochMicros(long timestampEpochMicros, String value) {
+            return new TimestampedAnnotation(timestampEpochMicros, value);
+        }
+
+        /**
+         * A convenience static factory method that lets you generate an instance of {@link TimestampedAnnotation}
+         * based on a timestamp in epoch milliseconds rather than microseconds. For example you could use this method
+         * when a timestamp was recorded with {@link System#currentTimeMillis()}, and you wanted to create a
+         * {@link TimestampedAnnotation} using that timestamp.
+         *
+         * @param timestampEpochMillis The timestamp in epoch milliseconds (not microseconds).
+         * @param value The value to associate with the given timestamp.
+         * @return A new {@link TimestampedAnnotation} with the given timestamp (converted to microseconds), and the
+         * given value.
+         */
+        public static TimestampedAnnotation forEpochMillis(long timestampEpochMillis, String value) {
+            return forEpochMicros(TimeUnit.MILLISECONDS.toMicros(timestampEpochMillis), value);
+        }
+
+        /**
+         * A convenience static factory method that lets you generate an instance of {@link TimestampedAnnotation}
+         * with a timestamp of "right now", however unfortunately that "right now" timestamp will have a resolution of
+         * only epoch milliseconds. This epoch millisecond resolution is the best we can do, because without more info
+         * we don't have anything more accurate than {@link System#currentTimeMillis()}.
+         *
+         * <p>NOTE: {@link Span}s keep track of nanosecond duration, so {@link
+         * Span#addTimestampedAnnotation(TimestampedAnnotation)} is able to give a more accurate timestamp than this
+         * method by calling {@link #forEpochMicrosWithNanoOffset(long, long, String)} with the nanosecond offset.
+         * Since {@link Span#addTimestampedAnnotation(TimestampedAnnotation)} is more accurate, you should use that
+         * method directly on the {@link Span} rather than this method whenever possible.
+         *
+         * @param value The value to associate with the "right now" timestamp.
+         * @return A new {@link TimestampedAnnotation} with a timestamp of {@link System#currentTimeMillis()}
+         * (converted to microseconds), and the given value.
+         */
+        public static TimestampedAnnotation forCurrentTime(String value) {
+            return forEpochMillis(System.currentTimeMillis(), value);
+        }
+
+        /**
+         * A convenience static factory method that lets you generate an instance of {@link TimestampedAnnotation}
+         * with a timestamp based on the given timestamp, but offset by the given nanosecond offset value. This
+         * method can be used to create instances of {@link TimestampedAnnotation} that have a more accurate
+         * timestamp than simply {@link System#currentTimeMillis()} converted to microseconds.
+         *
+         * @param timestampEpochMicros The timestamp in epoch microseconds (not milliseconds).
+         * @param offsetNanos The offset (in nanoseconds) to apply to the given timestamp in order to come up with
+         * the desired final timestamp.
+         * @param value The value to associate with the resulting timestamp.
+         * @return A new {@link TimestampedAnnotation} with a final timestamp calculated by adding the given timestamp
+         * and offset, and with the given value.
+         */
+        public static TimestampedAnnotation forEpochMicrosWithNanoOffset(
+            long timestampEpochMicros, long offsetNanos, String value
+        ) {
+            long offsetMicros = TimeUnit.NANOSECONDS.toMicros(offsetNanos);
+            return forEpochMicros(timestampEpochMicros + offsetMicros, value);
+        }
+
+        /**
+         * @return The timestamp of this instance in epoch microseconds (not milliseconds).
+         */
+        public long getTimestampEpochMicros() {
+            return timestampEpochMicros;
+        }
+
+        /**
+         * @return The value of this annotation.
+         */
+        public String getValue() {
+            return value;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (!(o instanceof TimestampedAnnotation)) {
+                return false;
+            }
+            TimestampedAnnotation that = (TimestampedAnnotation) o;
+            return getTimestampEpochMicros() == that.getTimestampEpochMicros() &&
+                   Objects.equals(getValue(), that.getValue());
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(getTimestampEpochMicros(), getValue());
+        }
+    }
+
+    /**
      * Builder for creating {@link Span} objects.
      * <p/>
      * IMPORTANT NOTE: Calling {@link #build()} will choose sensible defaults for {@code traceId} and {@code spanId} if they are null when {@link #build()} is called by
@@ -576,7 +764,8 @@ public class Span implements Closeable {
         private Long spanStartTimeNanos;
         private Long durationNanos;
         private SpanPurpose spanPurpose;
-        private Map<String,String> tags = new HashMap<>();
+        private Map<String,String> tags;
+        private List<TimestampedAnnotation> annotations;
 
         private Builder(String spanName, SpanPurpose spanPurpose) {
             this.spanName = spanName;
@@ -746,7 +935,11 @@ public class Span implements Closeable {
          * @return a reference to this Builder
          */
         public Builder withTag(String key, String value) {
-            tags.put(key, value);
+            if (this.tags == null) {
+                this.tags = new LinkedHashMap<>();
+            }
+
+            this.tags.put(key, value);
             return this;
         }
         
@@ -760,55 +953,112 @@ public class Span implements Closeable {
          *         specified map contains null keys or values
          */
         public Builder withTags(Map<String,String> tags) {
+            if (tags == null) {
+                return this;
+            }
+
+            if (this.tags == null) {
+                this.tags = new LinkedHashMap<>(tags.size());
+            }
+
             this.tags.putAll(tags);
             return this;
         }
-        
+
         /**
-         * <p>
-         *  Returns a {@link Span} built from the parameters set via the various {@code with*(...)} methods on this builder instance.
-         * </p>
-         * <p>
-         *  IMPORTANT NOTE: {@link Span} objects are not allowed to have null {@link Span#getTraceId()}, {@link Span#getSpanId()}, or
-         *  {@link Span#getSpanStartTimeEpochMicros()}, and there are sensible defaults we can set for those values when creating a new span, so if any of them
-         *  are null when this method is called it is assumed you are creating a new span and they will be set to the following:
-         *  <ul>
-         *      <li>{@code traceId} is defaulted to {@link TraceAndSpanIdGenerator#generateId()}</li>
-         *      <li>{@code spanId} is defaulted to {@link TraceAndSpanIdGenerator#generateId()}</li>
-         *      <li>{@code spanStartTimeEpochMicros} is defaulted to {@link System#currentTimeMillis()} converted to microseconds</li>
-         *      <ul>
-         *          <li>Side note - {@code spanStartTimeNanos} is calculated based on the rules described in {@link #withSpanStartTimeNanos(Long)}</li>
-         *      </ul>
-         *  </ul>
-         *  Span name is also not allowed to be null, but since there is no sensible default for that value an {@link IllegalArgumentException} will be thrown
-         *  if span name is null when this method is called.
-         * </p>
+         * Adds the given {@link TimestampedAnnotation}.
          *
-         * @return a {@code Span} built with parameters of this {@code Span.Builder}
+         * @param annotation the {@link TimestampedAnnotation} to add.
+         * @return a reference to this Builder
+         */
+        public Builder withTimestampedAnnotation(TimestampedAnnotation annotation) {
+            if (this.annotations == null) {
+                this.annotations = new ArrayList<>();
+            }
+
+            this.annotations.add(annotation);
+            return this;
+        }
+
+        /**
+         * Adds the given {@link TimestampedAnnotation}s.
+         *
+         * @param annotations the collection of {@link TimestampedAnnotation}s to add.
+         * @return a reference to this Builder
+         */
+        public Builder withTimestampedAnnotations(Collection<? extends TimestampedAnnotation> annotations) {
+            if (annotations == null) {
+                return this;
+            }
+            
+            if (this.annotations == null) {
+                this.annotations = new ArrayList<>(annotations.size());
+            }
+
+            this.annotations.addAll(annotations);
+            return this;
+        }
+
+        /**
+         * Returns a {@link Span} built from the parameters set via the various {@code with*(...)} methods on this
+         * builder instance.
+         *
+         * <p>IMPORTANT NOTE: {@link Span} objects are not allowed to have null {@link Span#getTraceId()}, {@link
+         * Span#getSpanId()}, or {@link Span#getSpanStartTimeEpochMicros()}, and there are sensible defaults we can set
+         * for those values when creating a new span, so if any of them are null when this method is called it is
+         * assumed you are creating a new span and they will be set to the following:
+         * <ul>
+         *     <li>{@code traceId} is defaulted to {@link TraceAndSpanIdGenerator#generateId()}.</li>
+         *     <li>{@code spanId} is defaulted to {@link TraceAndSpanIdGenerator#generateId()}.</li>
+         *     <li>
+         *         {@code spanStartTimeEpochMicros} is defaulted to {@link System#currentTimeMillis()} converted to
+         *         microseconds.
+         *     </li>
+         *     <ul>
+         *         <li>
+         *             Side note - {@code spanStartTimeNanos} is calculated based on the rules described in
+         *             {@link #withSpanStartTimeNanos(Long)}.
+         *         </li>
+         *     </ul>
+         * </ul>
+         *
+         * <p>Span name is also not allowed to be null, but since there is no sensible default for that value an
+         * {@link IllegalArgumentException} will be thrown if span name is null when this method is called.
+         *
+         * @return a {@link Span} built with parameters of this {@code Span.Builder}
          */
         public Span build() {
-            if (traceId == null)
+            if (traceId == null) {
                 traceId = TraceAndSpanIdGenerator.generateId();
+            }
 
-            if (spanId == null)
+            if (spanId == null) {
                 spanId = TraceAndSpanIdGenerator.generateId();
+            }
 
             if (spanStartTimeEpochMicros == null) {
                 spanStartTimeEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
                 if (spanStartTimeNanos != null) {
                     // The nano start time was set but the start time in epoch microseconds was *not*.
                     //      This makes no sense, so we'll null out the nano start and log a warning.
-                    builderLogger.warn("The builder was setup with a null spanStartTimeEpochMicros and non-null spanStartTimeNanos. This makes no sense "
-                                       + "(if you have a nano start time then you should also have the epoch micros start time), so the nano start time "
-                                       + "passed into this builder will be ignored and calculated fresh along with the epoch micros start timestamp.");
+                    builderLogger.warn(
+                        "The builder was setup with a null spanStartTimeEpochMicros and non-null spanStartTimeNanos. "
+                        + "This makes no sense (if you have a nano start time then you should also have the epoch "
+                        + "micros start time), so the nano start time passed into this builder will be ignored and "
+                        + "calculated fresh along with the epoch micros start timestamp."
+                    );
                     spanStartTimeNanos = null;
                 }
             }
 
-            if (spanStartTimeNanos == null)
+            if (spanStartTimeNanos == null) {
                 spanStartTimeNanos = System.nanoTime();
+            }
 
-            return new Span(traceId, parentSpanId, spanId, spanName, sampleable, userId, spanPurpose, spanStartTimeEpochMicros, spanStartTimeNanos, durationNanos, tags);
+            return new Span(
+                traceId, parentSpanId, spanId, spanName, sampleable, userId, spanPurpose, spanStartTimeEpochMicros,
+                spanStartTimeNanos, durationNanos, tags, annotations
+            );
         }
     }
 }

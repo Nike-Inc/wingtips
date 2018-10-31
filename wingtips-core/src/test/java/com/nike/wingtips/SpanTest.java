@@ -2,6 +2,7 @@ package com.nike.wingtips;
 
 import com.nike.internal.util.MapBuilder;
 import com.nike.wingtips.Span.SpanPurpose;
+import com.nike.wingtips.Span.TimestampedAnnotation;
 import com.nike.wingtips.util.TracerManagedSpanStatus;
 import com.nike.wingtips.util.parser.SpanParser;
 
@@ -19,13 +20,16 @@ import org.mockito.internal.util.reflection.Whitebox;
 import org.slf4j.MDC;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Deque;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static com.nike.wingtips.TestSpanCompleter.completeSpan;
 import static com.nike.wingtips.util.parser.SpanParserTest.deserializeKeyValueSpanString;
@@ -33,6 +37,9 @@ import static java.util.Collections.singletonList;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.assertj.core.api.Fail.fail;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verifyZeroInteractions;
 
 /**
  * Tests the functionality of {@link Span}
@@ -59,6 +66,13 @@ public class SpanTest {
                   .put("barTagKey", UUID.randomUUID().toString())
                   .build()
     );
+    private List<TimestampedAnnotation> annotations = Collections.unmodifiableList(
+        Arrays.asList(
+            TimestampedAnnotation.forEpochMicros(12345, UUID.randomUUID().toString()),
+            TimestampedAnnotation.forEpochMicros(12345, UUID.randomUUID().toString()),
+            TimestampedAnnotation.forEpochMicros(67890, UUID.randomUUID().toString())
+        )
+    );
 
     private ObjectMapper objectMapper = new ObjectMapper();
 
@@ -81,36 +95,42 @@ public class SpanTest {
         Long durationNanos = (completed) ? durationNanosForFullyCompletedSpan : null;
         return new Span(traceId, parentSpanId, spanId, spanName, sampleableForFullyCompleteSpan, userId,
                         spanPurposeForFullyCompletedSpan, startTimeEpochMicrosForFullyCompleteSpan,
-                        startTimeNanosForFullyCompleteSpan, durationNanos, tags
+                        startTimeNanosForFullyCompleteSpan, durationNanos, tags, annotations
         );
     }
 
-    public static void verifySpanDeepEquals(Span span1, Span span2, boolean allowStartTimeNanosFudgeFactor) {
-        assertThat(span1.getSpanStartTimeEpochMicros()).isEqualTo(span2.getSpanStartTimeEpochMicros());
+    public static void verifySpanDeepEquals(
+        Span spanToVerify, Span expectedSpan, boolean allowStartTimeNanosFudgeFactor
+    ) {
+        assertThat(spanToVerify.getSpanStartTimeEpochMicros()).isEqualTo(expectedSpan.getSpanStartTimeEpochMicros());
         if (allowStartTimeNanosFudgeFactor) {
-            assertThat(span1.getSpanStartTimeNanos())
-                .isCloseTo(span2.getSpanStartTimeNanos(), Offset.offset(TimeUnit.MILLISECONDS.toNanos(1)));
+            assertThat(spanToVerify.getSpanStartTimeNanos())
+                .isCloseTo(expectedSpan.getSpanStartTimeNanos(), Offset.offset(TimeUnit.MILLISECONDS.toNanos(1)));
         }
         else {
-            assertThat(span1.getSpanStartTimeNanos()).isEqualTo(span2.getSpanStartTimeNanos());
+            assertThat(spanToVerify.getSpanStartTimeNanos()).isEqualTo(expectedSpan.getSpanStartTimeNanos());
         }
-        assertThat(span1.isCompleted()).isEqualTo(span2.isCompleted());
-        assertThat(span1.getTraceId()).isEqualTo(span2.getTraceId());
-        assertThat(span1.getSpanId()).isEqualTo(span2.getSpanId());
-        assertThat(span1.getParentSpanId()).isEqualTo(span2.getParentSpanId());
-        assertThat(span1.getSpanName()).isEqualTo(span2.getSpanName());
-        assertThat(span1.isSampleable()).isEqualTo(span2.isSampleable());
-        assertThat(span1.getUserId()).isEqualTo(span2.getUserId());
-        assertThat(span1.getDurationNanos()).isEqualTo(span2.getDurationNanos());
-        assertThat(span1.getSpanPurpose()).isEqualTo(span2.getSpanPurpose());
-        assertThat(span1.getTags()).isEqualTo(span2.getTags());
+        assertThat(spanToVerify.isCompleted()).isEqualTo(expectedSpan.isCompleted());
+        assertThat(spanToVerify.getTraceId()).isEqualTo(expectedSpan.getTraceId());
+        assertThat(spanToVerify.getSpanId()).isEqualTo(expectedSpan.getSpanId());
+        assertThat(spanToVerify.getParentSpanId()).isEqualTo(expectedSpan.getParentSpanId());
+        assertThat(spanToVerify.getSpanName()).isEqualTo(expectedSpan.getSpanName());
+        assertThat(spanToVerify.isSampleable()).isEqualTo(expectedSpan.isSampleable());
+        assertThat(spanToVerify.getUserId()).isEqualTo(expectedSpan.getUserId());
+        assertThat(spanToVerify.getDurationNanos()).isEqualTo(expectedSpan.getDurationNanos());
+        assertThat(spanToVerify.getSpanPurpose()).isEqualTo(expectedSpan.getSpanPurpose());
+        assertThat(spanToVerify.getTags()).isEqualTo(expectedSpan.getTags());
+        assertThat(spanToVerify.getTimestampedAnnotations()).isEqualTo(expectedSpan.getTimestampedAnnotations());
     }
 
     @Test
     public void public_constructor_works_as_expected_for_completed_span() {
         // when
-        Span span = new Span(traceId, parentSpanId, spanId, spanName, sampleableForFullyCompleteSpan, userId, spanPurposeForFullyCompletedSpan,
-                             startTimeEpochMicrosForFullyCompleteSpan, startTimeNanosForFullyCompleteSpan, durationNanosForFullyCompletedSpan, tags);
+        Span span = new Span(
+            traceId, parentSpanId, spanId, spanName, sampleableForFullyCompleteSpan, userId,
+            spanPurposeForFullyCompletedSpan, startTimeEpochMicrosForFullyCompleteSpan,
+            startTimeNanosForFullyCompleteSpan, durationNanosForFullyCompletedSpan, tags, annotations
+        );
 
         // then
         assertThat(span.getTraceId()).isEqualTo(traceId);
@@ -126,13 +146,17 @@ public class SpanTest {
         assertThat(span.isCompleted()).isTrue();
         assertThat(span.getDurationNanos()).isEqualTo(durationNanosForFullyCompletedSpan);
         assertThat(span.getTags()).isEqualTo(tags);
+        assertThat(span.getTimestampedAnnotations()).isEqualTo(annotations);
     }
 
     @Test
     public void public_constructor_works_as_expected_for_incomplete_span() {
         // when
-        Span span = new Span(traceId, parentSpanId, spanId, spanName, sampleableForFullyCompleteSpan, userId, spanPurposeForFullyCompletedSpan,
-                             startTimeEpochMicrosForFullyCompleteSpan, startTimeNanosForFullyCompleteSpan, null, tags);
+        Span span = new Span(
+            traceId, parentSpanId, spanId, spanName, sampleableForFullyCompleteSpan, userId,
+            spanPurposeForFullyCompletedSpan, startTimeEpochMicrosForFullyCompleteSpan,
+            startTimeNanosForFullyCompleteSpan, null, tags, annotations
+        );
 
         // then
         assertThat(span.getTraceId()).isEqualTo(traceId);
@@ -148,42 +172,56 @@ public class SpanTest {
         assertThat(span.isCompleted()).isFalse();
         assertThat(span.getDurationNanos()).isNull();
         assertThat(span.getTags()).isEqualTo(tags);
+        assertThat(span.getTimestampedAnnotations()).isEqualTo(annotations);
     }
 
     @Test(expected = IllegalArgumentException.class)
     public void public_constructor_throws_IllegalArgumentException_if_passed_null_trace_id() {
         // expect
-        new Span(null, parentSpanId, spanId, spanName, true, userId, spanPurpose, 42, null, null, null);
+        new Span(null, parentSpanId, spanId, spanName, true, userId, spanPurpose, 42, null, null, null, null);
     }
 
     @Test(expected = IllegalArgumentException.class)
     public void public_constructor_throws_IllegalArgumentException_if_passed_null_span_id() {
         // expect
-        new Span(traceId, parentSpanId, null, spanName, true, userId, spanPurpose, 42, null, null, null);
+        new Span(traceId, parentSpanId, null, spanName, true, userId, spanPurpose, 42, null, null, null, null);
     }
 
     @Test(expected = IllegalArgumentException.class)
     public void public_constructor_throws_IllegalArgumentException_if_passed_null_span_name() {
         // expect
-        new Span(traceId, parentSpanId, spanId, null, true, userId, spanPurpose, 42, null, null, null);
+        new Span(traceId, parentSpanId, spanId, null, true, userId, spanPurpose, 42, null, null, null, null);
     }
 
     @Test
     public void public_constructor_defaults_to_UNKNOWN_span_purpose_if_passed_null() {
         // when
-        Span span = new Span(traceId, parentSpanId, spanId, spanName, true, userId, null, 42, null, null, null);
+        Span span = new Span(traceId, parentSpanId, spanId, spanName, true, userId, null, 42, null, null, null, null);
 
         // then
         assertThat(span.getSpanPurpose()).isEqualTo(SpanPurpose.UNKNOWN);
     }
 
     @Test
-    public void public_constructor_keeps_empty_set_when_tags_are_set_null() {
+    public void public_constructor_uses_empty_tags_map_when_tags_argument_is_null() {
         // when
-        Span span = new Span(traceId, parentSpanId, spanId, spanName, true, userId, null, 42, null, null, null);
+        Span span = new Span(traceId, parentSpanId, spanId, spanName, true, userId, null, 42, null, null, null, null);
 
         // then
-        assertThat(span.getTags()).isNotNull();
+        assertThat(span.getTags())
+            .isNotNull()
+            .isEmpty();
+    }
+
+    @Test
+    public void public_constructor_uses_empty_annotations_list_when_annotations_argument_is_null() {
+        // when
+        Span span = new Span(traceId, parentSpanId, spanId, spanName, true, userId, null, 42, null, null, null, null);
+
+        // then
+        assertThat(span.getTimestampedAnnotations())
+            .isNotNull()
+            .isEmpty();
     }
     
     @Test
@@ -194,7 +232,7 @@ public class SpanTest {
         long epochMicrosBeforeCall = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
 
         // when
-        Span span = new Span(traceId, parentSpanId, spanId, spanName, true, userId, spanPurpose, startTimeEpochMicrosUsed, null, 41L, null);
+        Span span = new Span(traceId, parentSpanId, spanId, spanName, true, userId, spanPurpose, startTimeEpochMicrosUsed, null, 41L, null, null);
         long epochMicrosAfterCall = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
         long nanosAfterCall = System.nanoTime();
 
@@ -219,9 +257,14 @@ public class SpanTest {
         Span result = new Span();
 
         // then
-        verifySpanDeepEquals(result,
-                             new Span(placeholderValue, null, placeholderValue, placeholderValue, false, null, SpanPurpose.UNKNOWN, -1, -1L, -1L, null),
-                             false);
+        verifySpanDeepEquals(
+            result,
+            new Span(
+                placeholderValue, null, placeholderValue, placeholderValue, false, null, SpanPurpose.UNKNOWN, -1, -1L,
+                -1L, null, null
+            ),
+            false
+        );
     }
 
     @Test
@@ -281,6 +324,8 @@ public class SpanTest {
         assertThat(result.getSpanStartTimeNanos()).isBetween(beforeCallNanos, afterCallNanos);
         assertThat(result.isCompleted()).isFalse();
         assertThat(result.getDurationNanos()).isNull();
+        assertThat(result.getTags()).isEmpty();
+        assertThat(result.getTimestampedAnnotations()).isEmpty();
     }
 
     @DataProvider(value = {
@@ -303,8 +348,9 @@ public class SpanTest {
         long afterCallNanos = System.nanoTime();
         long afterCallEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
 
-        // then: returned object contains the expected values
-        //       (new span ID, expected span name, parent span ID equal to parent's span ID, start time generated during call, not completed, everything else the same as parent).
+        // then: returned object contains the expected values (new span ID, expected span name, parent span ID equal
+        //      to parent's span ID, start time generated during call, not completed, no tags, no annotations, and
+        //      everything else the same as parent).
         assertThat(childSpan.getSpanId()).isNotEmpty();
         assertThat(childSpan.getSpanId()).isNotEqualTo(parentSpan.getSpanId());
         assertThat(childSpan.getSpanName()).isEqualTo(childSpanName);
@@ -319,6 +365,9 @@ public class SpanTest {
         assertThat(childSpan.getSpanStartTimeNanos()).isBetween(beforeCallNanos, afterCallNanos);
         assertThat(childSpan.isCompleted()).isFalse();
         assertThat(childSpan.getDurationNanos()).isNull();
+
+        assertThat(childSpan.getTags()).isEmpty();
+        assertThat(childSpan.getTimestampedAnnotations()).isEmpty();
     }
 
     @DataProvider(value = {
@@ -341,8 +390,9 @@ public class SpanTest {
         long afterCallNanos = System.nanoTime();
         long afterCallEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
 
-        // then: returned object contains the expected values
-        //       (new span ID, expected span name, parent span ID equal to parent's span ID, start time generated during call, not completed, everything else the same as parent).
+        // then: returned object contains the expected values (new span ID, expected span name, parent span ID equal
+        //      to parent's span ID, start time generated during call, not completed, no tags, no annotations, and
+        //      everything else the same as parent).
         assertThat(childSpan.getSpanId()).isNotEmpty();
         assertThat(childSpan.getSpanId()).isNotEqualTo(parentSpan.getSpanId());
         assertThat(childSpan.getSpanName()).isEqualTo(childSpanName);
@@ -357,6 +407,9 @@ public class SpanTest {
         assertThat(childSpan.getSpanStartTimeNanos()).isBetween(beforeCallNanos, afterCallNanos);
         assertThat(childSpan.isCompleted()).isFalse();
         assertThat(childSpan.getDurationNanos()).isNull();
+
+        assertThat(childSpan.getTags()).isEmpty();
+        assertThat(childSpan.getTimestampedAnnotations()).isEmpty();
     }
 
     @Test
@@ -439,6 +492,7 @@ public class SpanTest {
         // expect
         //noinspection EqualsBetweenInconvertibleTypes
         assertThat(span.equals(notASpan)).isFalse();
+        assertThat(span.hashCode()).isNotEqualTo(notASpan.hashCode());
     }
 
     @Test
@@ -593,6 +647,18 @@ public class SpanTest {
         assertThat(fullSpan1.hashCode()).isNotEqualTo(fullSpan2.hashCode());
     }
 
+    @Test
+    public void equals_returns_false_and_hashCode_different_if_annotations_are_different() {
+        // given
+        Span fullSpan1 = createFilledOutSpan(true);
+        Span fullSpan2 = createFilledOutSpan(true);
+        fullSpan1.addTimestampedAnnotation(TimestampedAnnotation.forCurrentTime("foo"));
+
+        // expect
+        assertThat(fullSpan1.equals(fullSpan2)).isFalse();
+        assertThat(fullSpan1.hashCode()).isNotEqualTo(fullSpan2.hashCode());
+    }
+
     @DataProvider(value = {
         "SERVER",
         "CLIENT",
@@ -623,6 +689,8 @@ public class SpanTest {
         assertThat(result.getSpanStartTimeNanos()).isBetween(beforeCallNanos, afterCallNanos);
         assertThat(result.getDurationNanos()).isNull();
         assertThat(result.isCompleted()).isFalse();
+        assertThat(result.getTags()).isEmpty();
+        assertThat(result.getTimestampedAnnotations()).isEmpty();
     }
 
     @DataProvider(value = {
@@ -642,13 +710,26 @@ public class SpanTest {
         Span copySpan = Span.newBuilder(origSpan).build();
 
         // then
-        verifySpanDeepEquals(origSpan, copySpan, false);
+        verifySpanDeepEquals(copySpan, origSpan, false);
     }
 
     @Test
     public void newBuilder_honors_values_for_all_fields_if_set() {
 
         // given
+        TimestampedAnnotation extraAnnotation = TimestampedAnnotation.forCurrentTime(UUID.randomUUID().toString());
+        List<TimestampedAnnotation> evenMoreAnnotations = Arrays.asList(
+            TimestampedAnnotation.forCurrentTime(UUID.randomUUID().toString()),
+            TimestampedAnnotation.forCurrentTime(UUID.randomUUID().toString())
+        );
+
+        String extraTagKey = "extraTagKey-" + UUID.randomUUID().toString();
+        String extraTagValue = "extraTagValue-" + UUID.randomUUID().toString();
+        Map<String, String> evenMoreTags = MapBuilder
+            .builder("foo-" + UUID.randomUUID().toString(), "bar-" + UUID.randomUUID().toString())
+            .put("foo2-" + UUID.randomUUID().toString(), "bar2-" + UUID.randomUUID().toString())
+            .build();
+
         Span.Builder builder = Span
                 .newBuilder("override_me", SpanPurpose.UNKNOWN)
                 .withTraceId(traceId)
@@ -661,9 +742,24 @@ public class SpanTest {
                 .withSpanStartTimeEpochMicros(startTimeEpochMicrosForFullyCompleteSpan)
                 .withSpanStartTimeNanos(startTimeNanosForFullyCompleteSpan)
                 .withDurationNanos(durationNanosForFullyCompletedSpan)
-                .withTags(tags);
+                .withTags(tags)
+                .withTag(extraTagKey, extraTagValue)
+                .withTags(evenMoreTags)
+                .withTimestampedAnnotations(annotations)
+                .withTimestampedAnnotation(extraAnnotation)
+                .withTimestampedAnnotations(evenMoreAnnotations);
         
         assertThat(spanPurpose).isNotEqualTo(SpanPurpose.UNKNOWN);
+
+        Map<String, String> expectedTags = MapBuilder.<String, String>builder()
+            .putAll(tags)
+            .put(extraTagKey, extraTagValue)
+            .putAll(evenMoreTags)
+            .build();
+
+        List<TimestampedAnnotation> expectedAnnotations = new ArrayList<>(annotations);
+        expectedAnnotations.add(extraAnnotation);
+        expectedAnnotations.addAll(evenMoreAnnotations);
 
         // when
         Span span = builder.build();
@@ -679,7 +775,50 @@ public class SpanTest {
         assertThat(span.getSpanStartTimeEpochMicros()).isEqualTo(startTimeEpochMicrosForFullyCompleteSpan);
         assertThat(span.getSpanStartTimeNanos()).isEqualTo(startTimeNanosForFullyCompleteSpan);
         assertThat(span.getDurationNanos()).isEqualTo(durationNanosForFullyCompletedSpan);
-        assertThat(span.getTags()).isEqualTo(tags);
+        assertThat(span.getTags()).isEqualTo(expectedTags);
+        assertThat(span.getTimestampedAnnotations()).isEqualTo(expectedAnnotations);
+    }
+
+    @Test
+    public void builder_withTags_does_nothing_if_passed_null() {
+        // given
+        Span.Builder builder = Span.newBuilder("foo", SpanPurpose.UNKNOWN);
+        Map<String, String> tagsMapSpy = spy(new LinkedHashMap<>());
+        Whitebox.setInternalState(builder, "tags", tagsMapSpy);
+        
+        // when
+        Span.Builder resultingBuilder = builder.withTags(null);
+
+        // then
+        assertThat(resultingBuilder).isSameAs(builder);
+        verifyZeroInteractions(tagsMapSpy);
+
+        // and when
+        Span resultingSpan = resultingBuilder.build();
+
+        // then
+        assertThat(resultingSpan.getTags()).isEmpty();
+    }
+
+    @Test
+    public void builder_withTimestampedAnnotations_does_nothing_if_passed_null() {
+        // given
+        Span.Builder builder = Span.newBuilder("foo", SpanPurpose.UNKNOWN);
+        List<TimestampedAnnotation> annotationsListSpy = spy(new ArrayList<>());
+        Whitebox.setInternalState(builder, "annotations", annotationsListSpy);
+
+        // when
+        Span.Builder resultingBuilder = builder.withTimestampedAnnotations(null);
+
+        // then
+        assertThat(resultingBuilder).isSameAs(builder);
+        verifyZeroInteractions(annotationsListSpy);
+
+        // and when
+        Span resultingSpan = resultingBuilder.build();
+
+        // then
+        assertThat(resultingSpan.getTimestampedAnnotations()).isEmpty();
     }
 
     @Test
@@ -1060,6 +1199,77 @@ public class SpanTest {
         assertThat(span.getTags().get(tagKey)).isEqualTo(otherValue);
     }
 
+    @DataProvider(value = {
+        // It's unlikely the test will actually execute fast enough to measure anything under 1 microsecond delay,
+        //      but it can't hurt to try.
+        "0",            // No delay
+        "420",          // 420 nanos
+        "1000",         // 1 micros
+        "42000",        // 42 micros
+        "420000",       // 420 micros
+        "600000",       // 600 micros
+        "1000000",      // 1 millis
+        "4200000"       // 4.2 millis
+    })
+    @Test
+    public void addTimestampedAnnotationForCurrentTime_works_as_expected(long delayNanos) {
+        // given
+        String annotationValue = UUID.randomUUID().toString();
+        
+        long nanoTimeBeforeSpanCreation = System.nanoTime();
+        Span span = Span.newBuilder("foo", SpanPurpose.CLIENT).build();
+        long nanoTimeAfterSpanCreation = System.nanoTime();
+
+        assertThat(span.getTimestampedAnnotations()).isEmpty();
+
+        busyWaitForNanos(delayNanos);
+
+        // when
+        long nanoTimeBeforeMethodCall = System.nanoTime();
+        span.addTimestampedAnnotationForCurrentTime(annotationValue);
+        long nanoTimeAfterMethodCall = System.nanoTime();
+
+        // then
+        long minPossibleOffsetMicros =
+            TimeUnit.NANOSECONDS.toMicros(nanoTimeBeforeMethodCall - nanoTimeAfterSpanCreation);
+        long maxPossibleOffsetMicros =
+            1 + TimeUnit.NANOSECONDS.toMicros(nanoTimeAfterMethodCall - nanoTimeBeforeSpanCreation);
+
+        long expectedMinTimestamp = span.getSpanStartTimeEpochMicros() + minPossibleOffsetMicros;
+        long expectedMaxTimestamp = span.getSpanStartTimeEpochMicros() + maxPossibleOffsetMicros;
+
+        assertThat(span.getTimestampedAnnotations().get(0).getTimestampEpochMicros())
+            .isBetween(expectedMinTimestamp, expectedMaxTimestamp);
+    }
+
+    private void busyWaitForNanos(long delayNanos) {
+        if (delayNanos == 0) {
+            return;
+        }
+
+        long startTimeNanos = System.nanoTime();
+        while ((System.nanoTime() - startTimeNanos) < delayNanos) {
+            // Do nothing. Busy/wait.
+        }
+
+        return;
+    }
+
+    @Test
+    public void addTimestampedAnnotation_works_as_expected() {
+        // given
+        Span span = Span.newBuilder("foo", SpanPurpose.CLIENT).build();
+        TimestampedAnnotation annotationMock = mock(TimestampedAnnotation.class);
+        
+        // when
+        span.addTimestampedAnnotation(annotationMock);
+
+        // then
+        assertThat(span.getTimestampedAnnotations())
+            .hasSize(1)
+            .containsExactly(annotationMock);
+    }
+
     @Test
     public void fromKeyValueString_delegates_to_span_parser() {
         // given
@@ -1103,6 +1313,7 @@ public class SpanTest {
     }
 
     public static void verifySpanEqualsDeserializedValues(Span span, Map<String, ?> deserializedValues) {
+        // Verify basic fields.
         assertThat(nullSafeStringValueOf(span.getSpanStartTimeEpochMicros())).isEqualTo(deserializedValues.get(SpanParser.START_TIME_EPOCH_MICROS_FIELD));
         assertThat(span.isCompleted()).isEqualTo(deserializedValues.containsKey(SpanParser.DURATION_NANOS_FIELD));
         assertThat(nullSafeStringValueOf(span.getTraceId())).isEqualTo(deserializedValues.get(SpanParser.TRACE_ID_FIELD));
@@ -1114,6 +1325,7 @@ public class SpanTest {
         assertThat(nullSafeStringValueOf(span.getDurationNanos())).isEqualTo(nullSafeStringValueOf(deserializedValues.get(SpanParser.DURATION_NANOS_FIELD)));
         assertThat(nullSafeStringValueOf(span.getSpanPurpose())).isEqualTo(nullSafeStringValueOf(deserializedValues.get(SpanParser.SPAN_PURPOSE_FIELD)));
 
+        // Verify tags.
         Map<String, String> tags = span.getTags();
         Map<String, Object> deserializedTags = (Map<String, Object>) deserializedValues.get(SpanParser.TAGS_FIELD);
 
@@ -1123,6 +1335,176 @@ public class SpanTest {
         else {
             assertThat(deserializedTags).isEqualTo(tags);
         }
+
+        // Verify annotations.
+        List<Map<String, String>> annotationsAsListOfMaps = span
+            .getTimestampedAnnotations()
+            .stream()
+            .map(
+                a -> MapBuilder.builder(
+                    SpanParser.ANNOTATION_SUBOBJECT_TIMESTAMP_FIELD, String.valueOf(a.getTimestampEpochMicros())
+                ).put(
+                    SpanParser.ANNOTATION_SUBOBJECT_VALUE_FIELD, a.getValue()
+                ).build()
+            )
+            .collect(Collectors.toList());
+
+        List<Map<String, String>> deserializedAnnotations =
+            (List<Map<String, String>>) deserializedValues.get(SpanParser.ANNOTATIONS_LIST_FIELD);
+
+        if (annotationsAsListOfMaps.isEmpty()) {
+            assertThat(deserializedAnnotations).isNullOrEmpty();
+        }
+        else {
+            assertThat(deserializedAnnotations).isEqualTo(annotationsAsListOfMaps);
+        }
+    }
+
+    @Test
+    public void TimestampedAnnotation_constructor_works_as_expected() {
+        // given
+        long timestamp = 42;
+        String value = UUID.randomUUID().toString();
+
+        // when
+        TimestampedAnnotation result = new TimestampedAnnotation(timestamp, value);
+
+        // then
+        assertThat(result.getTimestampEpochMicros()).isEqualTo(timestamp);
+        assertThat(result.getValue()).isEqualTo(value);
+    }
+
+    @Test
+    public void TimestampedAnnotation_equals_returns_true_and_hashCode_same_if_same_instance() {
+        // given
+        TimestampedAnnotation instance = new TimestampedAnnotation(42, "foo");
+
+        // expect
+        //noinspection EqualsWithItself
+        assertThat(instance.equals(instance)).isTrue();
+        assertThat(instance.hashCode()).isEqualTo(instance.hashCode());
+    }
+
+    @Test
+    public void TimestampedAnnotation_equals_returns_false_and_hashCode_different_if_other_is_not_a_TimestampedAnnotation() {
+        // given
+        TimestampedAnnotation annotation = new TimestampedAnnotation(42, "foo");
+        String notAnAnnotation = "notAnAnnotation";
+
+        // expect
+        //noinspection EqualsBetweenInconvertibleTypes
+        assertThat(annotation.equals(notAnAnnotation)).isFalse();
+        assertThat(annotation.hashCode()).isNotEqualTo(notAnAnnotation.hashCode());
+    }
+
+    @Test
+    public void TimestampedAnnotation_equals_returns_true_and_hashCode_same_if_all_fields_are_equal() {
+        // given
+        TimestampedAnnotation annotation1 = new TimestampedAnnotation(42, "foo");
+        TimestampedAnnotation annotation2 = new TimestampedAnnotation(
+            annotation1.getTimestampEpochMicros(),
+            annotation1.getValue()
+        );
+
+        // expect
+        assertThat(annotation1.equals(annotation2)).isTrue();
+        assertThat(annotation1.hashCode()).isEqualTo(annotation2.hashCode());
+    }
+
+    @Test
+    public void TimestampedAnnotation_equals_returns_false_and_hashCode_different_if_timestamp_is_different() {
+        // given
+        TimestampedAnnotation annotation1 = new TimestampedAnnotation(42, "foo");
+        TimestampedAnnotation annotation2 = new TimestampedAnnotation(
+            annotation1.getTimestampEpochMicros() + 1234,
+            annotation1.getValue()
+        );
+
+        // expect
+        assertThat(annotation1.equals(annotation2)).isFalse();
+        assertThat(annotation1.hashCode()).isNotEqualTo(annotation2.hashCode());
+    }
+
+    @Test
+    public void TimestampedAnnotation_equals_returns_false_and_hashCode_different_if_value_is_different() {
+        // given
+        TimestampedAnnotation annotation1 = new TimestampedAnnotation(42, "foo");
+        TimestampedAnnotation annotation2 = new TimestampedAnnotation(
+            annotation1.getTimestampEpochMicros(),
+            annotation1.getValue() + "_nope"
+        );
+
+        // expect
+        assertThat(annotation1.equals(annotation2)).isFalse();
+        assertThat(annotation1.hashCode()).isNotEqualTo(annotation2.hashCode());
+    }
+
+    @Test
+    public void TimestampedAnnotation_forEpochMicros_works_as_expected() {
+        // given
+        long timestampMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
+        String value = UUID.randomUUID().toString();
+
+        // when
+        TimestampedAnnotation result = TimestampedAnnotation.forEpochMicros(timestampMicros, value);
+
+        // then
+        assertThat(result.getTimestampEpochMicros()).isEqualTo(timestampMicros);
+        assertThat(result.getValue()).isEqualTo(value);
+    }
+
+    @Test
+    public void TimestampedAnnotation_forEpochMillis_works_as_expected() {
+        // given
+        long timestampMillis = System.currentTimeMillis();
+        String value = UUID.randomUUID().toString();
+
+        // when
+        TimestampedAnnotation result = TimestampedAnnotation.forEpochMillis(timestampMillis, value);
+
+        // then
+        assertThat(result.getTimestampEpochMicros()).isEqualTo(TimeUnit.MILLISECONDS.toMicros(timestampMillis));
+        assertThat(result.getValue()).isEqualTo(value);
+    }
+
+    @Test
+    public void TimestampedAnnotation_forCurrentTime_works_as_expected() {
+        // given
+        String value = UUID.randomUUID().toString();
+
+        // when
+        long beforeMillis = System.currentTimeMillis();
+        TimestampedAnnotation result = TimestampedAnnotation.forCurrentTime(value);
+        long afterMillis = System.currentTimeMillis();
+
+        // then
+        long beforeMicros = TimeUnit.MILLISECONDS.toMicros(beforeMillis);
+        long afterMicros = TimeUnit.MILLISECONDS.toMicros(afterMillis);
+        assertThat(result.getTimestampEpochMicros()).isBetween(beforeMicros, afterMicros);
+        assertThat(result.getValue()).isEqualTo(value);
+    }
+
+    @Test
+    public void TimestampedAnnotation_forEpochMicrosWithNanoOffset_works_as_expected() {
+        // given
+        long timestampMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
+        long nanoOffset = 4242;
+        String value = UUID.randomUUID().toString();
+
+        long expectedMicrosOffset = TimeUnit.NANOSECONDS.toMicros(nanoOffset);
+        assertThat(expectedMicrosOffset).isGreaterThan(0);
+
+        long expectedTimestamp = timestampMicros + expectedMicrosOffset;
+        assertThat(expectedTimestamp).isNotEqualTo(timestampMicros);
+
+        // when
+        TimestampedAnnotation result = TimestampedAnnotation.forEpochMicrosWithNanoOffset(
+            timestampMicros, nanoOffset, value
+        );
+
+        // then
+        assertThat(result.getTimestampEpochMicros()).isEqualTo(expectedTimestamp);
+        assertThat(result.getValue()).isEqualTo(value);
     }
 }
 
