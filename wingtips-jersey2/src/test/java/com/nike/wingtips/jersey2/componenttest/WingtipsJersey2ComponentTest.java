@@ -110,6 +110,7 @@ public class WingtipsJersey2ComponentTest {
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.asString()).isEqualTo(PATH_PARAM_ENDPOINT_PAYLOAD);
 
+        waitUntilSpanRecorderHasExpectedNumSpans(1);
         assertThat(spanRecorder.completedSpans).hasSize(1);
         assertThat(spanRecorder.completedSpans.get(0).getSpanName())
             .doesNotContain(id)
@@ -134,10 +135,32 @@ public class WingtipsJersey2ComponentTest {
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.asString()).isEqualTo(WILDCARD_ENDPOINT_ENDPOINT_PAYLOAD);
 
+        waitUntilSpanRecorderHasExpectedNumSpans(1);
         assertThat(spanRecorder.completedSpans).hasSize(1);
         assertThat(spanRecorder.completedSpans.get(0).getSpanName())
             .doesNotContain(randomPathSegment)
             .isEqualTo("GET " + WILDCARD_ENDPOINT_PATH);
+    }
+
+    private void waitUntilSpanRecorderHasExpectedNumSpans(int expectedNumSpans) {
+        long timeoutMillis = 5000;
+        long startTimeMillis = System.currentTimeMillis();
+        while (spanRecorder.completedSpans.size() < expectedNumSpans) {
+            try {
+                Thread.sleep(10);
+            }
+            catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+
+            long timeSinceStart = System.currentTimeMillis() - startTimeMillis;
+            if (timeSinceStart > timeoutMillis) {
+                throw new RuntimeException(
+                    "spanRecorder did not have the expected number of spans after waiting "
+                    + timeoutMillis + " milliseconds"
+                );
+            }
+        }
     }
 
     @Provider

@@ -8,6 +8,7 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 
 #### 0.x Releases
 
+- `0.18.x` Releases - [0.18.0](#0180)
 - `0.17.x` Releases - [0.17.0](#0170)
 - `0.16.x` Releases - [0.16.0](#0160)
 - `0.15.x` Releases - [0.15.0](#0150) 
@@ -17,6 +18,26 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 - `0.11.x` Releases - [0.11.2](#0112), [0.11.1](#0111), [0.11.0](#0110)
 - `0.10.x` Releases - [0.10.0](#0100)
 - `0.9.x` Releases - [0.9.0.1](#0901), [0.9.0](#090)
+
+## [0.18.0](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.18.0)
+
+Released on 2018-11-02.
+
+### Fixed
+
+* Fixed a bug that could cause a child span to sometimes inherit the tags of its parent.
+    - Fixed by [Nic Munroe][contrib_nicmunroe] in pull request [#84](https://github.com/Nike-Inc/wingtips/pull/84).
+
+### Added
+
+* Added the ability to add custom timestamped annotations to Spans. See the 
+[Custom Timestamped Span Annotations](README.md#custom_annotations) section of the readme for details.
+    - Added by [Nic Munroe][contrib_nicmunroe] in pull request [#84](https://github.com/Nike-Inc/wingtips/pull/84).
+    - Resolves issue [#23](https://github.com/Nike-Inc/wingtips/issues/23) (along with the changes from Wingtips
+    version `0.16.0`).
+* Added Wingtips annotations to Zipkin spans when utilizing the Wingtips -> Zipkin functionality found in
+`wingtips-zipkin2` module (and the deprecated `wingtips-zipkin`). 
+    - Added by [Nic Munroe][contrib_nicmunroe] in pull request [#84](https://github.com/Nike-Inc/wingtips/pull/84).
 
 ## [0.17.0](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.17.0)
 
@@ -32,7 +53,8 @@ Released on 2018-10-30.
     strategies and adapters if needed.
     - Added by [Brandon Currie][contrib_brandoncurrie] and [Nic Munroe][contrib_nicmunroe] in pull requests 
     [#81](https://github.com/Nike-Inc/wingtips/pull/81) and [#82](https://github.com/Nike-Inc/wingtips/pull/82).     
-
+    - Resolves issue [#21](https://github.com/Nike-Inc/wingtips/issues/21).
+    
 ### Changed
 
 * Changed the default span name format for HTTP instrumentation (Servlet, Spring, and Apache) to follow Zipkin
@@ -91,6 +113,7 @@ are not yet implemented, and neither has server/client instrumentation been upda
 and functionality will come later. 
     - Added by [Brandon Currie][contrib_brandoncurrie] and [Nic Munroe][contrib_nicmunroe] in pull requests 
     [#74](https://github.com/Nike-Inc/wingtips/pull/74) and [#78](https://github.com/Nike-Inc/wingtips/pull/78). 
+    - Partially resolves issue [#23](https://github.com/Nike-Inc/wingtips/issues/23).
 - `wingtips-zipkin2`'s `WingtipsToZipkinSpanConverterDefaultImpl` now has an alternate constructor that sets it up
 to "sanitize" IDs (Trace IDs, Span IDs, Parent Span IDs) that aren't Zipkin compatible. This can be necessary when
 you are reporting spans from Wingtips to Zipkin via `WingtipsToZipkinLifecycleListener`, but callers into your system

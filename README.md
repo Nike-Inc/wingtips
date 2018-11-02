@@ -28,6 +28,8 @@ tracing in [Spring Boot](https://spring.io/guides/gs/spring-boot/) environments 
 [Zipkin](http://zipkin.io/).  
 * [wingtips-apache-http-client](wingtips-apache-http-client/README.md) - A plugin to help with Wingtips distributed
 tracing when using Apache's `HttpClient`.
+* [wingtips-jersey2](wingtips-jersey2/README.md) - A plugin for Jersey 2 based applications. This is intended to be
+used in conjunction with the `RequestTracingFilter` from [wingtips-servlet-api](wingtips-servlet-api). 
 
 If you prefer hands-on exploration rather than readmes, the [sample applications](#samples) provide concrete examples 
 of using Wingtips that are simple, compact, and straightforward.
