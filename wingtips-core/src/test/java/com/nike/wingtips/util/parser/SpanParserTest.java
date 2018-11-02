@@ -3,8 +3,10 @@ package com.nike.wingtips.util.parser;
 import com.nike.internal.util.MapBuilder;
 import com.nike.wingtips.Span;
 import com.nike.wingtips.Span.SpanPurpose;
+import com.nike.wingtips.Span.TimestampedAnnotation;
 import com.nike.wingtips.TraceAndSpanIdGenerator;
 import com.nike.wingtips.Tracer;
+import com.nike.wingtips.util.parser.SpanParser.JsonDeserializationResult;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -20,6 +22,7 @@ import org.junit.runner.RunWith;
 import org.slf4j.MDC;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -254,44 +257,67 @@ public class SpanParserTest {
         assertThat(result).isNull();
     }
 
-    private enum TagScenario {
-        EMPTY_TAGS_MAP(Collections.emptyMap()),
-        SINGLE_TAG(Collections.singletonMap("fookey", "foovalue")),
-        TAG_WITH_EMPTY_KEY_AND_VALUE(Collections.singletonMap("", "")),
-        MULTIPLE_TAGS(
+    private enum TagAndAnnotationScenario {
+        EMPTY_TAGS_AND_ANNOTATIONS_COLLECTIONS(Collections.emptyMap(), Collections.emptyList()),
+        SINGLE_TAG_AND_ANNOTATION(
+            Collections.singletonMap("fookey", "foovalue"),
+            Collections.singletonList(TimestampedAnnotation.forCurrentTime("fooevent"))
+        ),
+        TAG_AND_ANNOTATION_WITH_EMPTY_KEY_AND_VALUE(
+            Collections.singletonMap("", ""),
+            Collections.singletonList(new TimestampedAnnotation(0, ""))
+        ),
+        MULTIPLE_TAGS_AND_ANNOTATIONS(
             MapBuilder.builder("fookey", "foovalue")
                       .put("color", "blue")
                       .put("day", "today")
-                      .build()
+                      .build(),
+            Arrays.asList(
+                TimestampedAnnotation.forEpochMicros(1234, "fooevent"),
+                TimestampedAnnotation.forEpochMicros(1234, "barevent-at-same-time-as-foo"),
+                TimestampedAnnotation.forEpochMicros(5678, "stuffevent"),
+                TimestampedAnnotation.forEpochMicros(9012, "yetanotherevent")
+            )
         ),
-        TAGS_WITH_SPECIAL_CHARS(
+        TAGS_AND_ANNOTATIONS_WITH_SPECIAL_CHARS(
             MapBuilder.builder("key+s", "value")
                       .put("crazy \" \n\t\r\b\f \\ key", "crazy \" \n\t\r\b\f \\ value")
                       .put("\"keywithquotes\"", "\"valuewithquotes\"")
                       .put("unicode\u0000\u0001key", "unicode\u0000\u0001value")
-                      .build()
+                      .build(),
+            Arrays.asList(
+                TimestampedAnnotation.forEpochMicros(1234, "crazy \" \n\t\r\b\f \\ value"),
+                TimestampedAnnotation.forEpochMicros(1234, "\"valuewithquotes\""),
+                TimestampedAnnotation.forEpochMicros(5678, "unicode\u0000\u0001value")
+            )
+        ),
+        ANNOTATION_WITH_NEGATIVE_TIMESTAMP(
+            Collections.emptyMap(),
+            Collections.singletonList(TimestampedAnnotation.forEpochMicros(-12345, "fooevent"))
         );
 
         public final Map<String,String> tags;
+        public final List<TimestampedAnnotation> annotations;
 
-        TagScenario(Map<String, String> tags) {
+        TagAndAnnotationScenario(Map<String, String> tags, List<TimestampedAnnotation> annotations) {
             this.tags = tags;
+            this.annotations = annotations;
         }
     }
 
     @DataProvider
-    public static List<List<TagScenario>> tagScenarioDataProvider() {
-        return Arrays.stream(TagScenario.values()).map(Collections::singletonList).collect(Collectors.toList());
+    public static List<List<TagAndAnnotationScenario>> tagAndAnnotationScenarioDataProvider() {
+        return Arrays.stream(TagAndAnnotationScenario.values()).map(Collections::singletonList).collect(Collectors.toList());
     }
 
-    @UseDataProvider("tagScenarioDataProvider")
+    @UseDataProvider("tagAndAnnotationScenarioDataProvider")
     @Test
     public void convertSpanToJSON_should_function_properly_when_there_are_no_null_values(
-        TagScenario tagsScenario
+        TagAndAnnotationScenario scenario
     ) throws IOException {
         // given: valid span without any null values, span completed (so that end time is not null), and JSON string
         //      from SpanParser.convertSpanToJSON()
-        Span validSpan = createFilledOutSpan(true, tagsScenario.tags);
+        Span validSpan = createFilledOutSpan(true, scenario.tags, scenario.annotations);
         assertThat(validSpan.getTraceId()).isNotEmpty();
         assertThat(validSpan.getUserId()).isNotEmpty();
         assertThat(validSpan.getParentSpanId()).isNotEmpty();
@@ -300,6 +326,8 @@ public class SpanParserTest {
         assertThat(validSpan.getDurationNanos()).isNotNull();
         assertThat(validSpan.isCompleted()).isTrue();
         assertThat(validSpan.getSpanPurpose()).isNotNull();
+        assertThat(validSpan.getTags()).isEqualTo(scenario.tags);
+        assertThat(validSpan.getTimestampedAnnotations()).isEqualTo(scenario.annotations);
         String json = SpanParser.convertSpanToJSON(validSpan);
         
         // when: jackson is used to deserialize that JSON
@@ -310,15 +338,23 @@ public class SpanParserTest {
     }
 
     private Span createFilledOutSpan(boolean completed) {
-        return createFilledOutSpan(completed, TagScenario.SINGLE_TAG.tags);
+        return createFilledOutSpan(
+            completed,
+            TagAndAnnotationScenario.MULTIPLE_TAGS_AND_ANNOTATIONS.tags,
+            TagAndAnnotationScenario.MULTIPLE_TAGS_AND_ANNOTATIONS.annotations
+        );
     }
 
-    private Span createFilledOutSpan(boolean completed, Map<String, String> tags) {
+    private Span createFilledOutSpan(
+        boolean completed,
+        Map<String, String> tags,
+        List<TimestampedAnnotation> annotations
+    ) {
         Long durationNanos = (completed) ? durationNanosForFullyCompletedSpan : null;
         return new Span(
             traceId, parentSpanId, spanId, spanName, sampleableForFullyCompleteSpan, userId,
             spanPurposeForFullyCompletedSpan, startTimeEpochMicrosForFullyCompleteSpan,
-            startTimeNanosForFullyCompleteSpan, durationNanos, tags
+            startTimeNanosForFullyCompleteSpan, durationNanos, tags, annotations
         );
     }
 
@@ -369,12 +405,12 @@ public class SpanParserTest {
         verifySpanEqualsDeserializedValues(validSpan, spanValuesFromJackson);
     }
 
-    @UseDataProvider("tagScenarioDataProvider")
+    @UseDataProvider("tagAndAnnotationScenarioDataProvider")
     @Test
-    public void fromJson_should_function_properly_when_there_are_no_null_values(TagScenario tagsScenario) {
+    public void fromJson_should_function_properly_when_there_are_no_null_values(TagAndAnnotationScenario scenario) {
         // given: valid span without any null values, completed (so that end time is not null) and JSON string
         //      from SpanParser.convertSpanToJSON()
-        Span validSpan = createFilledOutSpan(true, tagsScenario.tags);
+        Span validSpan = createFilledOutSpan(true, scenario.tags, scenario.annotations);
         assertThat(validSpan).isNotNull();
         assertThat(validSpan.getTraceId()).isNotNull();
         assertThat(validSpan.getUserId()).isNotNull();
@@ -384,13 +420,15 @@ public class SpanParserTest {
         assertThat(validSpan.getDurationNanos()).isNotNull();
         assertThat(validSpan.isCompleted()).isTrue();
         assertThat(validSpan.getSpanPurpose()).isNotNull();
+        assertThat(validSpan.getTags()).isEqualTo(scenario.tags);
+        assertThat(validSpan.getTimestampedAnnotations()).isEqualTo(scenario.annotations);
         String json = SpanParser.convertSpanToJSON(validSpan);
 
         // when: fromJson is called
         Span spanFromJson = SpanParser.fromJSON(json);
 
         // then: the original span and the fromJson() span values should be exactly the same
-        verifySpanDeepEquals(validSpan, spanFromJson, true);
+        verifySpanDeepEquals(spanFromJson, validSpan, true);
     }
 
     @Test
@@ -406,7 +444,7 @@ public class SpanParserTest {
         Span spanFromJson = SpanParser.fromJSON(json);
 
         // then: the original span and the fromJson() span values should be exactly the same
-        verifySpanDeepEquals(validSpan, spanFromJson, true);
+        verifySpanDeepEquals(spanFromJson, validSpan, true);
     }
 
     @Test
@@ -420,7 +458,7 @@ public class SpanParserTest {
         Span spanFromJson = SpanParser.fromJSON(json);
 
         // then: the original span and the fromJson() span values should be exactly the same
-        verifySpanDeepEquals(validSpan, spanFromJson, true);
+        verifySpanDeepEquals(spanFromJson, validSpan, true);
     }
 
     @Test
@@ -435,7 +473,7 @@ public class SpanParserTest {
         Span spanFromJson = SpanParser.fromJSON(json);
 
         // then: the original span and the fromJson() span values should be exactly the same
-        verifySpanDeepEquals(validSpan, spanFromJson, true);
+        verifySpanDeepEquals(spanFromJson, validSpan, true);
     }
 
     private enum BadJsonScenario {
@@ -471,6 +509,36 @@ public class SpanParserTest {
         ),
         TAGS_MISSING_CLOSE_OBJECT_CURLY_BRACE(
             s -> SpanParser.convertSpanToJSON(s).replaceFirst("}", "")
+        ),
+        JSON_ENDS_WITH_ARRAY_START_SQUARE_BRACKET(
+            s -> {
+                String goodJson = SpanParser.convertSpanToJSON(s);
+                int indexOfSquareBracket = goodJson.indexOf('[');
+                assertThat(indexOfSquareBracket)
+                    .withFailMessage("Expected span to contain a JSON array.")
+                    .isNotEqualTo(-1);
+                return goodJson.substring(0, indexOfSquareBracket + 1);
+            }
+        ),
+        JSON_ARRAY_STARTS_WITH_NON_JSON_OBJECT(
+            s -> SpanParser.convertSpanToJSON(s).replace("\"annotations\":[{", "\"annotations\":[42,")
+        ),
+        JSON_ENDS_BEFORE_ARRAY_CLOSE_BRACKET_IS_FOUND(
+            s -> {
+                String goodJson = SpanParser.convertSpanToJSON(s);
+                String searchStr = "\"barAnnotation\"}";
+                int indexOfCloseArraySquareBracket = goodJson.indexOf(searchStr);
+                assertThat(indexOfCloseArraySquareBracket)
+                    .withFailMessage(
+                        "Expected span to contain a annotation with value \"barAnnotation\" to be the last annotation."
+                    )
+                    .isNotEqualTo(-1);
+                indexOfCloseArraySquareBracket += searchStr.length();
+                return goodJson.substring(0, indexOfCloseArraySquareBracket);
+            }
+        ),
+        JSON_ARRAY_HAS_NON_JSON_OBJECT_IN_THE_MIDDLE(
+            s -> SpanParser.convertSpanToJSON(s).replace("\"fooAnnotation\"},{", "\"fooAnnotation\"},42")
         );
 
         private final Function<Span, String> badJsonGenerator;
@@ -499,6 +567,10 @@ public class SpanParserTest {
         String garbageInput = scenario.generateBadJson(
             Span.newBuilder("foo", SpanPurpose.CLIENT)
                 .withTag("footag", "bar")
+                .withTimestampedAnnotations(Arrays.asList(
+                    TimestampedAnnotation.forCurrentTime("fooAnnotation"),
+                    TimestampedAnnotation.forCurrentTime("barAnnotation")
+                ))
                 .build()
         );
 
@@ -586,17 +658,17 @@ public class SpanParserTest {
         TWO_BACKSLASHES_THEN_QUOTE_BEFORE_KEY_OR_VALUE_END("foo\\\\\"", "bar\\\\\""),
         THREE_BACKSLASHES_THEN_QUOTE_BEFORE_KEY_OR_VALUE_END("foo\\\\\\\"", "bar\\\\\\\"");
 
-        public final String unescapedTagKey;
-        public final String unescapedTagValue;
-        public final String escapedTagKey;
-        public final String escapedTagValue;
+        public final String unescapedKey;
+        public final String unescapedValue;
+        public final String escapedKey;
+        public final String escapedValue;
 
-        EscapedAndUnescapedQuotesBeforeKeyOrValueEndScenario(String unescapedTagKey, String unescapedTagValue) {
-            this.unescapedTagKey = unescapedTagKey;
-            this.unescapedTagValue = unescapedTagValue;
+        EscapedAndUnescapedQuotesBeforeKeyOrValueEndScenario(String unescapedKey, String unescapedValue) {
+            this.unescapedKey = unescapedKey;
+            this.unescapedValue = unescapedValue;
 
-            this.escapedTagKey = SpanParser.escapeJson(unescapedTagKey);
-            this.escapedTagValue = SpanParser.escapeJson(unescapedTagValue);
+            this.escapedKey = SpanParser.escapeJson(unescapedKey);
+            this.escapedValue = SpanParser.escapeJson(unescapedValue);
         }
     }
 
@@ -614,7 +686,10 @@ public class SpanParserTest {
     ) {
         // given
         Span span = Span.newBuilder("someSpan", SpanPurpose.CLIENT)
-                        .withTag(scenario.unescapedTagKey, scenario.unescapedTagValue)
+                        .withTag(scenario.unescapedKey, scenario.unescapedValue)
+                        .withTimestampedAnnotation(
+                            TimestampedAnnotation.forEpochMicros(1234, scenario.unescapedValue)
+                        )
                         .build();
         String json = SpanParser.convertSpanToJSON(span);
 
@@ -622,13 +697,31 @@ public class SpanParserTest {
         Span result = SpanParser.fromJSON(json);
 
         // then
-        assertThat(result.getTags().get(scenario.unescapedTagKey)).isEqualTo(scenario.unescapedTagValue);
+        assertThat(result.getTags().get(scenario.unescapedKey)).isEqualTo(scenario.unescapedValue);
+        assertThat(result.getTimestampedAnnotations().get(0).getValue()).isEqualTo(scenario.unescapedValue);
+    }
+
+    @DataProvider(value = {
+        "true",
+        "false"
+    })
+    @Test
+    public void convertToTimestampedAnnotationsList_returns_null_if_passed_null_or_empty(boolean isNull) {
+        // given
+        List<JsonDeserializationResult> jdrList = (isNull) ? null : Collections.emptyList();
+
+        // when
+        List<TimestampedAnnotation> result = SpanParser.convertToTimestampedAnnotationsList(jdrList);
+
+        // then
+        assertThat(result).isNull();
     }
 
     @Test
-    public void convertSpanToJSON_and_fromJSON_should_escape_and_unescape_expected_non_tag_values() {
-        // The TAGS_WITH_SPECIAL_CHARS case already verified tags. Now we need to verify that non-tag values are
-        //      escaped. Also note that other tests have verified that escapeJson() and unescapeJson() work properly.
+    public void convertSpanToJSON_and_fromJSON_should_escape_and_unescape_expected_non_tag_or_annotation_values() {
+        // The TAGS_AND_ANNOTATIONS_WITH_SPECIAL_CHARS case already verified tags and annotations. Now we need to
+        //      verify that non-tag values are escaped. Also note that other tests have verified that escapeJson()
+        //      and unescapeJson() work properly.
 
         // given
         String complexSpanName = "span-name-" + ALL_JSON_CHARS_THAT_NEED_ESCAPING;
@@ -657,17 +750,17 @@ public class SpanParserTest {
         Span deserialized = SpanParser.fromJSON(json);
 
         // then
-        verifySpanDeepEquals(span, deserialized, true);
+        verifySpanDeepEquals(deserialized, span, true);
     }
 
-    @UseDataProvider("tagScenarioDataProvider")
+    @UseDataProvider("tagAndAnnotationScenarioDataProvider")
     @Test
     public void convertSpanToKeyValueFormat_should_function_properly_when_there_are_no_null_values(
-        TagScenario tagsScenario
+        TagAndAnnotationScenario scenario
     ) {
         // given: valid known span without any null values, span completed (so that end time is not null)
         //      and key/value string from SpanParser.convertSpanToKeyValueFormat()
-        Span validSpan = createFilledOutSpan(true,tagsScenario.tags);
+        Span validSpan = createFilledOutSpan(true, scenario.tags, scenario.annotations);
         assertThat(validSpan.getTraceId()).isNotEmpty();
         assertThat(validSpan.getUserId()).isNotEmpty();
         assertThat(validSpan.getParentSpanId()).isNotEmpty();
@@ -676,6 +769,8 @@ public class SpanParserTest {
         assertThat(validSpan.getDurationNanos()).isNotNull();
         assertThat(validSpan.isCompleted()).isTrue();
         assertThat(validSpan.getSpanPurpose()).isNotNull();
+        assertThat(validSpan.getTags()).isEqualTo(scenario.tags);
+        assertThat(validSpan.getTimestampedAnnotations()).isEqualTo(scenario.annotations);
         String keyValueStr = SpanParser.convertSpanToKeyValueFormat(validSpan);
 
         // when: the string is deserialized into a map
@@ -692,7 +787,9 @@ public class SpanParserTest {
     public static Map<String, Object> deserializeKeyValueSpanString(String keyValStr) {
         Map<String, Object> map = new LinkedHashMap<>();
         Map<String, String> tags = new LinkedHashMap<>();
+        List<Map<String, String>> annotations = new ArrayList<>();
         map.put(SpanParser.TAGS_FIELD, tags);
+        map.put(SpanParser.ANNOTATIONS_LIST_FIELD, annotations);
         String[] fields = keyValStr.split(",");
         for (String field : fields) {
             String[] info = field.split("=");
@@ -707,6 +804,14 @@ public class SpanParserTest {
             if (key.startsWith(SpanParser.KEY_VALUE_TAG_PREFIX)) {
                 key = key.substring(SpanParser.KEY_VALUE_TAG_PREFIX.length());
                 tags.put(key, value);
+            }
+            else if (key.startsWith(SpanParser.KEY_VALUE_TIMESTAMPED_ANNOTATION_PREFIX)) {
+                key = key.substring(SpanParser.KEY_VALUE_TIMESTAMPED_ANNOTATION_PREFIX.length());
+                annotations.add(
+                    MapBuilder.builder(SpanParser.ANNOTATION_SUBOBJECT_TIMESTAMP_FIELD, key)
+                              .put(SpanParser.ANNOTATION_SUBOBJECT_VALUE_FIELD, value)
+                              .build()
+                );
             }
             else {
                 map.put(key, value);
@@ -760,12 +865,13 @@ public class SpanParserTest {
         verifySpanEqualsDeserializedValues(validSpan, deserializedValues);
     }
 
-    @UseDataProvider("tagScenarioDataProvider")
+    @UseDataProvider("tagAndAnnotationScenarioDataProvider")
     @Test
-    public void fromKeyValueString_should_function_properly_when_there_are_no_null_values(TagScenario tagsScenario) {
+    public void fromKeyValueString_should_function_properly_when_there_are_no_null_values(
+        TagAndAnnotationScenario scenario) {
         // given: valid span without any null values, completed (so that end time is not null) and key/value string
         //      from Span.fromKeyValueString()
-        Span validSpan = createFilledOutSpan(true, tagsScenario.tags);
+        Span validSpan = createFilledOutSpan(true, scenario.tags, scenario.annotations);
         assertThat(validSpan).isNotNull();
         assertThat(validSpan.getTraceId()).isNotNull();
         assertThat(validSpan.getUserId()).isNotNull();
@@ -776,13 +882,15 @@ public class SpanParserTest {
         assertThat(validSpan.isCompleted()).isTrue();
         assertThat(validSpan.getSpanPurpose()).isNotNull();
         assertThat(validSpan.getTags()).isNotNull();
+        assertThat(validSpan.getTags()).isEqualTo(scenario.tags);
+        assertThat(validSpan.getTimestampedAnnotations()).isEqualTo(scenario.annotations);
         String keyValStr = SpanParser.convertSpanToKeyValueFormat(validSpan);
 
         // when: fromKeyValueString is called
         Span spanFromKeyValStr = SpanParser.fromKeyValueString(keyValStr);
 
         // then: the original span and the fromKeyValueString() span values should be exactly the same
-        verifySpanDeepEquals(validSpan, spanFromKeyValStr, true);
+        verifySpanDeepEquals(spanFromKeyValStr, validSpan, true);
     }
 
     @Test
@@ -798,7 +906,7 @@ public class SpanParserTest {
         Span spanFromKeyValStr = SpanParser.fromKeyValueString(keyValStr);
 
         // then: the original span and the fromKeyValueString() span values should be exactly the same
-        verifySpanDeepEquals(validSpan, spanFromKeyValStr, true);
+        verifySpanDeepEquals(spanFromKeyValStr, validSpan, true);
     }
 
     @Test
@@ -812,7 +920,7 @@ public class SpanParserTest {
         Span spanFromKeyValStr = SpanParser.fromKeyValueString(keyValStr);
 
         // then: the original span and the fromKeyValueString() span values should be exactly the same
-        verifySpanDeepEquals(validSpan, spanFromKeyValStr, true);
+        verifySpanDeepEquals(spanFromKeyValStr, validSpan, true);
     }
 
     @Test
@@ -827,7 +935,7 @@ public class SpanParserTest {
         Span spanFromKeyValStr = SpanParser.fromKeyValueString(keyValStr);
 
         // then: the original span and the fromKeyValueString() span values should be exactly the same
-        verifySpanDeepEquals(validSpan, spanFromKeyValStr, true);
+        verifySpanDeepEquals(spanFromKeyValStr, validSpan, true);
     }
 
     private enum BadKeyValueScenario {
@@ -958,7 +1066,7 @@ public class SpanParserTest {
     ) {
         // given
         Span span = Span.newBuilder("someSpan", SpanPurpose.CLIENT)
-                        .withTag(scenario.unescapedTagKey, scenario.unescapedTagValue)
+                        .withTag(scenario.unescapedKey, scenario.unescapedValue)
                         .build();
         String keyValueStr = SpanParser.convertSpanToKeyValueFormat(span);
 
@@ -966,13 +1074,14 @@ public class SpanParserTest {
         Span result = SpanParser.fromKeyValueString(keyValueStr);
 
         // then
-        assertThat(result.getTags().get(scenario.unescapedTagKey)).isEqualTo(scenario.unescapedTagValue);
+        assertThat(result.getTags().get(scenario.unescapedKey)).isEqualTo(scenario.unescapedValue);
     }
 
     @Test
-    public void convertSpanToKeyValueFormat_and_fromKeyValueString_should_escape_and_unescape_expected_non_tag_values() {
-        // The TAGS_WITH_SPECIAL_CHARS case already verified tags. Now we need to verify that non-tag values are
-        //      escaped. Also note that other tests have verified that escapeJson() and unescapeJson() work properly.
+    public void convertSpanToKeyValueFormat_and_fromKeyValueString_should_escape_and_unescape_expected_non_tag_or_annotation_values() {
+        // The TAGS_AND_ANNOTATIONS_WITH_SPECIAL_CHARS case already verified tags and annotations. Now we need to
+        //      verify that non-tag values are escaped. Also note that other tests have verified that escapeJson()
+        //      and unescapeJson() work properly.
 
         // given
         String complexSpanName = "span-name-" + ALL_JSON_CHARS_THAT_NEED_ESCAPING;
@@ -1001,7 +1110,7 @@ public class SpanParserTest {
         Span deserialized = SpanParser.fromKeyValueString(keyValueStr);
 
         // then
-        verifySpanDeepEquals(span, deserialized, true);
+        verifySpanDeepEquals(deserialized, span, true);
     }
 
     @Test
@@ -1024,6 +1133,6 @@ public class SpanParserTest {
         Span deserialized = SpanParser.fromKeyValueString(keyValueStr);
 
         // then
-        verifySpanDeepEquals(span, deserialized, true);
+        verifySpanDeepEquals(deserialized, span, true);
     }
 }

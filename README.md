@@ -53,7 +53,7 @@ of using Wingtips that are simple, compact, and straightforward.
     * [Span Tags](#span_tags)
         * [HTTP Span Tag and Naming Strategies and Adapters](#tag_strategies_and_adapters) 
         * [Default HTTP Tags](#default_http_tags) 
-    * [Custom Annotations](#custom_annotations)
+    * [Custom Timestamped Span Annotations](#custom_annotations)
 * [Usage in Reactive Asynchronous Nonblocking Scenarios](#async_usage)
 * [Using Distributed Tracing to Help with Debugging Issues/Errors/Problems](#using_dtracing_for_errors)
 * [Integrating With Other Distributed Tracing Tools](#integrating_with_other_dtrace_tools)
@@ -307,9 +307,8 @@ Normally when a span is completed it is serialized to JSON and output to the log
 
 Tags allow for key-value pairs to be associated with a span as metadata, often useful for filtering or grouping trace 
 information, or integrating with a visualization/analytics system that expects certain tags. For example, say you've 
-instrumented retry logic. It may be desireable to be able to distinguish between a span/trace that contains retries 
-and those that didn't. Or you may want to tag your spans based on an attribute of the request, like user type or an 
-authenticated flag. 
+instrumented retry logic. It may be desirable to know how many retries were attempted. Or you may want to tag your 
+spans based on an attribute of the request, like user type or an authenticated flag. 
 
 ```
 Tracer.getInstance().getCurrentSpan().putTag("UserType", user.getType());
@@ -317,6 +316,10 @@ Tracer.getInstance().getCurrentSpan().putTag("UserType", user.getType());
 
 Both keys and values are stored as strings. Calling `Span.putTag(...)` will replace any existing value for the key, or 
 add the new key value pair if one with that key doesn't already exist. 
+
+NOTE: If you're wanting to record the time when some event occurred, you should probably use a 
+[timestamped annotation](#custom_annotations) instead of a tag. This can provide extra benefits, especially when
+using visualization or analytics systems that parse timestamped annotations and do interesting things with them. 
 
 <a name="tag_strategies_and_adapters"></a>
 #### HTTP Span Tag and Naming Strategies and Adapters
@@ -393,19 +396,36 @@ tags can be found in `KnownZipkinTags`):
 | `error`            | Only exists if the request is considered an error. If an exception occurred then its message or classname will be used as the tag value. If no exception occurred then the request can still be considered an error if `HttpTagAndSpanNamingAdapter.getErrorResponseTagValue(...)` returns a non-empty value. That value will be used as the tag value. Most HTTP client adapters consider 4xx or 5xx response codes to indicate an error, while server adapters usually only consider 5xx to be an error. In either case adapters often use the response HTTP status code as the error tag value. | `An error occurred while doing foo`, `FooException`, or `500` |
 
 <a name="custom_annotations"></a>
-### Custom Annotations
+### Custom Timestamped Span Annotations
 
-The Google Dapper paper describes how the Dapper tools allow them to associate arbitrary timestamped notes called 
-"annotations" with any span. Wingtips does not currently support annotations, but the most important use case for 
-annotations - knowing when a client sent a request vs when the server received it (and vice versa on the response) - is 
-simulated in Wingtips by surrounding a client request with a sub-span and making sure the called service creates an 
-overall request span for itself as well. This technique is described in the 
-"[using sub-spans to surround downstream calls](#sub_spans_for_downstream_calls)" section. Even if Wingtips supported 
-Dapper-style annotations this technique would still be recommended.
+In addition to [tags](#span_tags), Wingtips Spans support timestamped annotations. Timestamped annotations are 
+arbitrary notes with a timestamp attached, usually for the purpose of recording when certain events occurred. These
+will be output along with the usual Wingtips Span data and tags.
 
-Arbitrary application-specific annotations could be a useful addition however, so this feature may be added in the 
-future. Until then you can output log messages tagged with tracing and timestamp information to approximate the 
-functionality, or utilize the [Span tagging](#span_tags) feature.
+The usual mechanism for recording a timestamped annotation is to make a 
+`Span.addTimestampedAnnotationForCurrentTime(String)` method call to record an annotation for the current time when
+the event occurs, e.g.:
+
+``` java
+requestSpan.addTimestampedAnnotationForCurrentTime("retry.initiated");
+``` 
+
+The timestamps for annotations created in this fashion have microsecond precision *relative to the Span's start 
+timestamp* (which usually only has millisecond precision due to JVM System clock limitations). 
+
+If you need to record an annotation for a different timestamp than when you're adding the annotation, you can create
+a `TimestampedAnnotation` manually, and then call `Span.addTimestampedAnnotation(TimestampedAnnotation)`.
+
+NOTE: The most important and common use case for timestamped events is knowing when a client sent a request vs when 
+the server received it (and vice versa on the response). Although you could use the custom timestamped annotations
+feature described above to do this, it's better to surround a client request with a sub-span and make sure the 
+called service creates an overall request span for itself as well. This technique is described in the 
+"[using sub-spans to surround downstream calls](#sub_spans_for_downstream_calls)" section. Using subspans for 
+request/response timing instead of custom annotations is more reliable (less chance of forgetting to add the 
+important annotations), prevents polluting a server span with client span tags or annotations (and vice versa), 
+prevents incompatibilities with various tracing visualization and analytics systems that might not use the 
+annotation names you picked, and is conceptually more consistent (server calls and client calls should be separate 
+spans).
  
 <a name="async_usage"></a> 
 ## Usage in Reactive Asynchronous Nonblocking Scenarios 

@@ -1,11 +1,13 @@
 package com.nike.wingtips.zipkin.util;
 
 import com.nike.wingtips.Span;
+import com.nike.wingtips.Span.TimestampedAnnotation;
 import com.nike.wingtips.TraceAndSpanIdGenerator;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -42,15 +44,40 @@ public class WingtipsToZipkinSpanConverterDefaultImpl implements WingtipsToZipki
             .traceId(nullSafeLong(traceId))
             .duration(durationMicros);
         
-        addAllTagsToBuilderAsBinaryAnnotations(builder, wingtipsSpan.getTags());
-        
+        addAllTagsToBuilderAsBinaryAnnotations(builder, wingtipsSpan.getTags(), zipkinEndpoint);
+        addAllAnnotationsToBuilder(builder, wingtipsSpan.getTimestampedAnnotations(), zipkinEndpoint);
+
         return builder.build();
     }
 
-    protected void addAllTagsToBuilderAsBinaryAnnotations(zipkin.Span.Builder builder, Map<String,String> tagsToAdd) {
+    protected void addAllTagsToBuilderAsBinaryAnnotations(
+        zipkin.Span.Builder builder,
+        Map<String,String> tagsToAdd,
+        Endpoint zipkinEndpoint
+    ) {
         for (Map.Entry<String, String> tagEntry : tagsToAdd.entrySet()) {
-            BinaryAnnotation tagAnnotation = BinaryAnnotation.create(tagEntry.getKey(), tagEntry.getValue(), null);
+            BinaryAnnotation tagAnnotation = BinaryAnnotation.create(
+                tagEntry.getKey(),
+                tagEntry.getValue(),
+                zipkinEndpoint
+            );
             builder.addBinaryAnnotation(tagAnnotation);
+        }
+    }
+
+    protected void addAllAnnotationsToBuilder(
+        zipkin.Span.Builder builder,
+        List<TimestampedAnnotation> wingtipsAnnotations,
+        Endpoint zipkinEndpoint
+    ) {
+        for (TimestampedAnnotation wingtipsAnnotation : wingtipsAnnotations) {
+            builder.addAnnotation(
+                Annotation.create(
+                    wingtipsAnnotation.getTimestampEpochMicros(),
+                    wingtipsAnnotation.getValue(),
+                    zipkinEndpoint
+                )
+            );
         }
     }
     

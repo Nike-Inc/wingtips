@@ -313,19 +313,21 @@ public class ApacheHttpClientWithWingtipsComponentTest {
             completedSpan -> assertThat(completedSpan.getTraceId()).isEqualTo(traceIdFromResponse)
         );
 
-        // Find the span with the longest duration - this is the outermost span (either from the server or from
-        //      the Apache HttpClient depending on whether the subspan option was on).
-        Span outermostSpan = spanRecorder.completedSpans.stream()
-                                                        .max(Comparator.comparing(Span::getDurationNanos))
-                                                        .get();
-        assertThat(TimeUnit.NANOSECONDS.toMillis(outermostSpan.getDurationNanos()))
-            .isGreaterThanOrEqualTo(expectedMinSpanDurationMillis);
-
+        // We also have a race condition where the inner (child) span might claim a longer duration, simply because the
+        //      client and server spans are async and we don't control when the spans are completed. So we can't
+        //      rely on duration to find outer vs. inner span. Instead we'll look for the expected CLIENT or SERVER
+        //      span purpose, depending on what's expected.
         SpanPurpose expectedOutermostSpanPurpose = (expectSubspanFromHttpClient)
                                                    ? SpanPurpose.CLIENT
                                                    : SpanPurpose.SERVER;
-        assertThat(outermostSpan.getSpanPurpose()).isEqualTo(expectedOutermostSpanPurpose);
 
+        Span outermostSpan = spanRecorder.completedSpans
+            .stream()
+            .filter(s -> s.getSpanPurpose() == expectedOutermostSpanPurpose)
+            .findFirst().get();
+        assertThat(TimeUnit.NANOSECONDS.toMillis(outermostSpan.getDurationNanos()))
+            .isGreaterThanOrEqualTo(expectedMinSpanDurationMillis);
+        
         if (expectedUpstreamSpan == null) {
             assertThat(outermostSpan.getParentSpanId()).isNull();
         }

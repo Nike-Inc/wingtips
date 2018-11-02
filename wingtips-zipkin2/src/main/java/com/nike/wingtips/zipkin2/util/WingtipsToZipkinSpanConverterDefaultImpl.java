@@ -2,6 +2,7 @@ package com.nike.wingtips.zipkin2.util;
 
 import com.nike.wingtips.Span;
 import com.nike.wingtips.Span.SpanPurpose;
+import com.nike.wingtips.Span.TimestampedAnnotation;
 import com.nike.wingtips.TraceAndSpanIdGenerator;
 
 import org.apache.commons.codec.digest.DigestUtils;
@@ -72,7 +73,7 @@ public class WingtipsToZipkinSpanConverterDefaultImpl implements WingtipsToZipki
             .localEndpoint(zipkinEndpoint)
             .kind(determineZipkinKind(wingtipsSpan));
         
-        // Iterate over existing tags and add them one-by-one, no current interface to set a collection of tags
+        // Iterate over existing wingtips tags and add them to the zipkin builder.
         for (Map.Entry<String, String> tagEntry : wingtipsSpan.getTags().entrySet()) {
             spanBuilder.putTag(tagEntry.getKey(), tagEntry.getValue());
         }
@@ -85,6 +86,11 @@ public class WingtipsToZipkinSpanConverterDefaultImpl implements WingtipsToZipki
         }
         if (parentId != null && !parentId.equals(wingtipsSpan.getParentSpanId())) {
             spanBuilder.putTag("invalid.parent_id", wingtipsSpan.getParentSpanId());
+        }
+
+        // Iterate over existing wingtips annotations and add them to the zipkin builder.
+        for (TimestampedAnnotation wingtipsAnnotation : wingtipsSpan.getTimestampedAnnotations()) {
+            spanBuilder.addAnnotation(wingtipsAnnotation.getTimestampEpochMicros(), wingtipsAnnotation.getValue());
         }
         
         return spanBuilder.build();
