@@ -1116,12 +1116,12 @@ public class SpanParserTest {
     @Test
     public void convertSpanToKeyValueFormat_and_fromKeyValueString_escapes_and_unescapes_tag_keys_as_expected() {
         // given
-        String unescapedTagKey = "fookey=blah withspace";
+        String unescapedTagKey = "fookey=blah withspaceandequals,andcomma";
         String tagValue = UUID.randomUUID().toString();
         Span span = Span.newBuilder("someSpan", SpanPurpose.CLIENT)
                         .withTag(unescapedTagKey, tagValue)
                         .build();
-        String expectedEscapedTagKey = "fookey\\u003Dblah\\u0020withspace";
+        String expectedEscapedTagKey = "fookey\\u003Dblah\\u0020withspaceandequals\\u002Candcomma";
 
         // when
         String keyValueStr = SpanParser.convertSpanToKeyValueFormat(span);
