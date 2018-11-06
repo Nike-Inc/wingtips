@@ -28,7 +28,7 @@ Released on 2018-11-06.
 * Fixed Span key/value serialization format so that it will now unicode-escape any commas it finds in tag keys. This
 is in addition to spaces and equals signs, which it was already unicode-escaping for tag keys. This is necessary
 to facilitate programmatic parsing of Spans serialized in key/value format, since commas that are not surrounded by
-quotes (i.e. not part of a value) are a special character that separates key/value paris, and tag keys are not 
+quotes (i.e. not part of a value) are a special character that separates key/value pairs, and tag keys are not 
 surrounded by quotes. 
     - Fixed by [Nic Munroe][contrib_nicmunroe] in pull request [#86](https://github.com/Nike-Inc/wingtips/pull/86).
 
