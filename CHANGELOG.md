@@ -8,7 +8,7 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 
 #### 0.x Releases
 
-- `0.18.x` Releases - [0.18.0](#0180)
+- `0.18.x` Releases - [0.18.1](#0181), [0.18.0](#0180)
 - `0.17.x` Releases - [0.17.0](#0170)
 - `0.16.x` Releases - [0.16.0](#0160)
 - `0.15.x` Releases - [0.15.0](#0150) 
@@ -18,6 +18,19 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 - `0.11.x` Releases - [0.11.2](#0112), [0.11.1](#0111), [0.11.0](#0110)
 - `0.10.x` Releases - [0.10.0](#0100)
 - `0.9.x` Releases - [0.9.0.1](#0901), [0.9.0](#090)
+
+## [0.18.1](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.18.1)
+
+Released on 2018-11-06.
+
+### Fixed
+
+* Fixed Span key/value serialization format so that it will now unicode-escape any commas it finds in tag keys. This
+is in addition to spaces and equals signs, which it was already unicode-escaping for tag keys. This is necessary
+to facilitate programmatic parsing of Spans serialized in key/value format, since commas that are not surrounded by
+quotes (i.e. not part of a value) are a special character that separates key/value pairs, and tag keys are not 
+surrounded by quotes. 
+    - Fixed by [Nic Munroe][contrib_nicmunroe] in pull request [#86](https://github.com/Nike-Inc/wingtips/pull/86).
 
 ## [0.18.0](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.18.0)
 
