@@ -98,8 +98,8 @@ public class SpanParser {
     public static final String KEY_VALUE_TAG_PREFIX = "tag_";
 
     /**
-     * The prefix that will be added to every {@link Span#getTimestampedAnnotations()} tag key when serializing a
-     * {@link Span} to key/value format. See {@link #convertSpanToKeyValueFormat(Span)}.
+     * The prefix that will be added to every {@link Span#getTimestampedAnnotations()} annotation key (the timestamp)
+     * when serializing a {@link Span} to key/value format. See {@link #convertSpanToKeyValueFormat(Span)}.
      */
     public static final String KEY_VALUE_TIMESTAMPED_ANNOTATION_PREFIX = "ts_annot_";
 
@@ -535,11 +535,19 @@ public class SpanParser {
         if (containsChar(escapedKey, ' ')) {
             escapedKey = escapedKey.replace(" ", ESCAPED_SPACE_CHAR);
         }
+        // And comma character.
+        if (containsChar(escapedKey, ',')) {
+            escapedKey = escapedKey.replace(",", ESCAPED_COMMA_CHAR);
+        }
         return escapedKey;
     }
 
     protected static String unescapeTagKeyForKeyValueFormatDeserialization(String escapedKey) {
         // Do the reverse of the escape-tag logic.
+        if (escapedKey.contains(ESCAPED_COMMA_CHAR)) {
+            escapedKey = escapedKey.replace(ESCAPED_COMMA_CHAR, ",");
+        }
+
         if (escapedKey.contains(ESCAPED_SPACE_CHAR)) {
             escapedKey = escapedKey.replace(ESCAPED_SPACE_CHAR, " ");
         }
@@ -878,6 +886,7 @@ public class SpanParser {
     protected static final String[] JSON_ESCAPE_CHAR_MAPPINGS;
     protected static final String ESCAPED_EQUALS_SIGN = "\\u003D";
     protected static final String ESCAPED_SPACE_CHAR = "\\u0020";
+    protected static final String ESCAPED_COMMA_CHAR = "\\u002C";
     static {
         String[] jsonEscapeCharMappings = new String[128];
 
