@@ -1,0 +1,20 @@
+evaluationDependsOn(':')
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    compile(
+            project(":wingtips-core"),
+            "com.lightstep.tracer:lightstep-tracer-jre:$lightstepTracerVersion",
+            "com.lightstep.tracer:tracer-okhttp:$lightstepHttpVersion",
+            "io.grpc:grpc-netty:$grpcNettyVersion",
+            "io.netty:netty-tcnative-boringssl-static:$nettyTcnativeBoringVersion",
+            "commons-codec:commons-codec:$apacheCommonsCodecVersion",
+    )
+    testCompile(
+            "junit:junit-dep:$junitVersion",
+            "org.mockito:mockito-core:$mockitoVersion",
+    )
+}

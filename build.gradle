@@ -73,6 +73,11 @@ ext {
     apacheCommonsCodecVersion = '1.11'
     jersey2Version = '2.23.2'
 
+    lightstepTracerVersion = '0.15.4'
+    lightstepHttpVersion = '0.16.2'
+    grpcNettyVersion = '1.14.0'
+    nettyTcnativeBoringVersion = '2.0.12.Final'
+
     nikeInternalUtilVersion = '0.9.0.1'
 
     jetbrainsAnnotationsVersion = '16.0.3'
@@ -89,7 +94,7 @@ ext {
     jettyVersion = '9.3.21.v20170918'
 
     // JACOCO PROPERTIES
-    jacocoToolVersion = '0.8.1'
+    jacocoToolVersion = '0.8.2'
     // Anything in this jacocoExclusions list will be excluded from coverage reports.
     jacocoExclusions = []
     jacocoCoverageThresholdSetup = {
@@ -109,6 +114,15 @@ ext {
                 // Enforce minimum code coverage. See https://github.com/palantir/gradle-jacoco-coverage for the full list of options.
                 reportThreshold 0.8, INSTRUCTION
                 reportThreshold 0.5, BRANCH
+            }
+        }
+        // Similarly to Zipkin, LightStep doesn't contain much code and the current tracer version doesn't allow for
+        // easy assertions when implemented within a broader tracing framework like Wingtips. We will monitor and continue to make improvements.
+        configure(subprojects.findAll { it.name.contains("wingtips-lightstep") }) {
+            jacocoCoverage {
+                // Enforce minimum code coverage. See https://github.com/palantir/gradle-jacoco-coverage for the full list of options.
+                reportThreshold 0.4, INSTRUCTION
+                reportThreshold 0.25, BRANCH
             }
         }
     }
