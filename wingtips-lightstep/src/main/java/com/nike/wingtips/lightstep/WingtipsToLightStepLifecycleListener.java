@@ -1,26 +1,29 @@
 package com.nike.wingtips.lightstep;
 
-import com.lightstep.tracer.shared.SpanBuilder;
 import com.nike.wingtips.Span;
 import com.nike.wingtips.TraceAndSpanIdGenerator;
 import com.nike.wingtips.lifecyclelistener.SpanLifecycleListener;
 
 import com.lightstep.tracer.jre.JRETracer;
+import com.lightstep.tracer.shared.SpanBuilder;
 import com.lightstep.tracer.shared.SpanContext;
 
+import org.apache.commons.codec.digest.DigestUtils;
+import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
-import org.apache.commons.codec.digest.DigestUtils;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static java.util.Objects.requireNonNull;
+
 /**
- * A{@link SpanLifecycleListener} that converts Wingtips {@link Span}s to [LightStep implementation of] an OpenTracing
+ * A {@link SpanLifecycleListener} that converts Wingtips {@link Span}s to [LightStep implementation of] an OpenTracing
  * {@link io.opentracing.Span}, and sends that data to the LightStep Satellites via
- * the {@link com.lightstep.tracer.jre.JRETracer}.
+ * the {@link JRETracer}.
  *
  * We're adapting some of the prior work built in the Wingtips Zipkin2 plugin to handle conversion of span/trace/parent
  * IDs as well as frequency gates for exception logging.
@@ -35,7 +38,8 @@ import java.util.concurrent.atomic.AtomicLong;
 public class WingtipsToLightStepLifecycleListener implements SpanLifecycleListener {
 
     // we borrowed the logging and exception log rate limiting from the Zipkin plugin.
-    private final Logger lightStepToWingtipsLogger = LoggerFactory.getLogger("LIGHTSTEP_SPAN_CONVERSION_OR_HANDLING_ERROR");
+    private final Logger lightStepToWingtipsLogger =
+        LoggerFactory.getLogger("LIGHTSTEP_SPAN_CONVERSION_OR_HANDLING_ERROR");
 
     private static final String SANITIZED_ID_LOG_MSG = "Detected invalid ID format. orig_id={}, sanitized_id={}";
 
@@ -43,35 +47,48 @@ public class WingtipsToLightStepLifecycleListener implements SpanLifecycleListen
     private long lastSpanHandlingErrorLogTimeEpochMillis = 0;
     private static final long MIN_SPAN_HANDLING_ERROR_LOG_INTERVAL_MILLIS = TimeUnit.SECONDS.toMillis(60);
 
-    protected String serviceName;
-    protected String accessToken;
-    protected String satelliteUrl;
-    protected int satellitePort;
-
-    protected JRETracer tracer = null;
+    protected final JRETracer tracer;
 
     // Basic constructor which requires values to configure tracer and point span traffic from the transport library
     // to the LightStep Satellites.
-    public WingtipsToLightStepLifecycleListener(String serviceName, String accessToken, String satelliteUrl, int satellitePort) {
+    public WingtipsToLightStepLifecycleListener(
+        @NotNull String serviceName,
+        @NotNull String accessToken,
+        @NotNull String satelliteUrl,
+        int satellitePort
+    ) {
+        this(buildJreTracerFromOptions(serviceName, accessToken, satelliteUrl, satellitePort));
+    }
 
-        this.serviceName = serviceName;
-        this.accessToken = accessToken;
-        this.satelliteUrl = satelliteUrl;
-        this.satellitePort = satellitePort;
+    @SuppressWarnings("ResultOfMethodCallIgnored")
+    public WingtipsToLightStepLifecycleListener(@NotNull JRETracer tracer) {
+        requireNonNull(tracer, "tracer cannot be null.");
+        this.tracer = tracer;
+    }
+
+    @SuppressWarnings("ResultOfMethodCallIgnored")
+    private static @NotNull JRETracer buildJreTracerFromOptions(
+        @NotNull String serviceName,
+        @NotNull String accessToken,
+        @NotNull String satelliteUrl,
+        int satellitePort
+    ) {
+        requireNonNull(serviceName, "serviceName cannot be null.");
+        requireNonNull(accessToken, "accessToken cannot be null.");
+        requireNonNull(satelliteUrl, "satelliteUrl cannot be null.");
 
         try {
-            this.tracer = new com.lightstep.tracer.jre.JRETracer(
-                    new com.lightstep.tracer.shared.Options.OptionsBuilder()
-                            .withAccessToken(this.accessToken)
-                            .withComponentName(this.serviceName)
-                            .withCollectorHost(this.satelliteUrl)
-                            .withCollectorPort(this.satellitePort)
-                            .withVerbosity(4)
-                            .build()
+            return new JRETracer(
+                new com.lightstep.tracer.shared.Options.OptionsBuilder()
+                    .withAccessToken(accessToken)
+                    .withComponentName(serviceName)
+                    .withCollectorHost(satelliteUrl)
+                    .withCollectorPort(satellitePort)
+                    .withVerbosity(4)
+                    .build()
             );
-        } catch (Throwable ex) {
-            lightStepToWingtipsLogger.warn(
-                    "There has been an issue with initializing the LightStep tracer: ", ex);
+        } catch (Exception ex) {
+            throw new RuntimeException("There was an error initializing the LightStep tracer.", ex);
         }
     }
 
@@ -87,79 +104,84 @@ public class WingtipsToLightStepLifecycleListener implements SpanLifecycleListen
 
     @Override
     public void spanCompleted(Span wingtipsSpan) {
-        String operationName = wingtipsSpan.getSpanName();
-        long startTimeMicros = wingtipsSpan.getSpanStartTimeEpochMicros();
-
-        // Given we should only be in this method on span completion, we are not going to wrap this conversion in a
-        // try/catch. duration should be set on the Wingtips span.
-        long durationMicros = TimeUnit.NANOSECONDS.toMicros(wingtipsSpan.getDurationNanos());
-        long stopTimeMicros = startTimeMicros + durationMicros;
-
-        // parentId will get changed to reflect the Wingtips parent id. If there is no id then a value of 0 will get
-        // converted into null on the LightStep Satellite. LightStep will require our Ids to be in long format.
-        long lsParentId = 0;
-
-        String tagPurpose = wingtipsSpan.getSpanPurpose().toString();
-        long lsSpanId = TraceAndSpanIdGenerator.unsignedLowerHexStringToLong(sanitizeIdIfNecessary(wingtipsSpan.getSpanId(), false));
-        long lsTraceId = TraceAndSpanIdGenerator.unsignedLowerHexStringToLong(sanitizeIdIfNecessary(wingtipsSpan.getTraceId(), false));
-
         try {
-            SpanBuilder lsSpanBuilder = (SpanBuilder) tracer.buildSpan(operationName);
+            String operationName = wingtipsSpan.getSpanName();
+            long startTimeMicros = wingtipsSpan.getSpanStartTimeEpochMicros();
+
+            // Given we should only be in this method on span completion, we are not going to wrap this conversion in a
+            // try/catch. duration should be set on the Wingtips span.
+            long durationMicros = TimeUnit.NANOSECONDS.toMicros(wingtipsSpan.getDurationNanos());
+            long stopTimeMicros = startTimeMicros + durationMicros;
+
+            // Sanitize the wingtips trace/span/parent IDs if necessary. This guarantees we can convert them to
+            //      longs as required by LightStep.
+            String wtSanitizedSpanId = sanitizeIdIfNecessary(wingtipsSpan.getSpanId(), false);
+            String wtSanitizedTraceId = sanitizeIdIfNecessary(wingtipsSpan.getTraceId(), true);
+            String wtSanitizedParentId = sanitizeIdIfNecessary(wingtipsSpan.getParentSpanId(), false);
+
+            // LightStep requires Ids to be longs.
+            long lsSpanId = TraceAndSpanIdGenerator.unsignedLowerHexStringToLong(wtSanitizedSpanId);
+            long lsTraceId = TraceAndSpanIdGenerator.unsignedLowerHexStringToLong(wtSanitizedTraceId);
+
+            // Handle the common SpanBuilder settings.
+            SpanBuilder lsSpanBuilder = (SpanBuilder) (
+                tracer.buildSpan(operationName)
+                      .withStartTimestamp(wingtipsSpan.getSpanStartTimeEpochMicros())
+                      .ignoreActiveSpan()
+                      .withTag("lightstep.trace_id", lsTraceId)
+                      .withTag("lightstep.span_id", lsSpanId)
+                      .withTag("wingtips.span_id", wingtipsSpan.getSpanId())
+                      .withTag("wingtips.trace_id", wingtipsSpan.getTraceId())
+            );
+
+            // Handle the parent ID / parent context SpanBuilder settings.
             if (wingtipsSpan.getParentSpanId() != null) {
-                lsParentId = TraceAndSpanIdGenerator.unsignedLowerHexStringToLong(sanitizeIdIfNecessary(wingtipsSpan.getParentSpanId(), false));
+                long lsParentId = TraceAndSpanIdGenerator.unsignedLowerHexStringToLong(wtSanitizedParentId);
 
                 SpanContext lsSpanContext = new SpanContext(lsTraceId, lsParentId);
 
-                io.opentracing.Span lsSpan = lsSpanBuilder
-                        .withStartTimestamp(wingtipsSpan.getSpanStartTimeEpochMicros())
-                        .asChildOf(lsSpanContext)
-                        .ignoreActiveSpan()
-                        .withTag("lightstep.trace_id", lsTraceId)
-                        .withTag("lightstep.span_id", lsSpanId)
-                        .withTag("lightstep.parent_id", lsParentId)
-                        .withTag("wingtips.span_id", wingtipsSpan.getSpanId())
-                        .withTag("wingtips.trace_id", wingtipsSpan.getTraceId())
-                        .withTag("wingtips.parent_id", wingtipsSpan.getParentSpanId())
-                        .start();
-
-                for (Span.TimestampedAnnotation wingtipsAnnotation : wingtipsSpan.getTimestampedAnnotations()) {
-                    lsSpan.log(wingtipsAnnotation.getTimestampEpochMicros(), wingtipsAnnotation.getValue());
-                }
-
-                lsSpan.setTag("span.type", tagPurpose);
-
-                for (Map.Entry<String, String> wtTag : wingtipsSpan.getTags().entrySet()) {
-                    lsSpan.setTag(wtTag.getKey(), wtTag.getValue());
-                }
-                // on finish, the tracer library initialized on the creation of this listener will cache and transport the span
-                // data to the LightStep Satellite.
-                lsSpan.finish(stopTimeMicros);
+                lsSpanBuilder = (SpanBuilder)(
+                    lsSpanBuilder.asChildOf(lsSpanContext)
+                                 .withTag("lightstep.parent_id", lsParentId)
+                                 .withTag("wingtips.parent_id", wingtipsSpan.getParentSpanId())
+                );
             }
             else {
-                io.opentracing.Span lsSpan = lsSpanBuilder
-                        .withStartTimestamp(wingtipsSpan.getSpanStartTimeEpochMicros())
-                        .ignoreActiveSpan()
-                        .withTag("lightstep.trace_id", lsTraceId)
-                        .withTag("lightstep.span_id", lsSpanId)
-                        .withTag("lightstep.parent_id", "null")
-                        .withTag("wingtips.span_id", wingtipsSpan.getSpanId())
-                        .withTag("wingtips.trace_id", wingtipsSpan.getTraceId())
-                        .withTag("wingtips.parent_id", "null")
-                        .start();
-                for (Span.TimestampedAnnotation wingtipsAnnotation : wingtipsSpan.getTimestampedAnnotations()) {
-                    lsSpan.log(wingtipsAnnotation.getTimestampEpochMicros(), wingtipsAnnotation.getValue());
-                }
-
-                lsSpan.setTag("span.type", tagPurpose);
-
-                for (Map.Entry<String, String> wtTag : wingtipsSpan.getTags().entrySet()) {
-                    lsSpan.setTag(wtTag.getKey(), wtTag.getValue());
-                }
-                // on finish, the tracer library initialized on the creation of this listener will cache and transport the span
-                // data to the LightStep Satellite.
-                lsSpan.finish(stopTimeMicros);
+                lsSpanBuilder = (SpanBuilder)(
+                    lsSpanBuilder.withTag("lightstep.parent_id", "null")
+                                 .withTag("wingtips.parent_id", "null")
+                );
             }
-        } catch (Throwable ex) {
+
+            // Start the OT span and set logs and tags from the wingtips span.
+            io.opentracing.Span lsSpan = lsSpanBuilder.start();
+
+            for (Span.TimestampedAnnotation wingtipsAnnotation : wingtipsSpan.getTimestampedAnnotations()) {
+                lsSpan.log(wingtipsAnnotation.getTimestampEpochMicros(), wingtipsAnnotation.getValue());
+            }
+
+            lsSpan.setTag("span.type", wingtipsSpan.getSpanPurpose().name());
+
+            for (Map.Entry<String, String> wtTag : wingtipsSpan.getTags().entrySet()) {
+                lsSpan.setTag(wtTag.getKey(), wtTag.getValue());
+            }
+
+            // Add some custom boolean tags if any of the IDs had to be sanitized. The raw unsanitized ID will be
+            //      available via the wingtips.*_id tags.
+            if (!wtSanitizedSpanId.equals(wingtipsSpan.getSpanId())) {
+                lsSpan.setTag("wingtips.span_id.invalid", true);
+            }
+            if (!wtSanitizedTraceId.equals(wingtipsSpan.getTraceId())) {
+                lsSpan.setTag("wingtips.trace_id.invalid", true);
+            }
+            if (wtSanitizedParentId != null && !wtSanitizedParentId.equals(wingtipsSpan.getParentSpanId())) {
+                lsSpan.setTag("wingtips.parent_id.invalid", true);
+            }
+
+            // on finish, the tracer library initialized on the creation of this listener will cache and transport the span
+            // data to the LightStep Satellite.
+            lsSpan.finish(stopTimeMicros);
+        } catch (Exception ex) {
             long currentBadSpanCount = spanHandlingErrorCounter.incrementAndGet();
             // Adopted from WingtipsToZipkinLifecycleListener from Wingtips-Zipkin2 plugin.
             // Only log once every MIN_SPAN_HANDLING_ERROR_LOG_INTERVAL_MILLIS time interval to prevent log spam from a
@@ -174,17 +196,17 @@ public class WingtipsToLightStepLifecycleListener implements SpanLifecycleListen
                 lastSpanHandlingErrorLogTimeEpochMillis = currentTimeMillis;
 
                 lightStepToWingtipsLogger.warn(
-                        "There have been {} spans that were not LightStep compatible, or that experienced an error during span handling. Latest example: "
-                                + "wingtips_span_with_error=\"{}\", conversion_or_handling_error=\"{}\"",
+                        "There have been {} spans that were not LightStep compatible, or that experienced an error "
+                        + "during span handling. Latest example: "
+                        + "wingtips_span_with_error=\"{}\", conversion_or_handling_error=\"{}\"",
                         currentBadSpanCount, wingtipsSpan.toKeyValueString(), ex.toString()
                 );
             }
         }
     }
-    private String sanitizeIdIfNecessary(final String originalId, final boolean allow128Bit) {
+    protected String sanitizeIdIfNecessary(final String originalId, final boolean allow128Bit) {
 
         if (originalId == null) {
-            lightStepToWingtipsLogger.info("Sanitize not attempted, original ID is null");
             return null;
         }
 
