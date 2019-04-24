@@ -237,7 +237,7 @@ public class WingtipsToLightStepLifecycleListener implements SpanLifecycleListen
         // If the originalId can be parsed as a UUID and is allowed to be 128 bit,
         //      then its sanitized ID is that UUID with the dashes ripped out and forced lowercase.
         if (allow128Bit) {
-            String sanitizedId = attemptToConvertFromUuid(originalId);
+            String sanitizedId = attemptToSanitizeAsUuid(originalId);
             if (sanitizedId != null) {
                 lightStepToWingtipsLogger.info(SANITIZED_ID_LOG_MSG, originalId, sanitizedId);
                 return sanitizedId;
@@ -401,7 +401,7 @@ public class WingtipsToLightStepLifecycleListener implements SpanLifecycleListen
         return true;
     }
 
-    protected String attemptToConvertFromUuid(String originalId) {
+    protected String attemptToSanitizeAsUuid(String originalId) {
         if (originalId == null) {
             return null;
         }
@@ -411,7 +411,7 @@ public class WingtipsToLightStepLifecycleListener implements SpanLifecycleListen
             String noDashesAndLowercase = stripDashesAndConvertToLowercase(originalId);
             if (noDashesAndLowercase.length() == 32 && isLowerHex(noDashesAndLowercase)) {
                 // 32 chars and lowerhex - it's now a valid 128 bit ID.
-                return noDashesAndLowercase;//.toLowerCase();
+                return noDashesAndLowercase;
             }
         }
 

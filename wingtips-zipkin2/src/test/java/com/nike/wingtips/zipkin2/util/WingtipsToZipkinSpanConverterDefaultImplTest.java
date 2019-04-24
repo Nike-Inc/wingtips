@@ -282,6 +282,11 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
             "9894366724294019910e0f219a43949b", // Original ID with dashes removed
             "9f26a747d46a3dd5"                  // SHA 256 hash of original ID, take 16 chars
         ),
+        ID_IS_A_UPPERCASE_UUID(
+            "98943667-2429-4019-910E-0F219A43949B",
+            "9894366724294019910e0f219a43949b", // Original ID with dashes removed, and lowercase
+            "0bc091a479bad367"                  // SHA 256 hash of original ID, take 16 chars
+        ),
         LONGER_THAN_32_CHARS_NOT_UUID(
             "daa63e253dab8990daa63e253dab89901234",
             "47035ab8524e9e68d14de5bf4117e555", // SHA 256 hash of original ID, take 32 chars
@@ -572,9 +577,9 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
     }
 
     @Test
-    public void attemptToConvertFromUuid_returns_null_if_passed_nul() {
+    public void attemptToSanitizeAsUuid_returns_null_if_passed_nul() {
         // expect
-        assertThat(impl.attemptToConvertFromUuid(null)).isNull();
+        assertThat(impl.attemptToSanitizeAsUuid(null)).isNull();
     }
 
     @Test
