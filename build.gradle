@@ -121,8 +121,8 @@ ext {
         configure(subprojects.findAll { it.name.contains("wingtips-lightstep") }) {
             jacocoCoverage {
                 // Enforce minimum code coverage. See https://github.com/palantir/gradle-jacoco-coverage for the full list of options.
-                reportThreshold 0.4, INSTRUCTION
-                reportThreshold 0.25, BRANCH
+                reportThreshold 0.8, INSTRUCTION
+                reportThreshold 0.5, BRANCH
             }
         }
     }
