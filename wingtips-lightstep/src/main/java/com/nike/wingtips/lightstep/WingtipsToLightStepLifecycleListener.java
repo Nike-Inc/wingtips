@@ -14,7 +14,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -204,8 +203,11 @@ public class WingtipsToLightStepLifecycleListener implements SpanLifecycleListen
             }
         }
     }
-    protected String sanitizeIdIfNecessary(final String originalId, final boolean allow128Bit) {
 
+    // TODO: The sanitization logic is a copy/paste from WingtipsToZipkinSpanConverterDefaultImpl. We should figure out
+    //       a way to share the code. We could move it to wingtips-core, but this uses DigestUtils, and we don't want
+    //       to add that dependency to wingtips-core.
+    protected String sanitizeIdIfNecessary(final String originalId, final boolean allow128Bit) {
         if (originalId == null) {
             return null;
         }
@@ -234,10 +236,12 @@ public class WingtipsToLightStepLifecycleListener implements SpanLifecycleListen
 
         // If the originalId can be parsed as a UUID and is allowed to be 128 bit,
         //      then its sanitized ID is that UUID with the dashes ripped out and forced lowercase.
-        if (allow128Bit && attemptToConvertToUuid(originalId) != null) {
-            String sanitizedId = originalId.replace("-", "").toLowerCase();
-            lightStepToWingtipsLogger.info(SANITIZED_ID_LOG_MSG, originalId, sanitizedId);
-            return sanitizedId;
+        if (allow128Bit) {
+            String sanitizedId = attemptToConvertFromUuid(originalId);
+            if (sanitizedId != null) {
+                lightStepToWingtipsLogger.info(SANITIZED_ID_LOG_MSG, originalId, sanitizedId);
+                return sanitizedId;
+            }
         }
 
         // No convenient/sensible conversion to a valid lowerhex ID was found.
@@ -252,19 +256,21 @@ public class WingtipsToLightStepLifecycleListener implements SpanLifecycleListen
         return sanitizedId;
     }
 
-    private boolean isLowerHex(String id) {
+    protected boolean isLowerHex(String id) {
         return isHex(id, false);
     }
 
     /**
+     * Copied from {@link zipkin2.Span#validateHex(String)} and slightly modified.
      *
      * @param id The ID to check for hexadecimal conformity.
      * @param allowUppercase Pass true to allow uppercase A-F letters, false to force lowercase-hexadecimal check
      * (only a-f letters allowed).
+     *
      * @return true if the given id is hexadecimal, false if there are any characters that are not hexadecimal, with
      * the {@code allowUppercase} parameter determining whether uppercase hex characters are allowed.
      */
-    private boolean isHex(String id, boolean allowUppercase) {
+    protected boolean isHex(String id, boolean allowUppercase) {
         for (int i = 0, length = id.length(); i < length; i++) {
             char c = id.charAt(i);
             if ((c < '0' || c > '9') && (c < 'a' || c > 'f')) {
@@ -285,28 +291,147 @@ public class WingtipsToLightStepLifecycleListener implements SpanLifecycleListen
         return true;
     }
 
-    private boolean isAllowedNumChars(final String id, final boolean allow128Bit) {
+    protected boolean isAllowedNumChars(final String id, final boolean allow128Bit) {
         if (allow128Bit) {
             return id.length() <= 16 || id.length() == 32;
-        } else {
+        }
+        else {
             return id.length() <= 16;
         }
     }
 
-    private Long attemptToConvertToLong(final String id) {
+    private static final char[] MAX_LONG_AS_CHAR_ARRY = String.valueOf(Long.MAX_VALUE).toCharArray();
+    private static final int MIN_OR_MAX_LONG_NUM_DIGITS = MAX_LONG_AS_CHAR_ARRY.length;
+    private static final char[] ABS_MIN_LONG_AS_CHAR_ARRY = String.valueOf(Long.MIN_VALUE).substring(1).toCharArray();
+    static {
+        // Sanity check that MAX_LONG_AS_CHAR_ARRY and ABS_MIN_LONG_AS_CHAR_ARRY have the same number of chars.
+        assert MAX_LONG_AS_CHAR_ARRY.length == ABS_MIN_LONG_AS_CHAR_ARRY.length;
+    }
+    protected Long attemptToConvertToLong(final String id) {
+        if (id == null) {
+            return null;
+        }
+
+        // Only try if all chars in the ID are digits (the first char is allowed to be a dash to indicate negative).
+        int numDigits = 0;
+        boolean firstCharIsDash = false;
+        for (int i = 0; i < id.length(); i++) {
+            char nextChar = id.charAt(i);
+            boolean isDigit = (nextChar >= '0' && nextChar <= '9');
+            if (isDigit) {
+                numDigits++;
+            }
+            else {
+                // The first char is allowed to be a dash.
+                if (i == 0 && nextChar == '-') {
+                    // This is allowed.
+                    firstCharIsDash = true;
+                }
+                else {
+                    // Not a digit, and not a first-char-dash. So id cannot be a long. Return null.
+                    return null;
+                }
+            }
+        }
+
+        // All chars are digits (or negative sign followed by digits). Next we need to make sure they are in the
+        //      valid range of a java long.
+        if (!isWithinRangeOfJavaLongMinAndMax(id, numDigits, firstCharIsDash)) {
+            // Too many digits, or the value was too high. Can't be converted to java long, so return null.
+            return null;
+        }
+
         try {
-            return Long.valueOf(id);
-        } catch (final NumberFormatException nfe) {
+            // This *should* be convertible to a java long at this point.
+            return Long.parseLong(id);
+        }
+        catch (final NumberFormatException nfe) {
+            // This should never happen, but if it does, return null as it can't be converted to a long.
+            lightStepToWingtipsLogger.warn(
+                "Found digits-based-ID that reached Long.parseLong(id) and failed. "
+                + "This should never happen - please report this to the Wingtips maintainers. "
+                + "invalid_id={}, NumberFormatException={}",
+                id, nfe.toString()
+            );
             return null;
         }
     }
 
-    private UUID attemptToConvertToUuid(String originalId) {
-        try {
-            return UUID.fromString(originalId);
+    protected boolean isWithinRangeOfJavaLongMinAndMax(String longAsString, int numDigits, boolean firstCharIsDash) {
+        if (numDigits < MIN_OR_MAX_LONG_NUM_DIGITS) {
+            // Fewer number of digits than max java long, so it is in the valid min/max java long range.
+            return true;
         }
-        catch(Exception t) {
+
+        if (numDigits > MIN_OR_MAX_LONG_NUM_DIGITS) {
+            // Too many digits, so it is outside the valid min/max java long range.
+            return false;
+        }
+
+        // At this point, we know the ID has the same number of digits as the max java long value. The ID may or may
+        //      not be within the range of a java long. We could use a BigInteger to compare, but that's too slow.
+        //      So we'll root through digit by digit.
+
+        // Adjust the string we're checking to get rid of the negative sign (dash) if necessary.
+        String absLongAsString = (firstCharIsDash) ? longAsString.substring(1) : longAsString;
+
+        // Choose the correct min/max value to compare against.
+        char[] comparisonValue = (firstCharIsDash) ? ABS_MIN_LONG_AS_CHAR_ARRY : MAX_LONG_AS_CHAR_ARRY;
+
+        for (int i = 0; i < comparisonValue.length; i++) {
+            char nextCharAtIndex = absLongAsString.charAt(i);
+            char maxLongCharAtIndex = comparisonValue[i];
+            if (nextCharAtIndex > maxLongCharAtIndex) {
+                // Up to this index, the values were equal, but *at* this index the value is greater than max java long,
+                //      so it's outside the java long range.
+                return false;
+            }
+            else if (nextCharAtIndex < maxLongCharAtIndex) {
+                // Up to this index, the values were equal, but *at* this index the value is less than max java long,
+                //      so it's within the java long range.
+                return true;
+            }
+
+            // If neither of the comparisons above were triggered, then this char matches the max long char. Move on
+            //      to the next char.
+        }
+
+        // If we reach here, then longAsString has the same number of digits as max java long, and all digits were
+        //      equal. So this is exactly min or max java long, and therefore within range.
+        return true;
+    }
+
+    protected String attemptToConvertFromUuid(String originalId) {
+        if (originalId == null) {
             return null;
         }
+
+        if (originalId.length() == 36) {
+            // 36 chars - might be a UUID. Rip out the dashes and check to see if it's a valid 128 bit ID.
+            String noDashesAndLowercase = stripDashesAndConvertToLowercase(originalId);
+            if (noDashesAndLowercase.length() == 32 && isLowerHex(noDashesAndLowercase)) {
+                // 32 chars and lowerhex - it's now a valid 128 bit ID.
+                return noDashesAndLowercase;//.toLowerCase();
+            }
+        }
+
+        // It wasn't a UUID, so return null.
+        return null;
+    }
+
+    protected String stripDashesAndConvertToLowercase(String orig) {
+        if (orig == null) {
+            return null;
+        }
+
+        StringBuilder sb = new StringBuilder(orig.length());
+        for (int i = 0; i < orig.length(); i++) {
+            char nextChar = orig.charAt(i);
+            if (nextChar != '-') {
+                sb.append(Character.toLowerCase(nextChar));
+            }
+        }
+
+        return sb.toString();
     }
 }

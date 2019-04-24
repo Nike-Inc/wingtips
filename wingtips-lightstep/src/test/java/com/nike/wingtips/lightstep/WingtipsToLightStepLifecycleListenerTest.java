@@ -8,14 +8,20 @@ import com.lightstep.tracer.jre.JRETracer;
 import com.lightstep.tracer.shared.SpanBuilder;
 import com.tngtech.java.junit.dataprovider.DataProvider;
 import com.tngtech.java.junit.dataprovider.DataProviderRunner;
+import com.tngtech.java.junit.dataprovider.UseDataProvider;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 
+import java.math.BigInteger;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import io.opentracing.SpanContext;
 
@@ -296,5 +302,169 @@ public class WingtipsToLightStepLifecycleListenerTest {
         // then
         verify(jreTracerMock).buildSpan(anyString());
         assertThat(ex).isNull();
+    }
+
+    private enum IdSanitizationScenario {
+        NOT_HEX_STRING(
+            "notahexstring",
+            "15afe1fe8fe52ed3cd3efd908c45653b", // SHA 256 hash of original ID, take 32 chars
+            "15afe1fe8fe52ed3"                  // SHA 256 hash of original ID, take 16 chars
+        ),
+        UPPERCASE_HEX_STRING(
+            "DAA63E253DAB8990",
+            "daa63e253dab8990", // Original ID lowercased
+            "daa63e253dab8990"
+        ),
+        MIXED_CASE_HEX_STRING(
+            "dAA63e253DaB8990",
+            "daa63e253dab8990",  // Original ID lowercased
+            "daa63e253dab8990"
+        ),
+        LONGER_THAN_16_CHARS_BUT_SHORTER_THAN_32_RAW_LONG(
+            "1234567890123456789",
+            "112210f47de98115", // Original ID converted to a Long, then converted to lowerhex.
+            "112210f47de98115"
+        ),
+        LONGER_THAN_16_CHARS_BUT_SHORTER_THAN_32_NOT_A_RAW_LONG(
+            "daa63e253dab8990123",
+            "a3cd6fe61020c277ac30d83d18e670e5", // SHA 256 hash of original ID, take 32 chars
+            "a3cd6fe61020c277"                  // SHA 256 hash of original ID, take 16 chars
+        ),
+        ID_IS_A_UUID(
+            "98943667-2429-4019-910e-0f219a43949b",
+            "9894366724294019910e0f219a43949b", // Original ID with dashes removed
+            "9f26a747d46a3dd5"                  // SHA 256 hash of original ID, take 16 chars
+        ),
+        LONGER_THAN_32_CHARS_NOT_UUID(
+            "daa63e253dab8990daa63e253dab89901234",
+            "47035ab8524e9e68d14de5bf4117e555", // SHA 256 hash of original ID, take 32 chars
+            "47035ab8524e9e68"                  // SHA 256 hash of original ID, take 16 chars
+        ),
+        EXACTLY_32_CHARS_LOWERHEX(
+            "1a2b3c4d5e6f1a2b3c4d5e6f1a2b3c4d",
+            "1a2b3c4d5e6f1a2b3c4d5e6f1a2b3c4d", // No need to sanitize - this is valid for trace ID
+            "fe31730df9f857ee"                  // SHA 256 hash of original ID, take 16 chars
+        ),
+        GREATER_THAN_JAVA_MAX_LONG(
+            BigInteger.valueOf(Long.MAX_VALUE).add(BigInteger.ONE).toString(),
+            "c5c29af0c2b1ba23907ca40686689919", // SHA 256 hash of original ID, take 32 chars
+            "c5c29af0c2b1ba23"                  // SHA 256 hash of original ID, take 16 chars
+        ),
+        LESS_THAN_JAVA_MIN_LONG(
+            BigInteger.valueOf(Long.MIN_VALUE).subtract(BigInteger.ONE).toString(),
+            "a11b7b6918ba4e84f8e3ab75638e7325", // SHA 256 hash of original ID, take 32 chars
+            "a11b7b6918ba4e84"                  // SHA 256 hash of original ID, take 16 chars
+        );
+
+        public final String originalId;
+        public final String expectedSanitizedResultForTraceId; // Trace ID -> 128 bit allowed
+        public final String expectedSanitizedResultForSpanIdOrParentSpanId; // Non-Trace ID -> 128 bit not allowed
+
+        IdSanitizationScenario(
+            String originalId,
+            String expectedSanitizedResultForTraceId,
+            String expectedSanitizedResultForSpanIdOrParentSpanId
+        ) {
+            this.originalId = originalId;
+            this.expectedSanitizedResultForTraceId = expectedSanitizedResultForTraceId;
+            this.expectedSanitizedResultForSpanIdOrParentSpanId = expectedSanitizedResultForSpanIdOrParentSpanId;
+        }
+    }
+
+    @DataProvider
+    @SuppressWarnings("unused")
+    public static List<List<IdSanitizationScenario>> idSanitizationScenarios() {
+        return Arrays.stream(IdSanitizationScenario.values())
+                     .map(Collections::singletonList)
+                     .collect(Collectors.toList());
+    }
+
+    @UseDataProvider("idSanitizationScenarios")
+    @Test
+    public void sanitizeIdIfNecessary_sanitizes_ids_as_expected(
+        IdSanitizationScenario scenario
+    ) {
+        // when
+        String result128bit = listener.sanitizeIdIfNecessary(scenario.originalId, true);
+        String result64bit = listener.sanitizeIdIfNecessary(scenario.originalId, false);
+
+        // then
+        assertThat(result128bit).isEqualTo(scenario.expectedSanitizedResultForTraceId);
+        assertThat(result64bit).isEqualTo(scenario.expectedSanitizedResultForSpanIdOrParentSpanId);
+    }
+
+    // Verify the method at a per-character level to catch all the branching logic.
+    @DataProvider(value = {
+        "true",
+        "false"
+    })
+    @Test
+    public void isHex_works_as_expected(boolean allowUppercase) {
+        for (char c = Character.MIN_VALUE; c < Character.MAX_VALUE; c++) {
+            // given
+            boolean isHexDigit = (c >= '0') && (c <= '9');
+            boolean isHexLowercase = (c >= 'a') && (c <= 'f');
+            boolean isHexUppercase = (c >= 'A') && (c <= 'F');
+
+            boolean expectedResult = isHexDigit || isHexLowercase || (allowUppercase && isHexUppercase);
+
+            // when
+            boolean result = listener.isHex(String.valueOf(c), allowUppercase);
+
+            // then
+            assertThat(result)
+                .withFailMessage("Did not get expected result for char with int value " + (int)c +
+                                 ". Expected result: " + expectedResult)
+                .isEqualTo(expectedResult);
+        }
+    }
+
+    // Verify the attemptToConvertToLong method with various scenarios to catch branching logic and corner cases.
+    @DataProvider(value = {
+        "0                      |   true",
+        "1                      |   true",
+        "-1                     |   true",
+        "42                     |   true",
+        "-42                    |   true",
+        "2147483648             |   true",  // Greater than max int (but still in long range).
+        "-2147483649            |   true",  // Less than min int (but still in long range).
+        "9199999999999999999    |   true",  // Same num digits as max long, but digit before the end is less than same digit in max long.
+        "-9199999999999999999   |   true",  // Same num digits as min long, but digit before the end is less than same digit in min long.
+        "9223372036854775807    |   true",  // Exactly max long.
+        "-9223372036854775808   |   true",  // Exactly min long.
+        "9223372036854775808    |   false", // 1 bigger than max long.
+        "-9223372036854775809   |   false", // 1 less than min long.
+        "9300000000000000000    |   false", // Same num digits as max long, but digit before the end is greater than than same digit in max long.
+        "-9300000000000000000   |   false", // Same num digits as min long, but digit before the end is greater than than same digit in min long.
+        "10000000000000000000   |   false", // Too many digits (positive).
+        "-10000000000000000000  |   false", // Too many digits (negative).
+        "42blue42               |   false", // Contains non-digits.
+        "42f                    |   false", // Contains non-digits.
+        "4-2                    |   false", // Contains dash in a spot other than the beginning.
+        "42-                    |   false", // Contains dash in a spot other than the beginning.
+        "null                   |   false"  // Null can't be converted to a long.
+    }, splitBy = "\\|")
+    @Test
+    public void attemptToConvertToLong_works_as_expected(String longAsString, boolean expectValidLongResult) {
+        // given
+        Long expectedResult = (expectValidLongResult) ? Long.parseLong(longAsString) : null;
+
+        // when
+        Long result = listener.attemptToConvertToLong(longAsString);
+
+        // then
+        assertThat(result).isEqualTo(expectedResult);
+    }
+
+    @Test
+    public void attemptToConvertFromUuid_returns_null_if_passed_nul() {
+        // expect
+        assertThat(listener.attemptToConvertFromUuid(null)).isNull();
+    }
+
+    @Test
+    public void stripDashesAndConvertToLowercase_returns_null_if_passed_nul() {
+        // expect
+        assertThat(listener.stripDashesAndConvertToLowercase(null)).isNull();
     }
 }
