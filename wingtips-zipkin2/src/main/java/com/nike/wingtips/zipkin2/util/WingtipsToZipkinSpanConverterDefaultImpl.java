@@ -210,17 +210,111 @@ public class WingtipsToZipkinSpanConverterDefaultImpl implements WingtipsToZipki
     protected boolean isAllowedNumChars(final String id, final boolean allow128Bit) {
         if (allow128Bit) {
             return id.length() <= 16 || id.length() == 32;
-        } else {
+        }
+        else {
             return id.length() <= 16;
         }
     }
 
+    private static final char[] MAX_LONG_AS_CHAR_ARRY = String.valueOf(Long.MAX_VALUE).toCharArray();
+    private static final int MIN_OR_MAX_LONG_NUM_DIGITS = MAX_LONG_AS_CHAR_ARRY.length;
+    private static final char[] ABS_MIN_LONG_AS_CHAR_ARRY = String.valueOf(Long.MIN_VALUE).substring(1).toCharArray();
+    static {
+        // Sanity check that MAX_LONG_AS_CHAR_ARRY and ABS_MIN_LONG_AS_CHAR_ARRY have the same number of chars.
+        assert MAX_LONG_AS_CHAR_ARRY.length == ABS_MIN_LONG_AS_CHAR_ARRY.length;
+    }
     protected Long attemptToConvertToLong(final String id) {
-        try {
-            return Long.valueOf(id);
-        } catch (final NumberFormatException nfe) {
+        if (id == null) {
             return null;
         }
+
+        // Only try if all chars in the ID are digits (the first char is allowed to be a dash to indicate negative).
+        int numDigits = 0;
+        boolean firstCharIsDash = false;
+        for (int i = 0; i < id.length(); i++) {
+            char nextChar = id.charAt(i);
+            boolean isDigit = (nextChar >= '0' && nextChar <= '9');
+            if (isDigit) {
+                numDigits++;
+            }
+            else {
+                // The first char is allowed to be a dash.
+                if (i == 0 && nextChar == '-') {
+                    // This is allowed.
+                    firstCharIsDash = true;
+                }
+                else {
+                    // Not a digit, and not a first-char-dash. So id cannot be a long. Return null.
+                    return null;
+                }
+            }
+        }
+
+        // All chars are digits (or negative sign followed by digits). Next we need to make sure they are in the
+        //      valid range of a java long.
+        if (!isWithinRangeOfJavaLongMinAndMax(id, numDigits, firstCharIsDash)) {
+            // Too many digits, or the value was too high. Can't be converted to java long, so return null.
+            return null;
+        }
+
+        try {
+            // This *should* be convertible to a java long at this point.
+            return Long.parseLong(id);
+        }
+        catch (final NumberFormatException nfe) {
+            // This should never happen, but if it does, return null as it can't be converted to a long.
+            logger.warn(
+                "Found digits-based-ID that reached Long.parseLong(id) and failed. "
+                + "This should never happen - please report this to the Wingtips maintainers. "
+                + "invalid_id={}, NumberFormatException={}",
+                id, nfe.toString()
+            );
+            return null;
+        }
+    }
+
+    protected boolean isWithinRangeOfJavaLongMinAndMax(String longAsString, int numDigits, boolean firstCharIsDash) {
+        if (numDigits < MIN_OR_MAX_LONG_NUM_DIGITS) {
+            // Fewer number of digits than max java long, so it is in the valid min/max java long range.
+            return true;
+        }
+
+        if (numDigits > MIN_OR_MAX_LONG_NUM_DIGITS) {
+            // Too many digits, so it is outside the valid min/max java long range.
+            return false;
+        }
+
+        // At this point, we know the ID has the same number of digits as the max java long value. The ID may or may
+        //      not be within the range of a java long. We could use a BigInteger to compare, but that's too slow.
+        //      So we'll root through digit by digit.
+
+        // Adjust the string we're checking to get rid of the negative sign (dash) if necessary.
+        String absLongAsString = (firstCharIsDash) ? longAsString.substring(1) : longAsString;
+
+        // Choose the correct min/max value to compare against.
+        char[] comparisonValue = (firstCharIsDash) ? ABS_MIN_LONG_AS_CHAR_ARRY : MAX_LONG_AS_CHAR_ARRY;
+
+        for (int i = 0; i < comparisonValue.length; i++) {
+            char nextCharAtIndex = absLongAsString.charAt(i);
+            char maxLongCharAtIndex = comparisonValue[i];
+            if (nextCharAtIndex > maxLongCharAtIndex) {
+                // Up to this index, the values were equal, but *at* this index the value is greater than max java long,
+                //      so it's outside the java long range.
+                return false;
+            }
+            else if (nextCharAtIndex < maxLongCharAtIndex) {
+                // Up to this index, the values were equal, but *at* this index the value is less than max java long,
+                //      so it's within the java long range.
+                return true;
+            }
+
+            // If neither of the comparisons above were triggered, then this char matches the max long char. Move on
+            //      to the next char.
+        }
+
+        // If we reach here, then longAsString has the same number of digits as max java long, and all digits were
+        //      equal. So this is exactly min or max java long, and therefore within range.
+        return true;
     }
 
     protected String attemptToConvertFromUuid(String originalId) {
