@@ -13,6 +13,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.internal.util.reflection.Whitebox;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -281,6 +282,11 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
             "9894366724294019910e0f219a43949b", // Original ID with dashes removed
             "9f26a747d46a3dd5"                  // SHA 256 hash of original ID, take 16 chars
         ),
+        ID_IS_A_UPPERCASE_UUID(
+            "98943667-2429-4019-910E-0F219A43949B",
+            "9894366724294019910e0f219a43949b", // Original ID with dashes removed, and lowercase
+            "0bc091a479bad367"                  // SHA 256 hash of original ID, take 16 chars
+        ),
         LONGER_THAN_32_CHARS_NOT_UUID(
             "daa63e253dab8990daa63e253dab89901234",
             "47035ab8524e9e68d14de5bf4117e555", // SHA 256 hash of original ID, take 32 chars
@@ -290,6 +296,16 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
             "1a2b3c4d5e6f1a2b3c4d5e6f1a2b3c4d",
             "1a2b3c4d5e6f1a2b3c4d5e6f1a2b3c4d", // No need to sanitize - this is valid for trace ID
             "fe31730df9f857ee"                  // SHA 256 hash of original ID, take 16 chars
+        ),
+        GREATER_THAN_JAVA_MAX_LONG(
+            BigInteger.valueOf(Long.MAX_VALUE).add(BigInteger.ONE).toString(),
+            "c5c29af0c2b1ba23907ca40686689919", // SHA 256 hash of original ID, take 32 chars
+            "c5c29af0c2b1ba23"                  // SHA 256 hash of original ID, take 16 chars
+        ),
+        LESS_THAN_JAVA_MIN_LONG(
+            BigInteger.valueOf(Long.MIN_VALUE).subtract(BigInteger.ONE).toString(),
+            "a11b7b6918ba4e84f8e3ab75638e7325", // SHA 256 hash of original ID, take 32 chars
+            "a11b7b6918ba4e84"                  // SHA 256 hash of original ID, take 16 chars
         );
 
         public final String originalId;
@@ -521,5 +537,54 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
                                  ". Expected result: " + expectedResult)
                 .isEqualTo(expectedResult);
         }
+    }
+
+    // Verify the attemptToConvertToLong method with various scenarios to catch branching logic and corner cases.
+    @DataProvider(value = {
+        "0                      |   true",
+        "1                      |   true",
+        "-1                     |   true",
+        "42                     |   true",
+        "-42                    |   true",
+        "2147483648             |   true",  // Greater than max int (but still in long range).
+        "-2147483649            |   true",  // Less than min int (but still in long range).
+        "9199999999999999999    |   true",  // Same num digits as max long, but digit before the end is less than same digit in max long.
+        "-9199999999999999999   |   true",  // Same num digits as min long, but digit before the end is less than same digit in min long.
+        "9223372036854775807    |   true",  // Exactly max long.
+        "-9223372036854775808   |   true",  // Exactly min long.
+        "9223372036854775808    |   false", // 1 bigger than max long.
+        "-9223372036854775809   |   false", // 1 less than min long.
+        "9300000000000000000    |   false", // Same num digits as max long, but digit before the end is greater than than same digit in max long.
+        "-9300000000000000000   |   false", // Same num digits as min long, but digit before the end is greater than than same digit in min long.
+        "10000000000000000000   |   false", // Too many digits (positive).
+        "-10000000000000000000  |   false", // Too many digits (negative).
+        "42blue42               |   false", // Contains non-digits.
+        "42f                    |   false", // Contains non-digits.
+        "4-2                    |   false", // Contains dash in a spot other than the beginning.
+        "42-                    |   false", // Contains dash in a spot other than the beginning.
+        "null                   |   false"  // Null can't be converted to a long.
+    }, splitBy = "\\|")
+    @Test
+    public void attemptToConvertToLong_works_as_expected(String longAsString, boolean expectValidLongResult) {
+        // given
+        Long expectedResult = (expectValidLongResult) ? Long.parseLong(longAsString) : null;
+
+        // when
+        Long result = impl.attemptToConvertToLong(longAsString);
+
+        // then
+        assertThat(result).isEqualTo(expectedResult);
+    }
+
+    @Test
+    public void attemptToSanitizeAsUuid_returns_null_if_passed_nul() {
+        // expect
+        assertThat(impl.attemptToSanitizeAsUuid(null)).isNull();
+    }
+
+    @Test
+    public void stripDashesAndConvertToLowercase_returns_null_if_passed_nul() {
+        // expect
+        assertThat(impl.stripDashesAndConvertToLowercase(null)).isNull();
     }
 }
