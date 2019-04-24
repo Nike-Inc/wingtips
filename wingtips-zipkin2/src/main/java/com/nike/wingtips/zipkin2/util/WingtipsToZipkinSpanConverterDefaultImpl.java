@@ -10,7 +10,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import zipkin2.Endpoint;
@@ -153,10 +152,12 @@ public class WingtipsToZipkinSpanConverterDefaultImpl implements WingtipsToZipki
 
         // If the originalId can be parsed as a UUID and is allowed to be 128 bit,
         //      then its sanitized ID is that UUID with the dashes ripped out and forced lowercase.
-        if (allow128Bit && attemptToConvertToUuid(originalId) != null) {
-            String sanitizedId = originalId.replace("-", "").toLowerCase();
-            logger.info(SANITIZED_ID_LOG_MSG, originalId, sanitizedId);
-            return sanitizedId;
+        if (allow128Bit) {
+            String sanitizedId = attemptToConvertFromUuid(originalId);
+            if (sanitizedId != null) {
+                logger.info(SANITIZED_ID_LOG_MSG, originalId, sanitizedId);
+                return sanitizedId;
+            }
         }
 
         // No convenient/sensible conversion to a valid lowerhex ID was found.
@@ -181,6 +182,7 @@ public class WingtipsToZipkinSpanConverterDefaultImpl implements WingtipsToZipki
      * @param id The ID to check for hexadecimal conformity.
      * @param allowUppercase Pass true to allow uppercase A-F letters, false to force lowercase-hexadecimal check
      * (only a-f letters allowed).
+     *
      * @return true if the given id is hexadecimal, false if there are any characters that are not hexadecimal, with
      * the {@code allowUppercase} parameter determining whether uppercase hex characters are allowed.
      */
@@ -221,12 +223,37 @@ public class WingtipsToZipkinSpanConverterDefaultImpl implements WingtipsToZipki
         }
     }
 
-    protected UUID attemptToConvertToUuid(String originalId) {
-        try {
-            return UUID.fromString(originalId);
-        }
-        catch(Exception t) {
+    protected String attemptToConvertFromUuid(String originalId) {
+        if (originalId == null) {
             return null;
         }
+
+        if (originalId.length() == 36) {
+            // 36 chars - might be a UUID. Rip out the dashes and check to see if it's a valid 128 bit ID.
+            String noDashesAndLowercase = stripDashesAndConvertToLowercase(originalId);
+            if (noDashesAndLowercase.length() == 32 && isLowerHex(noDashesAndLowercase)) {
+                // 32 chars and lowerhex - it's now a valid 128 bit ID.
+                return noDashesAndLowercase;//.toLowerCase();
+            }
+        }
+
+        // It wasn't a UUID, so return null.
+        return null;
+    }
+
+    protected String stripDashesAndConvertToLowercase(String orig) {
+        if (orig == null) {
+            return null;
+        }
+
+        StringBuilder sb = new StringBuilder(orig.length());
+        for (int i = 0; i < orig.length(); i++) {
+            char nextChar = orig.charAt(i);
+            if (nextChar != '-') {
+                sb.append(Character.toLowerCase(nextChar));
+            }
+        }
+
+        return sb.toString();
     }
 }
