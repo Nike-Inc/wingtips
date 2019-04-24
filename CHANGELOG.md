@@ -8,6 +8,7 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 
 #### 0.x Releases
 
+- `0.19.x` Releases - [0.19.0](#0190)
 - `0.18.x` Releases - [0.18.1](#0181), [0.18.0](#0180)
 - `0.17.x` Releases - [0.17.0](#0170)
 - `0.16.x` Releases - [0.16.0](#0160)
@@ -18,6 +19,23 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 - `0.11.x` Releases - [0.11.2](#0112), [0.11.1](#0111), [0.11.0](#0110)
 - `0.10.x` Releases - [0.10.0](#0100)
 - `0.9.x` Releases - [0.9.0.1](#0901), [0.9.0](#090)
+
+## [0.19.0](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.19.0)
+
+Released on 2019-04-24.
+
+### Added
+
+* Added a `WingtipsToLightStepLifecycleListener` for sending Wingtips spans to LightStep satellites for ingestion. 
+    - Added by [Parker Edwards][contrib_parkeredwards] and [Nic Munroe][contrib_nicmunroe] in pull requests 
+    [#89](https://github.com/Nike-Inc/wingtips/pull/89) and [#90](https://github.com/Nike-Inc/wingtips/pull/90).
+
+### Fixed
+
+* Optimized the ID sanitization logic done by `WingtipsToZipkinSpanConverterDefaultImpl` and
+`WingtipsToLightStepLifecycleListener` for speed/performance. If you receive a heavy volume of traffic with IDs that
+need to be sanitized, then this change should significantly reduce the CPU hit caused by sanitization.
+    - Fixed by [Nic Munroe][contrib_nicmunroe] in pull request [#91](https://github.com/Nike-Inc/wingtips/pull/91).
 
 ## [0.18.1](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.18.1)
 
@@ -424,3 +442,4 @@ Released on 2016-06-07.
 [contrib_alesj]: https://github.com/alesj
 [contrib_longtonthat]: https://github.com/longtonthat
 [contrib_brandoncurrie]: https://github.com/brandoncurrie
+[contrib_parkeredwards]: https://github.com/parker-edwards
