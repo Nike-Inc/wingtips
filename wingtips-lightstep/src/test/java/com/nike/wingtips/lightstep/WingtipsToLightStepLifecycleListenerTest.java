@@ -223,10 +223,11 @@ public class WingtipsToLightStepLifecycleListenerTest {
         verify(jreTracerMock).buildSpan(spanName);
         verify(lsSpanBuilderMock).withStartTimestamp(wtSpan.getSpanStartTimeEpochMicros());
         verify(lsSpanBuilderMock).ignoreActiveSpan();
-        verify(lsSpanBuilderMock).withTag("lightstep.trace_id", expectedLsTraceId);
-        verify(lsSpanBuilderMock).withTag("lightstep.span_id", expectedLsSpanId);
         verify(lsSpanBuilderMock).withTag("wingtips.span_id", wtSpan.getSpanId());
         verify(lsSpanBuilderMock).withTag("wingtips.trace_id", wtSpan.getTraceId());
+        verify(lsSpanBuilderMock).withTag("wingtips.parent_id", String.valueOf(wtSpan.getParentSpanId()));
+        verify(lsSpanBuilderMock).withTag("span.type", wtSpan.getSpanPurpose().name());
+        verify(lsSpanBuilderMock).withTraceIdAndSpanId(expectedLsTraceId, expectedLsSpanId);
 
         if (spanHasParent) {
             assertThat(expectedLsParentId).isNotEqualTo(0L);
@@ -241,13 +242,6 @@ public class WingtipsToLightStepLifecycleListenerTest {
                 (com.lightstep.tracer.shared.SpanContext)parentSpanContext;
             assertThat(lsParentSpanContext.getTraceId()).isEqualTo(expectedLsTraceId);
             assertThat(lsParentSpanContext.getSpanId()).isEqualTo(expectedLsParentId);
-
-            verify(lsSpanBuilderMock).withTag("lightstep.parent_id", expectedLsParentId);
-            verify(lsSpanBuilderMock).withTag("wingtips.parent_id", wtSpan.getParentSpanId());
-        }
-        else {
-            verify(lsSpanBuilderMock).withTag("lightstep.parent_id", "null");
-            verify(lsSpanBuilderMock).withTag("wingtips.parent_id", "null");
         }
 
         verify(lsSpanBuilderMock).start();
@@ -258,8 +252,6 @@ public class WingtipsToLightStepLifecycleListenerTest {
         wtSpan.getTimestampedAnnotations().forEach(
             annot -> verify(otSpanMock).log(annot.getTimestampEpochMicros(), annot.getValue())
         );
-
-        verify(otSpanMock).setTag("span.type", wtSpan.getSpanPurpose().name());
 
         wtSpan.getTags().forEach(
             (expectedTagKey, expectedTagValue) -> verify(otSpanMock).setTag(expectedTagKey, expectedTagValue)

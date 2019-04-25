@@ -118,20 +118,22 @@ public class WingtipsToLightStepLifecycleListener implements SpanLifecycleListen
             String wtSanitizedTraceId = sanitizeIdIfNecessary(wingtipsSpan.getTraceId(), true);
             String wtSanitizedParentId = sanitizeIdIfNecessary(wingtipsSpan.getParentSpanId(), false);
 
-            // LightStep requires Ids to be longs.
-            long lsSpanId = TraceAndSpanIdGenerator.unsignedLowerHexStringToLong(wtSanitizedSpanId);
-            long lsTraceId = TraceAndSpanIdGenerator.unsignedLowerHexStringToLong(wtSanitizedTraceId);
-
             // Handle the common SpanBuilder settings.
             SpanBuilder lsSpanBuilder = (SpanBuilder) (
                 tracer.buildSpan(operationName)
                       .withStartTimestamp(wingtipsSpan.getSpanStartTimeEpochMicros())
                       .ignoreActiveSpan()
-                      .withTag("lightstep.trace_id", lsTraceId)
-                      .withTag("lightstep.span_id", lsSpanId)
                       .withTag("wingtips.span_id", wingtipsSpan.getSpanId())
                       .withTag("wingtips.trace_id", wingtipsSpan.getTraceId())
+                      .withTag("wingtips.parent_id", String.valueOf(wingtipsSpan.getParentSpanId()))
+                      .withTag("span.type", wingtipsSpan.getSpanPurpose().name())
             );
+
+            // Force the LightStep span to have a Trace ID and Span ID matching the Wingtips span.
+            //      NOTE: LightStep requires Ids to be longs, so we convert the sanitized wingtips trace/span IDs.
+            long lsSpanId = TraceAndSpanIdGenerator.unsignedLowerHexStringToLong(wtSanitizedSpanId);
+            long lsTraceId = TraceAndSpanIdGenerator.unsignedLowerHexStringToLong(wtSanitizedTraceId);
+            lsSpanBuilder.withTraceIdAndSpanId(lsTraceId, lsSpanId);
 
             // Handle the parent ID / parent context SpanBuilder settings.
             if (wingtipsSpan.getParentSpanId() != null) {
@@ -139,17 +141,7 @@ public class WingtipsToLightStepLifecycleListener implements SpanLifecycleListen
 
                 SpanContext lsSpanContext = new SpanContext(lsTraceId, lsParentId);
 
-                lsSpanBuilder = (SpanBuilder)(
-                    lsSpanBuilder.asChildOf(lsSpanContext)
-                                 .withTag("lightstep.parent_id", lsParentId)
-                                 .withTag("wingtips.parent_id", wingtipsSpan.getParentSpanId())
-                );
-            }
-            else {
-                lsSpanBuilder = (SpanBuilder)(
-                    lsSpanBuilder.withTag("lightstep.parent_id", "null")
-                                 .withTag("wingtips.parent_id", "null")
-                );
+                lsSpanBuilder = (SpanBuilder)(lsSpanBuilder.asChildOf(lsSpanContext));
             }
 
             // Start the OT span and set logs and tags from the wingtips span.
@@ -158,8 +150,6 @@ public class WingtipsToLightStepLifecycleListener implements SpanLifecycleListen
             for (Span.TimestampedAnnotation wingtipsAnnotation : wingtipsSpan.getTimestampedAnnotations()) {
                 lsSpan.log(wingtipsAnnotation.getTimestampEpochMicros(), wingtipsAnnotation.getValue());
             }
-
-            lsSpan.setTag("span.type", wingtipsSpan.getSpanPurpose().name());
 
             for (Map.Entry<String, String> wtTag : wingtipsSpan.getTags().entrySet()) {
                 lsSpan.setTag(wtTag.getKey(), wtTag.getValue());
