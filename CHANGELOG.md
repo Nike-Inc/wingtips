@@ -8,7 +8,7 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 
 #### 0.x Releases
 
-- `0.19.x` Releases - [0.19.0](#0190)
+- `0.19.x` Releases - [0.19.1](#0191), [0.19.0](#0190)
 - `0.18.x` Releases - [0.18.1](#0181), [0.18.0](#0180)
 - `0.17.x` Releases - [0.17.0](#0170)
 - `0.16.x` Releases - [0.16.0](#0160)
@@ -19,6 +19,16 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 - `0.11.x` Releases - [0.11.2](#0112), [0.11.1](#0111), [0.11.0](#0110)
 - `0.10.x` Releases - [0.10.0](#0100)
 - `0.9.x` Releases - [0.9.0.1](#0901), [0.9.0](#090)
+
+## [0.19.1](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.19.1)
+
+Released on 2019-04-25.
+
+### Fixed
+
+* Fixed `WingtipsToLightStepLifecycleListener` to set the LightStep trace and span IDs to always match the Wingtips
+trace and span IDs. Also cleaned up a few unnecessary tags.
+    - Fixed by [Nic Munroe][contrib_nicmunroe] in pull request [#93](https://github.com/Nike-Inc/wingtips/pull/93).
 
 ## [0.19.0](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.19.0)
 
