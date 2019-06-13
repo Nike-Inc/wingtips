@@ -21,6 +21,7 @@ dependencies {
             "ch.qos.logback:logback-classic:$logbackVersion",
             "org.assertj:assertj-core:$assertJVersion",
             "com.tngtech.java:junit-dataprovider:$junitDataproviderVersion",
-            "org.jetbrains:annotations:$jetbrainsAnnotationsVersion"
+            "org.jetbrains:annotations:$jetbrainsAnnotationsVersion",
+            "commons-lang:commons-lang:$apacheCommonsLangVersion"
     )
 }

@@ -90,6 +90,7 @@ ext {
     junitDataproviderVersion = '1.10.1'
     restAssuredVersion = '3.0.1'
     apacheCommonsIoVersion = '2.5'
+    apacheCommonsLangVersion = '2.6'
 
     jettyVersion = '9.3.21.v20170918'
 
