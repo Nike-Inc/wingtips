@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.Closeable;
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -50,7 +51,7 @@ import java.util.concurrent.TimeUnit;
  * @author Nic Munroe
  */
 @SuppressWarnings("WeakerAccess")
-public class Span implements Closeable {
+public class Span implements Closeable, Serializable {
 
     private final String traceId;
     private final String spanId;
@@ -616,7 +617,7 @@ public class Span implements Closeable {
      * <p>The timestamp is retrieved via {@link #getTimestampEpochMicros()}, and the value associated with that
      * timestamp is retrieved via {@link #getValue()}.
      */
-    public static class TimestampedAnnotation {
+    public static class TimestampedAnnotation implements Serializable {
 
         private final long timestampEpochMicros;
         private final String value;

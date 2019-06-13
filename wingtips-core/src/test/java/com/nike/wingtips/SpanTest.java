@@ -12,6 +12,7 @@ import com.tngtech.java.junit.dataprovider.DataProvider;
 import com.tngtech.java.junit.dataprovider.DataProviderRunner;
 
 import org.assertj.core.data.Offset;
+import org.apache.commons.lang.SerializationUtils;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -1506,5 +1507,18 @@ public class SpanTest {
         assertThat(result.getTimestampEpochMicros()).isEqualTo(expectedTimestamp);
         assertThat(result.getValue()).isEqualTo(value);
     }
-}
 
+    @Test
+    public void span_serializes_and_deserializes_with_no_data_loss() {
+        Span span = new Span(
+            traceId, parentSpanId, spanId, spanName, sampleableForFullyCompleteSpan, userId,
+            spanPurposeForFullyCompletedSpan, startTimeEpochMicrosForFullyCompleteSpan,
+            startTimeNanosForFullyCompleteSpan, durationNanosForFullyCompletedSpan, tags, annotations
+        );
+
+        byte[] bytes = SerializationUtils.serialize(span);
+        Span deserializedSpan = (Span) SerializationUtils.deserialize(bytes);
+
+        verifySpanDeepEquals(span, deserializedSpan, false);
+    }
+}
