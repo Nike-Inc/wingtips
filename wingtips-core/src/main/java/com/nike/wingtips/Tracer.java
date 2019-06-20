@@ -835,8 +835,24 @@ public class Tracer {
      * separate from the application worker threads.
      */
     public void addSpanLifecycleListener(SpanLifecycleListener listener) {
-        if (listener != null)
+        if (listener != null) {
             this.spanLifecycleListeners.add(listener);
+        }
+    }
+
+    /**
+     * Prepends the given listener to the {@link #spanLifecycleListeners} list by using {@link List#add(int, Object)}
+     * and passing 0 for the index. This method will do nothing if you pass in null.
+     *
+     * <p><b>WARNING:</b> It's important that any {@link SpanLifecycleListener} you add is extremely lightweight or you
+     * risk distributed tracing becoming a major bottleneck for high throughput services. If any expensive work needs
+     * to be done in a {@link SpanLifecycleListener} then it should be done asynchronously on a thread or threadpool
+     * separate from the application worker threads.
+     */
+    public void addSpanLifecycleListenerFirst(SpanLifecycleListener listener) {
+        if (listener != null) {
+            this.spanLifecycleListeners.add(0, listener);
+        }
     }
 
     /**
@@ -848,6 +864,14 @@ public class Tracer {
             return false;
 
         return this.spanLifecycleListeners.remove(listener);
+    }
+
+    /**
+     * Calls {@link List#clear()} on {@link #spanLifecycleListeners} to remove all {@link SpanLifecycleListener}s.
+     * This is here primarily to ease unit testing where you need to "reset" {@link Tracer} between tests.
+     */
+    public void removeAllSpanLifecycleListeners() {
+        this.spanLifecycleListeners.clear();
     }
 
     /**

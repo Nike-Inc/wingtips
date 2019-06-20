@@ -20,7 +20,6 @@ import org.slf4j.MDC;
 
 import java.lang.reflect.Field;
 import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Deque;
@@ -47,9 +46,7 @@ public class TracerTest {
     private void resetTracer() {
         Tracer.getInstance().completeRequestSpan();
         Tracer.getInstance().setRootSpanSamplingStrategy(new SampleAllTheThingsStrategy());
-        for (SpanLifecycleListener listener : new ArrayList<>(Tracer.getInstance().getSpanLifecycleListeners())) {
-            Tracer.getInstance().removeSpanLifecycleListener(listener);
-        }
+        Tracer.getInstance().removeAllSpanLifecycleListeners();
         Tracer.getInstance().setSpanLoggingRepresentation(Tracer.SpanLoggingRepresentation.JSON);
     }
 
@@ -810,6 +807,40 @@ public class TracerTest {
     }
 
     @Test
+    public void addSpanLifecycleListenerFirst_should_work_as_advertised() {
+        // given
+        SpanLifecycleListener listener1 = mock(SpanLifecycleListener.class);
+        SpanLifecycleListener listener2 = mock(SpanLifecycleListener.class);
+        SpanLifecycleListener listener3 = mock(SpanLifecycleListener.class);
+
+        Tracer.getInstance().addSpanLifecycleListener(listener1);
+        Tracer.getInstance().addSpanLifecycleListener(listener2);
+
+        assertThat(Tracer.getInstance().getSpanLifecycleListeners()).isEqualTo(Arrays.asList(listener1, listener2));
+
+        // when
+        Tracer.getInstance().addSpanLifecycleListenerFirst(listener3);
+
+        // then
+        assertThat(Tracer.getInstance().getSpanLifecycleListeners()).hasSize(3);
+        assertThat(Tracer.getInstance().getSpanLifecycleListeners().get(0)).isEqualTo(listener3);
+        assertThat(Tracer.getInstance().getSpanLifecycleListeners())
+            .isEqualTo(Arrays.asList(listener3, listener1, listener2));
+    }
+
+    @Test
+    public void addSpanLifecycleListenerFirst_should_do_nothing_if_passed_null() {
+        // given
+        assertThat(Tracer.getInstance().getSpanLifecycleListeners()).isEmpty();
+
+        // when
+        Tracer.getInstance().addSpanLifecycleListenerFirst(null);
+
+        // then
+        assertThat(Tracer.getInstance().getSpanLifecycleListeners()).isEmpty();
+    }
+
+    @Test
     public void removeSpanLifecycleListener_should_work_as_advertised() {
         // given
         SpanLifecycleListener listener = mock(SpanLifecycleListener.class);
@@ -840,6 +871,26 @@ public class TracerTest {
         assertThat(result).isFalse();
         assertThat(Tracer.getInstance().getSpanLifecycleListeners()).hasSize(1);
         assertThat(Tracer.getInstance().getSpanLifecycleListeners().get(0)).isEqualTo(listener);
+    }
+
+    @Test
+    public void removeAllSpanLifecycleListeners_should_work_as_advertised() {
+        // given
+        SpanLifecycleListener listener1 = mock(SpanLifecycleListener.class);
+        SpanLifecycleListener listener2 = mock(SpanLifecycleListener.class);
+
+        Tracer.getInstance().addSpanLifecycleListener(listener1);
+        Tracer.getInstance().addSpanLifecycleListener(listener2);
+
+        assertThat(Tracer.getInstance().getSpanLifecycleListeners())
+            .isNotEmpty()
+            .hasSize(2);
+
+        // when
+        Tracer.getInstance().removeAllSpanLifecycleListeners();
+
+        // then
+        assertThat(Tracer.getInstance().getSpanLifecycleListeners()).isEmpty();
     }
 
     @Test
