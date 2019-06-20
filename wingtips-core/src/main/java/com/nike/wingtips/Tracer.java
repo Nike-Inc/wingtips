@@ -774,8 +774,13 @@ public class Tracer {
             );
             return;
         }
-        else
+        else {
             span.complete();
+        }
+
+        // Notify listeners after completion but before logging to allow listeners to do final span modifications and
+        //      have them be reflected in the log message (e.g. change span name, add tags/annotations, etc).
+        notifySpanCompleted(span);
 
         // Log the span if it was sampleable.
         if (span.isSampleable()) {
@@ -783,9 +788,6 @@ public class Tracer {
             Logger loggerToUse = containsIncorrectTimingInfo ? invalidSpanLogger : validSpanLogger;
             loggerToUse.info("{}[DISTRIBUTED_TRACING] {}", infoTag, serializeSpanToDesiredStringRepresentation(span));
         }
-
-        // Notify listeners.
-        notifySpanCompleted(span);
     }
 
     /**
