@@ -29,9 +29,10 @@ import zipkin2.Endpoint;
  * if necessary. You can enable sanitization by using the alternate {@link
  * WingtipsToZipkinSpanConverterDefaultImpl#WingtipsToZipkinSpanConverterDefaultImpl(boolean)} constructor and passing
  * true. If you enable sanitization and this class sees a badly formatted ID, then it will convert it to the proper
- * lowerhex format, add a {@link #SANITIZED_ID_LOG_MSG log message} with the original and sanitized IDs for correlation,
- * and add a Zipkin {@code invalid.[trace/span/parent]_id} tag with a value of the original ID. The sanitization is
- * done in a deterministic way so that the same original ID input will always be sanitized into the same output.
+ * lowerhex format, add a {@code invalid.[trace/span/parent]_id} tag with a value of the original ID to the Zipkin span,
+ * and add a {@code sanitized_[trace/span/parent]_id} tag with the sanitized ID value to the Wingtips span. The
+ * sanitization is done in a deterministic way so that the same original ID input will always be sanitized into the same
+ * output.
  *
  * @author Nic Munroe
  */
@@ -39,8 +40,6 @@ import zipkin2.Endpoint;
 public class WingtipsToZipkinSpanConverterDefaultImpl implements WingtipsToZipkinSpanConverter {
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
-
-    private static final String SANITIZED_ID_LOG_MSG = "Detected invalid ID format. orig_id={}, sanitized_id={}";
 
     protected final boolean enableIdSanitization;
 
@@ -79,12 +78,15 @@ public class WingtipsToZipkinSpanConverterDefaultImpl implements WingtipsToZipki
             
         if (!spanId.equals(wingtipsSpan.getSpanId())) {
             spanBuilder.putTag("invalid.span_id", wingtipsSpan.getSpanId());
+            wingtipsSpan.putTag("sanitized_span_id", spanId);
         }
         if (!traceId.equals(wingtipsSpan.getTraceId())) {
             spanBuilder.putTag("invalid.trace_id", wingtipsSpan.getTraceId());
+            wingtipsSpan.putTag("sanitized_trace_id", traceId);
         }
         if (parentId != null && !parentId.equals(wingtipsSpan.getParentSpanId())) {
             spanBuilder.putTag("invalid.parent_id", wingtipsSpan.getParentSpanId());
+            wingtipsSpan.putTag("sanitized_parent_id", parentId);
         }
 
         // Iterate over existing wingtips annotations and add them to the zipkin builder.
@@ -95,7 +97,6 @@ public class WingtipsToZipkinSpanConverterDefaultImpl implements WingtipsToZipki
         return spanBuilder.build();
     }
 
-    @SuppressWarnings("WeakerAccess")
     protected zipkin2.Span.Kind determineZipkinKind(Span wingtipsSpan) {
         SpanPurpose wtsp = wingtipsSpan.getSpanPurpose();
 
@@ -114,7 +115,7 @@ public class WingtipsToZipkinSpanConverterDefaultImpl implements WingtipsToZipki
         else {
             // This case should technically be impossible, but in case it happens we'll log a warning and default to
             //      no Zipkin kind.
-            logger.warn("Unhandled SpanPurpose type: {}", String.valueOf(wtsp));
+            logger.warn("Unhandled SpanPurpose type: {}", wtsp);
             return null;
         }
     }
@@ -136,18 +137,14 @@ public class WingtipsToZipkinSpanConverterDefaultImpl implements WingtipsToZipki
             else if (isHex(originalId, true)) {
                 // It wasn't lowerhex, but it is hex and it is the correct number of chars.
                 //      We can trivially convert to valid lowerhex by lowercasing the ID.
-                String sanitizedId = originalId.toLowerCase();
-                logger.info(SANITIZED_ID_LOG_MSG, originalId, sanitizedId);
-                return sanitizedId;
+                return originalId.toLowerCase();
             }
         }
 
         // If the originalId can be parsed as a long, then its sanitized ID is the lowerhex representation of that long.
         Long originalIdAsRawLong = attemptToConvertToLong(originalId);
         if (originalIdAsRawLong != null) {
-            String sanitizedId = TraceAndSpanIdGenerator.longToUnsignedLowerHexString(originalIdAsRawLong);
-            logger.info(SANITIZED_ID_LOG_MSG, originalId, sanitizedId);
-            return sanitizedId;
+            return TraceAndSpanIdGenerator.longToUnsignedLowerHexString(originalIdAsRawLong);
         }
 
         // If the originalId can be parsed as a UUID and is allowed to be 128 bit,
@@ -155,7 +152,6 @@ public class WingtipsToZipkinSpanConverterDefaultImpl implements WingtipsToZipki
         if (allow128Bit) {
             String sanitizedId = attemptToSanitizeAsUuid(originalId);
             if (sanitizedId != null) {
-                logger.info(SANITIZED_ID_LOG_MSG, originalId, sanitizedId);
                 return sanitizedId;
             }
         }
@@ -167,9 +163,7 @@ public class WingtipsToZipkinSpanConverterDefaultImpl implements WingtipsToZipki
         //      ("TRUNCATION OF A MESSAGE DIGEST") here:
         //      https://csrc.nist.gov/csrc/media/publications/fips/180/4/final/documents/fips180-4-draft-aug2014.pdf
         int allowedNumChars = allow128Bit ? 32 : 16;
-        String sanitizedId = DigestUtils.sha256Hex(originalId).toLowerCase().substring(0, allowedNumChars);
-        logger.info(SANITIZED_ID_LOG_MSG, originalId, sanitizedId);
-        return sanitizedId;
+        return DigestUtils.sha256Hex(originalId).toLowerCase().substring(0, allowedNumChars);
     }
 
     protected boolean isLowerHex(String id) {

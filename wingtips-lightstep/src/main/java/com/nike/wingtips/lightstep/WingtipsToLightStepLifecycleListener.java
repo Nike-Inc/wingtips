@@ -34,13 +34,12 @@ import static java.util.Objects.requireNonNull;
  * @author parker@lightstep.com
  */
 
+@SuppressWarnings("WeakerAccess")
 public class WingtipsToLightStepLifecycleListener implements SpanLifecycleListener {
 
     // we borrowed the logging and exception log rate limiting from the Zipkin plugin.
     private final Logger lightStepToWingtipsLogger =
         LoggerFactory.getLogger("LIGHTSTEP_SPAN_CONVERSION_OR_HANDLING_ERROR");
-
-    private static final String SANITIZED_ID_LOG_MSG = "Detected invalid ID format. orig_id={}, sanitized_id={}";
 
     private final AtomicLong spanHandlingErrorCounter = new AtomicLong(0);
     private long lastSpanHandlingErrorLogTimeEpochMillis = 0;
@@ -59,13 +58,11 @@ public class WingtipsToLightStepLifecycleListener implements SpanLifecycleListen
         this(buildJreTracerFromOptions(serviceName, accessToken, satelliteUrl, satellitePort));
     }
 
-    @SuppressWarnings("ResultOfMethodCallIgnored")
     public WingtipsToLightStepLifecycleListener(@NotNull JRETracer tracer) {
         requireNonNull(tracer, "tracer cannot be null.");
         this.tracer = tracer;
     }
 
-    @SuppressWarnings("ResultOfMethodCallIgnored")
     private static @NotNull JRETracer buildJreTracerFromOptions(
         @NotNull String serviceName,
         @NotNull String accessToken,
@@ -83,7 +80,7 @@ public class WingtipsToLightStepLifecycleListener implements SpanLifecycleListen
                     .withComponentName(serviceName)
                     .withCollectorHost(satelliteUrl)
                     .withCollectorPort(satellitePort)
-                    .withVerbosity(4)
+                    .withVerbosity(1)
                     .build()
             );
         } catch (Exception ex) {
@@ -159,12 +156,15 @@ public class WingtipsToLightStepLifecycleListener implements SpanLifecycleListen
             //      available via the wingtips.*_id tags.
             if (!wtSanitizedSpanId.equals(wingtipsSpan.getSpanId())) {
                 lsSpan.setTag("wingtips.span_id.invalid", true);
+                wingtipsSpan.putTag("sanitized_span_id", wtSanitizedSpanId);
             }
             if (!wtSanitizedTraceId.equals(wingtipsSpan.getTraceId())) {
                 lsSpan.setTag("wingtips.trace_id.invalid", true);
+                wingtipsSpan.putTag("sanitized_trace_id", wtSanitizedTraceId);
             }
             if (wtSanitizedParentId != null && !wtSanitizedParentId.equals(wingtipsSpan.getParentSpanId())) {
                 lsSpan.setTag("wingtips.parent_id.invalid", true);
+                wingtipsSpan.putTag("sanitized_parent_id", wtSanitizedParentId);
             }
 
             // on finish, the tracer library initialized on the creation of this listener will cache and transport the span
@@ -210,18 +210,14 @@ public class WingtipsToLightStepLifecycleListener implements SpanLifecycleListen
             else if (isHex(originalId, true)) {
                 // It wasn't lowerhex, but it is hex and it is the correct number of chars.
                 //      We can trivially convert to valid lowerhex by lowercasing the ID.
-                String sanitizedId = originalId.toLowerCase();
-                lightStepToWingtipsLogger.info(SANITIZED_ID_LOG_MSG, originalId, sanitizedId);
-                return sanitizedId;
+                return originalId.toLowerCase();
             }
         }
 
         // If the originalId can be parsed as a long, then its sanitized ID is the lowerhex representation of that long.
         Long originalIdAsRawLong = attemptToConvertToLong(originalId);
         if (originalIdAsRawLong != null) {
-            String sanitizedId = TraceAndSpanIdGenerator.longToUnsignedLowerHexString(originalIdAsRawLong);
-            lightStepToWingtipsLogger.info(SANITIZED_ID_LOG_MSG, originalId, sanitizedId);
-            return sanitizedId;
+            return TraceAndSpanIdGenerator.longToUnsignedLowerHexString(originalIdAsRawLong);
         }
 
         // If the originalId can be parsed as a UUID and is allowed to be 128 bit,
@@ -229,7 +225,6 @@ public class WingtipsToLightStepLifecycleListener implements SpanLifecycleListen
         if (allow128Bit) {
             String sanitizedId = attemptToSanitizeAsUuid(originalId);
             if (sanitizedId != null) {
-                lightStepToWingtipsLogger.info(SANITIZED_ID_LOG_MSG, originalId, sanitizedId);
                 return sanitizedId;
             }
         }
@@ -241,9 +236,7 @@ public class WingtipsToLightStepLifecycleListener implements SpanLifecycleListen
         //      ("TRUNCATION OF A MESSAGE DIGEST") here:
         //      https://csrc.nist.gov/csrc/media/publications/fips/180/4/final/documents/fips180-4-draft-aug2014.pdf
         int allowedNumChars = allow128Bit ? 32 : 16;
-        String sanitizedId = DigestUtils.sha256Hex(originalId).toLowerCase().substring(0, allowedNumChars);
-        lightStepToWingtipsLogger.info(SANITIZED_ID_LOG_MSG, originalId, sanitizedId);
-        return sanitizedId;
+        return DigestUtils.sha256Hex(originalId).toLowerCase().substring(0, allowedNumChars);
     }
 
     protected boolean isLowerHex(String id) {
