@@ -80,7 +80,7 @@ public class WingtipsToLightStepLifecycleListener implements SpanLifecycleListen
                     .withComponentName(serviceName)
                     .withCollectorHost(satelliteUrl)
                     .withCollectorPort(satellitePort)
-                    .withVerbosity(4)
+                    .withVerbosity(1)
                     .build()
             );
         } catch (Exception ex) {
