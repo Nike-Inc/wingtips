@@ -111,10 +111,7 @@ public class RequestTracingFilterOldServletComponentTest {
     }
 
     private void clearTracerSpanLifecycleListeners() {
-        List<SpanLifecycleListener> listeners = new ArrayList<>(Tracer.getInstance().getSpanLifecycleListeners());
-        for (SpanLifecycleListener listener : listeners) {
-            Tracer.getInstance().removeSpanLifecycleListener(listener);
-        }
+        Tracer.getInstance().removeAllSpanLifecycleListeners();
     }
 
     @DataProvider(value = {

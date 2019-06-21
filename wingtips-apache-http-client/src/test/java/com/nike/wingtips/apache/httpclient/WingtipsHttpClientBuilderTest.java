@@ -2,11 +2,11 @@ package com.nike.wingtips.apache.httpclient;
 
 import com.nike.wingtips.Span;
 import com.nike.wingtips.Tracer;
+import com.nike.wingtips.apache.httpclient.tag.ApacheHttpClientTagAdapter;
 import com.nike.wingtips.apache.httpclient.testutils.ArgCapturingHttpTagAndSpanNamingStrategy;
 import com.nike.wingtips.apache.httpclient.testutils.ArgCapturingHttpTagAndSpanNamingStrategy.InitialSpanNameArgs;
 import com.nike.wingtips.apache.httpclient.testutils.ArgCapturingHttpTagAndSpanNamingStrategy.RequestTaggingArgs;
 import com.nike.wingtips.apache.httpclient.testutils.ArgCapturingHttpTagAndSpanNamingStrategy.ResponseTaggingArgs;
-import com.nike.wingtips.apache.httpclient.tag.ApacheHttpClientTagAdapter;
 import com.nike.wingtips.lifecyclelistener.SpanLifecycleListener;
 import com.nike.wingtips.tags.HttpTagAndSpanNamingAdapter;
 import com.nike.wingtips.tags.HttpTagAndSpanNamingStrategy;
@@ -142,16 +142,7 @@ public class WingtipsHttpClientBuilderTest {
     private void resetTracing() {
         MDC.clear();
         Tracer.getInstance().unregisterFromThread();
-        removeSpanRecorderLifecycleListener();
-    }
-
-    private void removeSpanRecorderLifecycleListener() {
-        List<SpanLifecycleListener> listeners = new ArrayList<>(Tracer.getInstance().getSpanLifecycleListeners());
-        for (SpanLifecycleListener listener : listeners) {
-            if (listener instanceof SpanRecorder) {
-                Tracer.getInstance().removeSpanLifecycleListener(listener);
-            }
-        }
+        Tracer.getInstance().removeAllSpanLifecycleListeners();
     }
 
     @Test

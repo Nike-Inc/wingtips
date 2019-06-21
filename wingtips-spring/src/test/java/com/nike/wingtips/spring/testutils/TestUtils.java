@@ -32,11 +32,7 @@ public class TestUtils {
     public static void resetTracing() {
         MDC.clear();
         Tracer.getInstance().unregisterFromThread();
-
-        List<SpanLifecycleListener> listeners = new ArrayList<>(Tracer.getInstance().getSpanLifecycleListeners());
-        for (SpanLifecycleListener listener : listeners) {
-            Tracer.getInstance().removeSpanLifecycleListener(listener);
-        }
+        Tracer.getInstance().removeAllSpanLifecycleListeners();
     }
 
     public static class SpanRecorder implements SpanLifecycleListener {

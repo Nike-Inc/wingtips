@@ -110,16 +110,7 @@ public class SpringAsyncAndBlockingRestTemplateWithWingtipsComponentTest {
     private void resetTracing() {
         MDC.clear();
         Tracer.getInstance().unregisterFromThread();
-        removeSpanRecorderLifecycleListener();
-    }
-
-    private void removeSpanRecorderLifecycleListener() {
-        List<SpanLifecycleListener> listeners = new ArrayList<>(Tracer.getInstance().getSpanLifecycleListeners());
-        for (SpanLifecycleListener listener : listeners) {
-            if (listener instanceof SpanRecorder) {
-                Tracer.getInstance().removeSpanLifecycleListener(listener);
-            }
-        }
+        Tracer.getInstance().removeAllSpanLifecycleListeners();
     }
 
     @DataProvider(value = {
