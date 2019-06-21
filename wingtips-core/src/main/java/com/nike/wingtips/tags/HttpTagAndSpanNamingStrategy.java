@@ -155,7 +155,7 @@ public abstract class HttpTagAndSpanNamingStrategy<REQ, RES> {
      * Callers must always check for a null return value, and generate a backup span name in those cases.</b>
      *
      * <p>This method is final and delegates to {@link #doGetInitialSpanName(Object, HttpTagAndSpanNamingAdapter)}.
-     * That delegate method call is surrounded with a try/catch so that it this method will never throw an exception.
+     * That delegate method call is surrounded with a try/catch so that this method will never throw an exception.
      * If an exception occurs then the error will be logged and null will be returned. Since this method is final, if
      * you want to override the behavior of this method then you should override {@link
      * #doGetInitialSpanName(Object, HttpTagAndSpanNamingAdapter)}.
@@ -198,7 +198,7 @@ public abstract class HttpTagAndSpanNamingStrategy<REQ, RES> {
      *
      * <p>This method is final and delegates to {@link
      * #doHandleRequestTagging(Span, Object, HttpTagAndSpanNamingAdapter)}. That delegate method call is surrounded
-     * with a try/catch so that it this method will never throw an exception. If an exception occurs then the error
+     * with a try/catch so that this method will never throw an exception. If an exception occurs then the error
      * will be logged but will not propagate outside this method. Since this method is final, if you want to override
      * the behavior of this method then you should override {@link
      * #doHandleRequestTagging(Span, Object, HttpTagAndSpanNamingAdapter)}.
@@ -252,7 +252,7 @@ public abstract class HttpTagAndSpanNamingStrategy<REQ, RES> {
      *     <li>{@link #doExtraWingtipsTagging(Span, Object, Object, Throwable, HttpTagAndSpanNamingAdapter)}</li>
      * </ul>
      *
-     * Those delegate method calls are surrounded with try/catch blocks so that it this method will never throw an
+     * Those delegate method calls are surrounded with try/catch blocks so that this method will never throw an
      * exception, and an exception in one won't prevent the others from executing. If an exception occurs then the
      * error will be logged but will not propagate outside this method. Since this method is final, if you want to
      * override the behavior of this method then you should override the relevant delegate method(s).
