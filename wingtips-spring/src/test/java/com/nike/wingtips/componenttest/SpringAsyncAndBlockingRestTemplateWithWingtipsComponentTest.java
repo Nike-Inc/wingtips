@@ -43,7 +43,7 @@ import org.springframework.web.client.RestTemplate;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.util.ArrayList;
-import java.util.Comparator;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
@@ -110,16 +110,7 @@ public class SpringAsyncAndBlockingRestTemplateWithWingtipsComponentTest {
     private void resetTracing() {
         MDC.clear();
         Tracer.getInstance().unregisterFromThread();
-        removeSpanRecorderLifecycleListener();
-    }
-
-    private void removeSpanRecorderLifecycleListener() {
-        List<SpanLifecycleListener> listeners = new ArrayList<>(Tracer.getInstance().getSpanLifecycleListeners());
-        for (SpanLifecycleListener listener : listeners) {
-            if (listener instanceof SpanRecorder) {
-                Tracer.getInstance().removeSpanLifecycleListener(listener);
-            }
-        }
+        Tracer.getInstance().removeAllSpanLifecycleListeners();
     }
 
     @DataProvider(value = {
@@ -349,7 +340,7 @@ public class SpringAsyncAndBlockingRestTemplateWithWingtipsComponentTest {
     @SuppressWarnings("WeakerAccess")
     private static class SpanRecorder implements SpanLifecycleListener {
 
-        public final List<Span> completedSpans = new ArrayList<>();
+        public final List<Span> completedSpans = Collections.synchronizedList(new ArrayList<>());
 
         @Override
         public void spanStarted(Span span) {

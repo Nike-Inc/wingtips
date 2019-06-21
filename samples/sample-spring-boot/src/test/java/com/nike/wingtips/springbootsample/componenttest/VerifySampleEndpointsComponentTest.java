@@ -95,7 +95,7 @@ public class VerifySampleEndpointsComponentTest {
 
     @Before
     public void beforeMethod() {
-        removeSpanRecorderLifecycleListener();
+        clearAllSpanLifecycleListeners();
 
         spanRecorder = new SpanRecorder();
         Tracer.getInstance().addSpanLifecycleListener(spanRecorder);
@@ -103,16 +103,11 @@ public class VerifySampleEndpointsComponentTest {
 
     @After
     public void afterMethod() {
-        removeSpanRecorderLifecycleListener();
+        clearAllSpanLifecycleListeners();
     }
 
-    private void removeSpanRecorderLifecycleListener() {
-        List<SpanLifecycleListener> listeners = new ArrayList<>(Tracer.getInstance().getSpanLifecycleListeners());
-        for (SpanLifecycleListener listener : listeners) {
-            if (listener instanceof SpanRecorder) {
-                Tracer.getInstance().removeSpanLifecycleListener(listener);
-            }
-        }
+    private void clearAllSpanLifecycleListeners() {
+        Tracer.getInstance().removeAllSpanLifecycleListeners();
     }
 
     @DataProvider(value = {
@@ -833,7 +828,7 @@ public class VerifySampleEndpointsComponentTest {
     @SuppressWarnings("WeakerAccess")
     public static class SpanRecorder implements SpanLifecycleListener {
 
-        public final List<Span> completedSpans = new ArrayList<>();
+        public final List<Span> completedSpans = Collections.synchronizedList(new ArrayList<>());
 
         @Override
         public void spanStarted(Span span) { }

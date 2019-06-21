@@ -31,7 +31,6 @@ import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.ServerSocket;
 import java.net.URL;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -66,10 +65,7 @@ public class WingtipsWithZipkinSpringBootConfigurationTest {
     }
 
     private void clearTracerSpanLifecycleListeners() {
-        List<SpanLifecycleListener> listeners = new ArrayList<>(Tracer.getInstance().getSpanLifecycleListeners());
-        for (SpanLifecycleListener listener : listeners) {
-            Tracer.getInstance().removeSpanLifecycleListener(listener);
-        }
+        Tracer.getInstance().removeAllSpanLifecycleListeners();
     }
 
     @SuppressWarnings("SameParameterValue")

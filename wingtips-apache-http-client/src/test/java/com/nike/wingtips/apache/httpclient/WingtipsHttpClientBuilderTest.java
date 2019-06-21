@@ -2,11 +2,11 @@ package com.nike.wingtips.apache.httpclient;
 
 import com.nike.wingtips.Span;
 import com.nike.wingtips.Tracer;
+import com.nike.wingtips.apache.httpclient.tag.ApacheHttpClientTagAdapter;
 import com.nike.wingtips.apache.httpclient.testutils.ArgCapturingHttpTagAndSpanNamingStrategy;
 import com.nike.wingtips.apache.httpclient.testutils.ArgCapturingHttpTagAndSpanNamingStrategy.InitialSpanNameArgs;
 import com.nike.wingtips.apache.httpclient.testutils.ArgCapturingHttpTagAndSpanNamingStrategy.RequestTaggingArgs;
 import com.nike.wingtips.apache.httpclient.testutils.ArgCapturingHttpTagAndSpanNamingStrategy.ResponseTaggingArgs;
-import com.nike.wingtips.apache.httpclient.tag.ApacheHttpClientTagAdapter;
 import com.nike.wingtips.lifecyclelistener.SpanLifecycleListener;
 import com.nike.wingtips.tags.HttpTagAndSpanNamingAdapter;
 import com.nike.wingtips.tags.HttpTagAndSpanNamingStrategy;
@@ -37,6 +37,7 @@ import org.slf4j.MDC;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -141,16 +142,7 @@ public class WingtipsHttpClientBuilderTest {
     private void resetTracing() {
         MDC.clear();
         Tracer.getInstance().unregisterFromThread();
-        removeSpanRecorderLifecycleListener();
-    }
-
-    private void removeSpanRecorderLifecycleListener() {
-        List<SpanLifecycleListener> listeners = new ArrayList<>(Tracer.getInstance().getSpanLifecycleListeners());
-        for (SpanLifecycleListener listener : listeners) {
-            if (listener instanceof SpanRecorder) {
-                Tracer.getInstance().removeSpanLifecycleListener(listener);
-            }
-        }
+        Tracer.getInstance().removeAllSpanLifecycleListeners();
     }
 
     @Test
@@ -494,7 +486,7 @@ public class WingtipsHttpClientBuilderTest {
 
     private static class SpanRecorder implements SpanLifecycleListener {
 
-        public final List<Span> completedSpans = new ArrayList<>();
+        public final List<Span> completedSpans = Collections.synchronizedList(new ArrayList<>());
 
         @Override
         public void spanStarted(Span span) { }

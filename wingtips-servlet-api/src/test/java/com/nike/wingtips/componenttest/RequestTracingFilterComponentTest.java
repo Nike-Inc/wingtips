@@ -90,10 +90,7 @@ public class RequestTracingFilterComponentTest {
     }
 
     private void clearTracerSpanLifecycleListeners() {
-        List<SpanLifecycleListener> listeners = new ArrayList<>(Tracer.getInstance().getSpanLifecycleListeners());
-        for (SpanLifecycleListener listener : listeners) {
-            Tracer.getInstance().removeSpanLifecycleListener(listener);
-        }
+        Tracer.getInstance().removeAllSpanLifecycleListeners();
     }
 
     @DataProvider(value = {
@@ -462,7 +459,7 @@ public class RequestTracingFilterComponentTest {
 
     public static class SpanRecorder implements SpanLifecycleListener {   
 
-        public final List<Span> completedSpans = new ArrayList<>();
+        public final List<Span> completedSpans = Collections.synchronizedList(new ArrayList<>());
 
         @Override
         public void spanStarted(Span span) {
