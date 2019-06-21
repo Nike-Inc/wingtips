@@ -184,22 +184,39 @@ public class Span implements Closeable, Serializable {
 
     /**
      * @param spanName The {@link Span#getSpanName()} to use for the new child sub-span.
-     * @param spanPurpose The {@link SpanPurpose} for the new child span. See the javadocs for {@link SpanPurpose} for full details on what each enum option
-     *                    means. If you pass in null for this then {@link SpanPurpose#UNKNOWN} will be used.
-     * @return A new uncompleted span representing a child of this instance. The returned instance's {@link #getParentSpanId()} will be this instance's
-     *          {@link #getSpanId()}, its {@link #getSpanName()} will be the given value, its {@link #getSpanId()} will be randomly generated, and its
-     *          {@link #getSpanStartTimeEpochMicros()} and {@link #getSpanStartTimeNanos()} values will be set to the appropriate values based on when this
-     *          method is called. It will share this instance's {@link #getTraceId()}, {@link #isSampleable()}, and {@link #getUserId()} values.
+     * @param spanPurpose The {@link SpanPurpose} for the new child span. See the javadocs for {@link SpanPurpose} for
+     * full details on what each enum option means. If you pass in null for this then {@link SpanPurpose#UNKNOWN} will
+     * be used.
+     * @return A new uncompleted span representing a child of this instance. The returned instance's {@link
+     * #getParentSpanId()} will be this instance's {@link #getSpanId()}, its {@link #getSpanName()} will be the given
+     * value, its {@link #getSpanId()} will be randomly generated, and its {@link #getSpanStartTimeEpochMicros()} and
+     * {@link #getSpanStartTimeNanos()} values will be set to the appropriate values based on when this method is
+     * called. It will share this instance's {@link #getTraceId()}, {@link #isSampleable()}, and {@link #getUserId()}
+     * values.
      */
     public Span generateChildSpan(String spanName, SpanPurpose spanPurpose) {
+        // Rather than losing precision for the child span's start time by using System.currentTimeMillis(), we
+        //      calculate the child's start time based on this instance's (the parent's) start time epoch micros,
+        //      plus a micro offset calculated from the current nano time minus the parent's nano start time.
+        // NOTE: This could cause a little drift from System.currentTimeMillis() if the parent span has been running
+        //      for several minutes before the child span is created, but it's still probably the right tradeoff and
+        //      will prevent surprising results when visualizing things (e.g. a child annotation appearing "after" a
+        //      parent annotation, even though the child event must have strictly happened before the parent event in
+        //      reality). Between systems, those kinds of oddities are easily explained by clock drift. But on the
+        //      same system, it can be a head-scratcher.
+        long currentNanoTime = System.nanoTime();
+        long nanosSinceParentStart = currentNanoTime - this.spanStartTimeNanos;
+        long childStartTimeEpochMicros =
+            this.spanStartTimeEpochMicros + TimeUnit.NANOSECONDS.toMicros(nanosSinceParentStart);
+
         return Span.newBuilder(spanName, spanPurpose)
                    .withTraceId(this.getTraceId())
                    .withSampleable(this.isSampleable())
                    .withUserId(this.getUserId())
                    .withParentSpanId(this.getSpanId())
                    .withSpanId(TraceAndSpanIdGenerator.generateId())
-                   .withSpanStartTimeEpochMicros(TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis()))
-                   .withSpanStartTimeNanos(System.nanoTime())
+                   .withSpanStartTimeEpochMicros(childStartTimeEpochMicros)
+                   .withSpanStartTimeNanos(currentNanoTime)
                    .withDurationNanos(null)
                    .build();
     }

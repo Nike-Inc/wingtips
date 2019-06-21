@@ -329,10 +329,8 @@ public class TracerTest {
 
         // when: Tracer.startSubSpan(String) is called to start a subspan
         long beforeNanoTime = System.nanoTime();
-        long beforeEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
         Tracer.getInstance().startSubSpan("subspan", spanPurpose);
         long afterNanoTime = System.nanoTime();
-        long afterEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
 
         // then: a new subspan is started that uses the first span as its parent, and the MDC is updated
         assertThat(getSpanStackSize()).isEqualTo(2);
@@ -340,7 +338,13 @@ public class TracerTest {
         assertThat(subspan).isNotNull();
         assertThat(subspan.getSpanName()).isEqualTo("subspan");
         assertThat(subspan.getParentSpanId()).isEqualTo(firstSpan.getSpanId());
-        assertThat(subspan.getSpanStartTimeEpochMicros()).isBetween(beforeEpochMicros, afterEpochMicros);
+
+        long expectedMinChildStartEpochMicros =
+            firstSpan.getSpanStartTimeEpochMicros() + TimeUnit.NANOSECONDS.toMicros(beforeNanoTime - firstSpan.getSpanStartTimeNanos());
+        long expectedMaxChildStartEpochMicros =
+            firstSpan.getSpanStartTimeEpochMicros() + TimeUnit.NANOSECONDS.toMicros(afterNanoTime - firstSpan.getSpanStartTimeNanos());
+        assertThat(subspan.getSpanStartTimeEpochMicros()).isBetween(expectedMinChildStartEpochMicros, expectedMaxChildStartEpochMicros);
+        
         assertThat(subspan.getSpanStartTimeNanos()).isBetween(beforeNanoTime, afterNanoTime);
         assertThat(subspan.isCompleted()).isFalse();
         assertThat(subspan.getDurationNanos()).isNull();

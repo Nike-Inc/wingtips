@@ -344,10 +344,8 @@ public class SpanTest {
 
         // when: generateChildSpan is used to create a child span with a new span name
         long beforeCallNanos = System.nanoTime();
-        long beforeCallEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
         Span childSpan = parentSpan.generateChildSpan(childSpanName, childSpanPurpose);
         long afterCallNanos = System.nanoTime();
-        long afterCallEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
 
         // then: returned object contains the expected values (new span ID, expected span name, parent span ID equal
         //      to parent's span ID, start time generated during call, not completed, no tags, no annotations, and
@@ -362,7 +360,12 @@ public class SpanTest {
         assertThat(childSpan.getSpanPurpose()).isEqualTo(childSpanPurpose);
         assertThat(childSpan.isSampleable()).isEqualTo(parentSpan.isSampleable());
 
-        assertThat(childSpan.getSpanStartTimeEpochMicros()).isBetween(beforeCallEpochMicros, afterCallEpochMicros);
+        long expectedMinChildStartEpochMicros =
+            parentSpan.getSpanStartTimeEpochMicros() + TimeUnit.NANOSECONDS.toMicros(beforeCallNanos - parentSpan.getSpanStartTimeNanos());
+        long expectedMaxChildStartEpochMicros =
+            parentSpan.getSpanStartTimeEpochMicros() + TimeUnit.NANOSECONDS.toMicros(afterCallNanos - parentSpan.getSpanStartTimeNanos());
+        assertThat(childSpan.getSpanStartTimeEpochMicros()).isBetween(expectedMinChildStartEpochMicros, expectedMaxChildStartEpochMicros);
+
         assertThat(childSpan.getSpanStartTimeNanos()).isBetween(beforeCallNanos, afterCallNanos);
         assertThat(childSpan.isCompleted()).isFalse();
         assertThat(childSpan.getDurationNanos()).isNull();
@@ -386,10 +389,8 @@ public class SpanTest {
 
         // when: generateChildSpan is used to create a child span with a new span name
         long beforeCallNanos = System.nanoTime();
-        long beforeCallEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
         Span childSpan = parentSpan.generateChildSpan(childSpanName, childSpanPurpose);
         long afterCallNanos = System.nanoTime();
-        long afterCallEpochMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis());
 
         // then: returned object contains the expected values (new span ID, expected span name, parent span ID equal
         //      to parent's span ID, start time generated during call, not completed, no tags, no annotations, and
@@ -404,7 +405,12 @@ public class SpanTest {
         assertThat(childSpan.getSpanPurpose()).isEqualTo(childSpanPurpose);
         assertThat(childSpan.isSampleable()).isEqualTo(parentSpan.isSampleable());
 
-        assertThat(childSpan.getSpanStartTimeEpochMicros()).isBetween(beforeCallEpochMicros, afterCallEpochMicros);
+        long expectedMinChildStartEpochMicros =
+            parentSpan.getSpanStartTimeEpochMicros() + TimeUnit.NANOSECONDS.toMicros(beforeCallNanos - parentSpan.getSpanStartTimeNanos());
+        long expectedMaxChildStartEpochMicros =
+            parentSpan.getSpanStartTimeEpochMicros() + TimeUnit.NANOSECONDS.toMicros(afterCallNanos - parentSpan.getSpanStartTimeNanos());
+        assertThat(childSpan.getSpanStartTimeEpochMicros()).isBetween(expectedMinChildStartEpochMicros, expectedMaxChildStartEpochMicros);
+        
         assertThat(childSpan.getSpanStartTimeNanos()).isBetween(beforeCallNanos, afterCallNanos);
         assertThat(childSpan.isCompleted()).isFalse();
         assertThat(childSpan.getDurationNanos()).isNull();
