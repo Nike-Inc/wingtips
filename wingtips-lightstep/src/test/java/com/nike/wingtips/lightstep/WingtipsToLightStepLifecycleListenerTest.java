@@ -18,7 +18,9 @@ import org.mockito.ArgumentCaptor;
 import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -216,6 +218,8 @@ public class WingtipsToLightStepLifecycleListenerTest {
         long expectedStopTimeMicros =
             wtSpan.getSpanStartTimeEpochMicros() + TimeUnit.NANOSECONDS.toMicros(wtSpan.getDurationNanos());
 
+        Map<String, String> origWtTags = new LinkedHashMap<>(wtSpan.getTags());
+
         // when
         listener.spanCompleted(wtSpan);
 
@@ -246,36 +250,53 @@ public class WingtipsToLightStepLifecycleListenerTest {
 
         verify(lsSpanBuilderMock).start();
 
-        assertThat(wtSpan.getTags()).hasSize(2);
+        int expectedNumWingtipsTags = 2;
+        if (!wtSpan.getSpanId().equals(expectedSanitizedSpanId)) {
+            expectedNumWingtipsTags++;
+        }
+        if (!wtSpan.getTraceId().equals(expectedSanitizedTraceId)) {
+            expectedNumWingtipsTags++;
+        }
+        if (wtSpan.getParentSpanId() != null && !wtSpan.getParentSpanId().equals(expectedSanitizedParentId)) {
+            expectedNumWingtipsTags++;
+        }
+
+        assertThat(wtSpan.getTags()).hasSize(expectedNumWingtipsTags);
         assertThat(wtSpan.getTimestampedAnnotations()).hasSize(2);
 
         wtSpan.getTimestampedAnnotations().forEach(
             annot -> verify(otSpanMock).log(annot.getTimestampEpochMicros(), annot.getValue())
         );
 
-        wtSpan.getTags().forEach(
+        origWtTags.forEach(
             (expectedTagKey, expectedTagValue) -> verify(otSpanMock).setTag(expectedTagKey, expectedTagValue)
         );
 
         if (!wtSpan.getSpanId().equals(expectedSanitizedSpanId)) {
             verify(otSpanMock).setTag("wingtips.span_id.invalid", true);
+            assertThat(wtSpan.getTags().get("sanitized_span_id")).isEqualTo(expectedSanitizedSpanId);
         }
         else {
             verify(otSpanMock, never()).setTag("wingtips.span_id.invalid", true);
+            assertThat(wtSpan.getTags().get("sanitized_span_id")).isNull();
         }
 
         if (!wtSpan.getTraceId().equals(expectedSanitizedTraceId)) {
             verify(otSpanMock).setTag("wingtips.trace_id.invalid", true);
+            assertThat(wtSpan.getTags().get("sanitized_trace_id")).isEqualTo(expectedSanitizedTraceId);
         }
         else {
             verify(otSpanMock, never()).setTag("wingtips.trace_id.invalid", true);
+            assertThat(wtSpan.getTags().get("sanitized_trace_id")).isNull();
         }
 
         if (wtSpan.getParentSpanId() != null && !wtSpan.getParentSpanId().equals(expectedSanitizedParentId)) {
             verify(otSpanMock).setTag("wingtips.parent_id.invalid", true);
+            assertThat(wtSpan.getTags().get("sanitized_parent_id")).isEqualTo(expectedSanitizedParentId);
         }
         else {
             verify(otSpanMock, never()).setTag("wingtips.parent_id.invalid", true);
+            assertThat(wtSpan.getTags().get("sanitized_parent_id")).isNull();
         }
 
         verify(otSpanMock).finish(expectedStopTimeMicros);

@@ -345,9 +345,15 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
                 .withDurationNanos(Math.abs(random.nextLong()))
                 .build();
 
-        String expectedZipkinInvalidIdTagValue = (scenario.expectedSanitizedResultForTraceId.equals(scenario.originalId))
-                                                 ? null
-                                                 : scenario.originalId;
+        String expectedZipkinInvalidIdTagValue =
+            (scenario.expectedSanitizedResultForTraceId.equals(scenario.originalId))
+            ? null // no tag if sanitization wasn't needed
+            : scenario.originalId;
+
+        String expectedWingtipsSanitizedIdTagValue =
+            (scenario.expectedSanitizedResultForTraceId.equals(scenario.originalId))
+            ? null // no tag if sanitization wasn't needed
+            : scenario.expectedSanitizedResultForTraceId;
 
         // when
         zipkin2.Span zipkinSpan = impl.convertWingtipsSpanToZipkinSpan(wingtipsSpan, zipkinEndpoint);
@@ -355,6 +361,7 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
         // then
         assertThat(zipkinSpan.traceId()).isEqualTo(scenario.expectedSanitizedResultForTraceId);
         assertThat(zipkinSpan.tags().get("invalid.trace_id")).isEqualTo(expectedZipkinInvalidIdTagValue);
+        assertThat(wingtipsSpan.getTags().get("sanitized_trace_id")).isEqualTo(expectedWingtipsSanitizedIdTagValue);
     }
 
     @UseDataProvider("idSanitizationScenarios")
@@ -377,6 +384,7 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
         // then
         assertThat(zipkinSpan.id()).isEqualTo(scenario.expectedSanitizedResultForSpanIdOrParentSpanId);
         assertThat(zipkinSpan.tags().get("invalid.span_id")).isEqualTo(scenario.originalId);
+        assertThat(wingtipsSpan.getTags().get("sanitized_span_id")).isEqualTo(scenario.expectedSanitizedResultForSpanIdOrParentSpanId);
     }
 
     @UseDataProvider("idSanitizationScenarios")
@@ -399,6 +407,7 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
         // then
         assertThat(zipkinSpan.parentId()).isEqualTo(scenario.expectedSanitizedResultForSpanIdOrParentSpanId);
         assertThat(zipkinSpan.tags().get("invalid.parent_id")).isEqualTo(scenario.originalId);
+        assertThat(wingtipsSpan.getTags().get("sanitized_parent_id")).isEqualTo(scenario.expectedSanitizedResultForSpanIdOrParentSpanId);
     }
 
     @Test
@@ -438,6 +447,9 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
         assertThat(zipkinSpan.tags().get("invalid.trace_id")).isEqualTo(badTraceId);
         assertThat(zipkinSpan.tags().get("invalid.span_id")).isEqualTo(badSpanId);
         assertThat(zipkinSpan.tags().get("invalid.parent_id")).isEqualTo(badParentSpanId);
+        assertThat(wingtipsSpan.getTags().get("sanitized_trace_id")).isEqualTo(expectedSanitizedTraceId);
+        assertThat(wingtipsSpan.getTags().get("sanitized_span_id")).isEqualTo(expectedSanitizedSpanId);
+        assertThat(wingtipsSpan.getTags().get("sanitized_parent_id")).isEqualTo(expectedSanitizedParentSpanId);
     }
 
     @UseDataProvider("idSanitizationScenarios")
