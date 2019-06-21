@@ -229,7 +229,7 @@ public class RequestTracingFilterOldServletComponentTest {
 
     public static class SpanRecorder implements SpanLifecycleListener {
 
-        final List<Span> completedSpans = new ArrayList<>();
+        final List<Span> completedSpans = Collections.synchronizedList(new ArrayList<Span>());
 
         @Override
         public void spanStarted(Span span) { }

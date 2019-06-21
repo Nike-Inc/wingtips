@@ -837,7 +837,7 @@ public class VerifySampleEndpointsComponentTest {
     @SuppressWarnings("WeakerAccess")
     public static class SpanRecorder implements SpanLifecycleListener {
 
-        public final List<Span> completedSpans = new ArrayList<>();
+        public final List<Span> completedSpans = Collections.synchronizedList(new ArrayList<>());
 
         @Override
         public void spanStarted(Span span) { }
