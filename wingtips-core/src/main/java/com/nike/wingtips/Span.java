@@ -10,6 +10,7 @@ import java.io.Closeable;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -66,8 +67,10 @@ public class Span implements Closeable, Serializable {
     //      tags plus a few extra without any internal rehashing of the map as tags are added.
     //      This seems about right for most use cases, so we'll leave the default settings.
     private final Map<String,String> tags = new LinkedHashMap<>();
+    private final Map<String,String> unmodifiableTags = Collections.unmodifiableMap(tags);
     // The default initial capacity (10) seems ok for the annotations list.
     private final List<TimestampedAnnotation> annotations = new ArrayList<>();
+    private final List<TimestampedAnnotation> unmodifiableAnnotations = Collections.unmodifiableList(annotations);
 
     private Long durationNanos;
 
@@ -308,6 +311,8 @@ public class Span implements Closeable, Serializable {
         }
         
         this.spanName = newName;
+        // This span's state changed, so clear the cached serialized representations.
+        clearCachedDataDueToStateChange();
     }
 
     /**
@@ -363,10 +368,8 @@ public class Span implements Closeable, Serializable {
             throw new IllegalStateException("This Span is already completed.");
 
         this.durationNanos = System.nanoTime() - spanStartTimeNanos;
-        // We need to recalculate the JSON and/or key/value representation(s) of this span now that the state of the span has been modified.
-        // By setting a cached value to null it will be regenerated the next time it is requested.
-        cachedJsonRepresentation = null;
-        cachedKeyValueRepresentation = null;
+        // This span's state changed, so clear the cached serialized representations.
+        clearCachedDataDueToStateChange();
     }
 
     /**
@@ -398,10 +401,11 @@ public class Span implements Closeable, Serializable {
     }
     
     /**
-     * @return This Span's collection of key/value tags - will never be null.
+     * @return An <b>unmodifiable</b> read-only view of this Span's collection of key/value tags - will never be null.
+     * Any attempt to modify the returned map will result in a {@link UnsupportedOperationException}.
      */
     public Map<String,String> getTags() {
-        return tags;
+        return unmodifiableTags;
     }
 
     /**
@@ -418,13 +422,28 @@ public class Span implements Closeable, Serializable {
      */
     public void putTag(String key, String value) {
         tags.put(key, value);
+        // This span's state changed, so clear the cached serialized representations.
+        clearCachedDataDueToStateChange();
     }
 
     /**
-     * @return This Span's list of {@link TimestampedAnnotation}s - will never be null.
+     * Removes the tag from this span with the given tag key. If this span does not have the given tag, then nothing
+     * will be done.
+     *
+     * @param key The tag {@code key} to remove.
+     */
+    public void removeTag(String key) {
+        tags.remove(key);
+        // This span's state changed, so clear the cached serialized representations.
+        clearCachedDataDueToStateChange();
+    }
+
+    /**
+     * @return An <b>unmodifiable</b> read-only view of this Span's list of {@link TimestampedAnnotation}s - will
+     * never be null. Any attempt to modify the returned list will result in a {@link UnsupportedOperationException}.
      */
     public List<TimestampedAnnotation> getTimestampedAnnotations() {
-        return annotations;
+        return unmodifiableAnnotations;
     }
 
     /**
@@ -456,6 +475,8 @@ public class Span implements Closeable, Serializable {
      */
     public void addTimestampedAnnotation(TimestampedAnnotation timestampedAnnotation) {
         this.annotations.add(timestampedAnnotation);
+        // This span's state changed, so clear the cached serialized representations.
+        clearCachedDataDueToStateChange();
     }
 
     /**
@@ -581,6 +602,18 @@ public class Span implements Closeable, Serializable {
             traceId, spanId, parentSpanId, spanName, sampleable, userId, spanPurpose, spanStartTimeEpochMicros,
             durationNanos, tags, annotations
         );
+    }
+
+    /**
+     * Sets {@link #cachedJsonRepresentation} and {@link #cachedKeyValueRepresentation} to null so that they will
+     * be recalculated the next time {@link #toJSON()}, {@link #toKeyValueString()}, or {@link #toString()} is called.
+     *
+     * <p>This method should be called any time this span's state is changed.
+     */
+    private void clearCachedDataDueToStateChange() {
+        // By setting a cached value to null it will be regenerated the next time it is requested.
+        cachedJsonRepresentation = null;
+        cachedKeyValueRepresentation = null;
     }
 
     /**

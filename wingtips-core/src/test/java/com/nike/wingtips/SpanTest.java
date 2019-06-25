@@ -11,8 +11,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tngtech.java.junit.dataprovider.DataProvider;
 import com.tngtech.java.junit.dataprovider.DataProviderRunner;
 
-import org.assertj.core.data.Offset;
 import org.apache.commons.lang.SerializationUtils;
+import org.assertj.core.data.Offset;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -30,9 +30,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
-import static com.nike.wingtips.TestSpanCompleter.completeSpan;
 import static com.nike.wingtips.util.parser.SpanParserTest.deserializeKeyValueSpanString;
 import static java.util.Collections.singletonList;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -1116,6 +1116,57 @@ public class SpanTest {
         assertThat(tmssCompleted).isEqualTo(TracerManagedSpanStatus.UNMANAGED_SPAN);
     }
 
+    @DataProvider(value = {
+        "true",
+        "false"
+    })
+    @Test
+    public void toJson_matches_SpanParser_convertSpanToJSON(boolean completed) {
+        // given
+        Span span = createFilledOutSpan(completed);
+        String jsonFromSpanParser = SpanParser.convertSpanToJSON(span);
+
+        // when
+        String jsonFromSpan = span.toJSON();
+
+        // then
+        assertThat(jsonFromSpan).isEqualTo(jsonFromSpanParser);
+    }
+
+    @DataProvider(value = {
+        "true",
+        "false"
+    })
+    @Test
+    public void toKeyValueString_matches_SpanParser_convertSpanToKeyValueFormat(boolean completed) {
+        // given
+        Span span = createFilledOutSpan(completed);
+        String keyValueStrFromSpanParser = SpanParser.convertSpanToKeyValueFormat(span);
+
+        // when
+        String keyValueStrFromSpan = span.toKeyValueString();
+
+        // then
+        assertThat(keyValueStrFromSpan).isEqualTo(keyValueStrFromSpanParser);
+    }
+
+    @DataProvider(value = {
+        "true",
+        "false"
+    })
+    @Test
+    public void toString_matches_SpanParser_convertSpanToJSON(boolean completed) {
+        // given
+        Span span = createFilledOutSpan(completed);
+        String jsonFromSpanParser = SpanParser.convertSpanToJSON(span);
+
+        // when
+        String toStringFromSpan = span.toString();
+
+        // then
+        assertThat(toStringFromSpan).isEqualTo(jsonFromSpanParser);
+    }
+
     @Test
     public void toJson_should_use_cached_json() {
         // given
@@ -1128,25 +1179,6 @@ public class SpanTest {
 
         // then
         assertThat(toJsonResult).isEqualTo(uuidString);
-    }
-
-    @Test
-    public void complete_should_reset_cached_json() throws IOException {
-        // given
-        Span validSpan = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
-        String uuidString = UUID.randomUUID().toString();
-        Whitebox.setInternalState(validSpan, "cachedJsonRepresentation", uuidString);
-
-        // when
-        String beforeCompleteJson = validSpan.toJSON();
-        completeSpan(validSpan);
-
-        // then
-        String afterCompleteJson = validSpan.toJSON();
-        assertThat(afterCompleteJson).isNotEqualTo(beforeCompleteJson);
-        assertThat(afterCompleteJson).isNotEqualTo(uuidString);
-        Map<String, Object> spanValuesFromJackson = objectMapper.readValue(afterCompleteJson, new TypeReference<Map<String, Object>>() { });
-        verifySpanEqualsDeserializedValues(validSpan, spanValuesFromJackson);
     }
 
     @Test
@@ -1164,22 +1196,17 @@ public class SpanTest {
     }
 
     @Test
-    public void complete_should_reset_cached_key_value_string() {
+    public void toString_should_use_cached_json() {
         // given
         Span validSpan = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
         String uuidString = UUID.randomUUID().toString();
-        Whitebox.setInternalState(validSpan, "cachedKeyValueRepresentation", uuidString);
+        Whitebox.setInternalState(validSpan, "cachedJsonRepresentation", uuidString);
 
         // when
-        String beforeCompleteKeyValueString = validSpan.toKeyValueString();
-        completeSpan(validSpan);
+        String toStringResult = validSpan.toString();
 
         // then
-        String afterCompleteKeyValueString = validSpan.toKeyValueString();
-        assertThat(afterCompleteKeyValueString).isNotEqualTo(beforeCompleteKeyValueString);
-        assertThat(afterCompleteKeyValueString).isNotEqualTo(uuidString);
-        Map<String, Object> deserializedValues = deserializeKeyValueSpanString(afterCompleteKeyValueString);
-        verifySpanEqualsDeserializedValues(validSpan, deserializedValues);
+        assertThat(toStringResult).isEqualTo(uuidString);
     }
 
     @Test
@@ -1204,6 +1231,22 @@ public class SpanTest {
         // then
         assertThat(span.getTags()).hasSize(1);
         assertThat(span.getTags().get(tagKey)).isEqualTo(otherValue);
+    }
+
+    @Test
+    public void getTags_returns_unmodifiable_map() {
+        // given
+        Span span = createFilledOutSpan(false);
+
+        // when
+        Throwable ex1 = catchThrowable(() -> span.getTags().put("foo", "bar"));
+        Throwable ex2 = catchThrowable(() -> span.getTags().remove("foo"));
+        Throwable ex3 = catchThrowable(() -> span.getTags().clear());
+
+        // then
+        assertThat(ex1).isInstanceOf(UnsupportedOperationException.class);
+        assertThat(ex2).isInstanceOf(UnsupportedOperationException.class);
+        assertThat(ex3).isInstanceOf(UnsupportedOperationException.class);
     }
 
     @DataProvider(value = {
@@ -1275,6 +1318,128 @@ public class SpanTest {
         assertThat(span.getTimestampedAnnotations())
             .hasSize(1)
             .containsExactly(annotationMock);
+    }
+
+    @Test
+    public void getTimestampedAnnotations_returns_unmodifiable_list() {
+        // given
+        Span span = createFilledOutSpan(false);
+
+        // when
+        Throwable ex1 = catchThrowable(() -> span.getTimestampedAnnotations().add(mock(TimestampedAnnotation.class)));
+        Throwable ex2 = catchThrowable(() -> span.getTimestampedAnnotations().remove(0));
+        Throwable ex3 = catchThrowable(() -> span.getTimestampedAnnotations().clear());
+
+        // then
+        assertThat(ex1).isInstanceOf(UnsupportedOperationException.class);
+        assertThat(ex2).isInstanceOf(UnsupportedOperationException.class);
+        assertThat(ex3).isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    private void setCachedSerializedSpanStrings(Span span, String cachedJson, String cachedKeyValueStr) {
+        Whitebox.setInternalState(span, "cachedJsonRepresentation", cachedJson);
+        Whitebox.setInternalState(span, "cachedKeyValueRepresentation", cachedKeyValueStr);
+    }
+
+    private void verifyCachedSerializedSpanRepresentationStrings(
+        Span span,
+        String expectedCachedJson,
+        String expectedCachedKeyValueStr
+    ) {
+        assertThat(Whitebox.getInternalState(span, "cachedJsonRepresentation")).isEqualTo(expectedCachedJson);
+        assertThat(Whitebox.getInternalState(span, "cachedKeyValueRepresentation")).isEqualTo(expectedCachedKeyValueStr);
+    }
+
+    private enum SpanStateChangeScenario {
+        COMPLETE_SPAN(
+            span -> {},
+            TestSpanCompleter::completeSpan
+        ),
+        SET_SPAN_NAME(
+            span -> {},
+            span -> span.setSpanName("someNewSpanName_" + UUID.randomUUID().toString())
+        ),
+        PUT_TAG(
+            span -> {},
+            span -> span.putTag("fooTag", UUID.randomUUID().toString())
+        ),
+        REMOVE_TAG(
+            span -> span.putTag("fooTag", "fooTagValue"),
+            span -> span.removeTag("fooTag")
+        ),
+        ADD_TIMESTAMPED_ANNOTATION(
+            span -> {},
+            span -> span.addTimestampedAnnotationForCurrentTime("fooEvent")
+        );
+
+        public final Consumer<Span> spanSetupConsumer;
+        public final Consumer<Span> stateChanger;
+
+        SpanStateChangeScenario(
+            Consumer<Span> spanSetupConsumer, Consumer<Span> stateChanger
+        ) {
+            this.spanSetupConsumer = spanSetupConsumer;
+            this.stateChanger = stateChanger;
+        }
+    }
+
+    @DataProvider(value = {
+        "COMPLETE_SPAN",
+        "SET_SPAN_NAME",
+        "PUT_TAG",
+        "REMOVE_TAG",
+        "ADD_TIMESTAMPED_ANNOTATION"
+    })
+    @Test
+    public void span_state_change_should_reset_cached_serialized_span_representation_strings(
+        SpanStateChangeScenario scenario
+    ) throws IOException {
+        // given
+        Span span = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
+        scenario.spanSetupConsumer.accept(span);
+
+        String origCachedJson = UUID.randomUUID().toString();
+        String origCachedKeyValueStr = UUID.randomUUID().toString();
+        setCachedSerializedSpanStrings(span, origCachedJson, origCachedKeyValueStr);
+
+        String beforeStateChangeJson = span.toJSON();
+        String beforeStateChangeKeyValueStr = span.toKeyValueString();
+
+        assertThat(beforeStateChangeJson).isEqualTo(origCachedJson);
+        assertThat(beforeStateChangeKeyValueStr).isEqualTo(origCachedKeyValueStr);
+
+        // when
+        scenario.stateChanger.accept(span);
+
+        // then
+        String afterStateChangeJson = span.toJSON();
+        String afterStateChangeKeyValueStr = span.toKeyValueString();
+
+        {
+            // Verify cached JSON was reset.
+            assertThat(afterStateChangeJson).isNotEqualTo(beforeStateChangeJson);
+            assertThat(afterStateChangeJson).isNotEqualTo(origCachedJson);
+
+            assertThat(SpanParser.convertSpanToJSON(span)).isEqualTo(afterStateChangeJson);
+
+            Map<String, Object> spanValuesFromJacksonJson =
+                objectMapper.readValue(afterStateChangeJson, new TypeReference<Map<String, Object>>() {});
+            verifySpanEqualsDeserializedValues(span, spanValuesFromJacksonJson);
+        }
+
+        {
+            // Verify cached key/value string was reset.
+            assertThat(afterStateChangeKeyValueStr).isNotEqualTo(beforeStateChangeKeyValueStr);
+            assertThat(afterStateChangeKeyValueStr).isNotEqualTo(origCachedKeyValueStr);
+
+            assertThat(SpanParser.convertSpanToKeyValueFormat(span)).isEqualTo(afterStateChangeKeyValueStr);
+
+            Map<String, Object> deserializedValuesFromKeyValueStr =
+                deserializeKeyValueSpanString(afterStateChangeKeyValueStr);
+            verifySpanEqualsDeserializedValues(span, deserializedValuesFromKeyValueStr);
+        }
+
+        verifyCachedSerializedSpanRepresentationStrings(span, afterStateChangeJson, afterStateChangeKeyValueStr);
     }
 
     @Test
