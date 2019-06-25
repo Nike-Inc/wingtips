@@ -539,7 +539,11 @@ public class Tracer {
 
         currentStack.push(pushMe);
         configureMDC(pushMe);
-        classLogger.debug("** starting sample for span {}", serializeSpanToDesiredStringRepresentation(pushMe));
+        // We don't want to call serializeSpanToDesiredStringRepresentation(...) unless absolutely necessary, so check
+        //      that debug logging is enabled before making the classLogger.debug(...) call.
+        if (classLogger.isDebugEnabled()) {
+            classLogger.debug("** starting sample for span {}", serializeSpanToDesiredStringRepresentation(pushMe));
+        }
     }
 
     /**
@@ -786,7 +790,15 @@ public class Tracer {
         if (span.isSampleable()) {
             String infoTag = containsIncorrectTimingInfo ? "[INCORRECT_TIMING] " : "";
             Logger loggerToUse = containsIncorrectTimingInfo ? invalidSpanLogger : validSpanLogger;
-            loggerToUse.info("{}[DISTRIBUTED_TRACING] {}", infoTag, serializeSpanToDesiredStringRepresentation(span));
+            // Only attempt to log if loggerToUse.isInfoEnabled() returns true, so that we don't incur the cost of
+            //      serialization via serializeSpanToDesiredStringRepresentation(span) unless it will actually get used.
+            //      This will save CPU if the application has turned off logging in their logger config, but
+            //      otherwise allowed Wingtips to function normally.
+            if (loggerToUse.isInfoEnabled()) {
+                loggerToUse.info(
+                    "{}[DISTRIBUTED_TRACING] {}", infoTag, serializeSpanToDesiredStringRepresentation(span)
+                );
+            }
         }
     }
 

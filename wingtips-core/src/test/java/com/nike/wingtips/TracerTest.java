@@ -29,6 +29,9 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+
 import static java.util.Collections.singletonList;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Fail.fail;
@@ -1799,10 +1802,42 @@ public class TracerTest {
     }
 
     @Test
-    public void make_code_coverage_happy() {
+    public void make_code_coverage_happy1() {
         // Some code coverage tools force you to exercise valueOf() (for example) or you get uncovered lines.
         for (Tracer.SpanLoggingRepresentation option : Tracer.SpanLoggingRepresentation.values()) {
             assertThat(Tracer.SpanLoggingRepresentation.valueOf(option.name())).isEqualTo(option);
+        }
+    }
+
+    @Test
+    public void make_code_coverage_happy2() {
+        Logger tracerValidSpanLogger = (Logger) Whitebox.getInternalState(Tracer.getInstance(), "validSpanLogger");
+        Level origLevel = tracerValidSpanLogger.getLevel();
+        try {
+            // Disable info logging.
+            tracerValidSpanLogger.setLevel(Level.WARN);
+            // Exercise the span completion logic to trigger the do-nothing branch when info logging is disabled.
+            Tracer.getInstance().startRequestWithRootSpan("foo");
+            Tracer.getInstance().completeRequestSpan();
+        }
+        finally {
+            tracerValidSpanLogger.setLevel(origLevel);
+        }
+    }
+
+    @Test
+    public void make_code_coverage_happy3() {
+        Logger tracerClassLogger = (Logger) Whitebox.getInternalState(Tracer.getInstance(), "classLogger");
+        Level origLevel = tracerClassLogger.getLevel();
+        try {
+            // Enable debug logging.
+            tracerClassLogger.setLevel(Level.DEBUG);
+            // Exercise a span lifecycle to trigger the code branches that only do something if debug logging is on.
+            Tracer.getInstance().startRequestWithRootSpan("foo");
+            Tracer.getInstance().completeRequestSpan();
+        }
+        finally {
+            tracerClassLogger.setLevel(origLevel);
         }
     }
 
