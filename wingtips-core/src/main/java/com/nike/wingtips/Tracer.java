@@ -7,16 +7,21 @@ import com.nike.wingtips.sampling.SampleAllTheThingsStrategy;
 import com.nike.wingtips.util.TracerManagedSpanStatus;
 import com.nike.wingtips.util.TracingState;
 
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * <p>
@@ -101,11 +106,14 @@ import java.util.List;
  *     lost to network lag or any other bottlenecks between the services.
  * </p>
  * <p>
- *     In addition to the logs this class outputs for spans it puts the trace ID and span JSON for the "current" span into the SLF4J
- *     <a href="http://www.slf4j.org/manual.html#mdc">MDC</a> so that all your logs can be tagged with the current span's trace ID and/or full JSON. To utilize this you
- *     would need to add {@code %X{traceId}} and/or {@code %X{spanJson}} to your log pattern (NOTE: this only works with SLF4J frameworks that support MDC, e.g. logback
+ *     In addition to the logs this class outputs for spans it puts the trace ID for the "current" span into the SLF4J
+ *     <a href="http://www.slf4j.org/manual.html#mdc">MDC</a> so that all your logs can be tagged with the current span's trace ID. To utilize this you
+ *     would need to add {@code %X{traceId}} to your log pattern (NOTE: this only works with SLF4J frameworks that support MDC, e.g. logback
  *     and log4j). This causes *all* log messages, including ones that come from third party libraries and have no knowledge of distributed tracing, to be output with the
- *     current span's tracing information.
+ *     current span's tracing information. Note you can adjust which span fields are included in the MDC behavior by
+ *     calling {@link #setSpanFieldsForLoggerMdc(SpanFieldForLoggerMdc...)}. It's recommended that you always include
+ *     {@link SpanFieldForLoggerMdc#TRACE_ID}, but if you want to also include span ID, parent span ID, or even the
+ *     full span JSON in the MDC (not recommended), you can.
  * </p>
  * <p>
  *     NOTE: Due to the thread-local nature of this class it is more effort to integrate with reactive (asynchronous non-blocking) frameworks like Netty or actor frameworks
@@ -137,7 +145,6 @@ public class Tracer {
      * The options for how {@link Span} objects are represented when they are completed. To change how {@link Tracer} serializes spans when logging them
      * call {@link #setSpanLoggingRepresentation(SpanLoggingRepresentation)}.
      */
-    @SuppressWarnings("WeakerAccess")
     public enum SpanLoggingRepresentation {
         /**
          * Causes spans to be output in the logs using {@link Span#toJSON()}.
@@ -147,6 +154,61 @@ public class Tracer {
          * Causes spans to be output in the logs using {@link Span#toKeyValueString()}.
          */
         KEY_VALUE
+    }
+
+    /**
+     * The options for which {@link Span} fields are put into and taken out of the logger {@link MDC} as {@link Tracer}
+     * works with spans.
+     */
+    public enum SpanFieldForLoggerMdc {
+        /**
+         * MDC key for storing the current span's {@link Span#getTraceId()}.
+         */
+        TRACE_ID("traceId"),
+        /**
+         * MDC key for storing the current span's {@link Span#getSpanId()}.
+         */
+        SPAN_ID("spanId"),
+        /**
+         * MDC key for storing the current span's {@link Span#getParentSpanId()}.
+         */
+        PARENT_SPAN_ID("parentSpanId"),
+        /**
+         * MDC key for storing the current {@link Span} as a JSON string.
+         *
+         * <p>WARNING: This can get expensive in some use cases where processing hops threads frequently and the span
+         * state is changed often (i.e. lots of tags). Make sure you absolutely need this before including it in a call
+         * to {@link #setSpanFieldsForLoggerMdc(SpanFieldForLoggerMdc...)} or {@link #setSpanFieldsForLoggerMdc(Set)}.
+         */
+        FULL_SPAN_JSON("spanJson");
+
+        /**
+         * The key to use when calling {@link MDC#put(String, String)} or {@link MDC#remove(String)}.
+         */
+        public final String mdcKey;
+
+        SpanFieldForLoggerMdc(String mdcKey) {
+            this.mdcKey = mdcKey;
+        }
+
+        /**
+         * @param span The span to grab the value from.
+         * @return The string from the given span associated with this {@link SpanFieldForLoggerMdc}.
+         */
+        public @Nullable String getMdcValueForSpan(@NotNull Span span) {
+            switch (this) {
+                case TRACE_ID:
+                    return span.getTraceId();
+                case SPAN_ID:
+                    return span.getSpanId();
+                case PARENT_SPAN_ID:
+                    return span.getParentSpanId();
+                case FULL_SPAN_JSON:
+                    return span.toJSON();
+                default:
+                    throw new IllegalStateException("Unhandled SpanFieldForLoggerMdc type: " + this);
+            }
+        }
     }
 
     private static final String VALID_WINGTIPS_SPAN_LOGGER_NAME = "VALID_WINGTIPS_SPANS";
@@ -166,15 +228,6 @@ public class Tracer {
      */
     private static final Tracer INSTANCE = new Tracer();
 
-    /**
-     * MDC key for storing the current {@link Span} as a JSON string.
-     */
-    public static final String SPAN_JSON_MDC_KEY = "spanJson";
-    /**
-     * MDC key for storing the current span's {@link Span#getTraceId()}.
-     */
-    public static final String TRACE_ID_MDC_KEY = "traceId";
-
 
     /**
      * The sampling strategy this instance will use. Default to sampling everything. Never allow this field to be set to null.
@@ -190,6 +243,15 @@ public class Tracer {
      * The span representation that should be used when logging completed spans.
      */
     private SpanLoggingRepresentation spanLoggingRepresentation = SpanLoggingRepresentation.JSON;
+
+    /**
+     * The set of span fields that should be put into and taken out of the logger {@link MDC} as {@link Tracer} works
+     * with spans.
+     */
+    private SpanFieldForLoggerMdc[] spanFieldsForLoggerMdc =
+        new SpanFieldForLoggerMdc[]{ SpanFieldForLoggerMdc.TRACE_ID };
+    private Set<SpanFieldForLoggerMdc> cachedUnmodifiableSpanFieldsForLoggerMdc =
+        Collections.unmodifiableSet(new LinkedHashSet<>(Arrays.asList(spanFieldsForLoggerMdc)));
 
     private Tracer() { /* Intentionally private to enforce singleton pattern. */ }
 
@@ -539,7 +601,11 @@ public class Tracer {
 
         currentStack.push(pushMe);
         configureMDC(pushMe);
-        classLogger.debug("** starting sample for span {}", serializeSpanToDesiredStringRepresentation(pushMe));
+        // We don't want to call serializeSpanToDesiredStringRepresentation(...) unless absolutely necessary, so check
+        //      that debug logging is enabled before making the classLogger.debug(...) call.
+        if (classLogger.isDebugEnabled()) {
+            classLogger.debug("** starting sample for span {}", serializeSpanToDesiredStringRepresentation(pushMe));
+        }
     }
 
     /**
@@ -617,6 +683,7 @@ public class Tracer {
         completeAndLogSpan(subSpan, false);
 
         // Now configure the MDC with the new current span.
+        //noinspection ConstantConditions
         configureMDC(currentSpanStack.peek());
     }
 
@@ -786,24 +853,35 @@ public class Tracer {
         if (span.isSampleable()) {
             String infoTag = containsIncorrectTimingInfo ? "[INCORRECT_TIMING] " : "";
             Logger loggerToUse = containsIncorrectTimingInfo ? invalidSpanLogger : validSpanLogger;
-            loggerToUse.info("{}[DISTRIBUTED_TRACING] {}", infoTag, serializeSpanToDesiredStringRepresentation(span));
+            // Only attempt to log if loggerToUse.isInfoEnabled() returns true, so that we don't incur the cost of
+            //      serialization via serializeSpanToDesiredStringRepresentation(span) unless it will actually get used.
+            //      This will save CPU if the application has turned off logging in their logger config, but
+            //      otherwise allowed Wingtips to function normally.
+            if (loggerToUse.isInfoEnabled()) {
+                loggerToUse.info(
+                    "{}[DISTRIBUTED_TRACING] {}", infoTag, serializeSpanToDesiredStringRepresentation(span)
+                );
+            }
         }
     }
 
     /**
      * Sets the span variables on the MDC context.
      */
-    protected static void configureMDC(Span span) {
-        MDC.put(TRACE_ID_MDC_KEY, span.getTraceId());
-        MDC.put(SPAN_JSON_MDC_KEY, span.toJSON());
+    protected void configureMDC(@NotNull Span span) {
+        for (SpanFieldForLoggerMdc mdcField : this.spanFieldsForLoggerMdc) {
+            MDC.put(mdcField.mdcKey, mdcField.getMdcValueForSpan(span));
+        }
     }
+
 
     /**
      * Removes the MDC parameters.
      */
-    protected static void unconfigureMDC() {
-        MDC.remove(TRACE_ID_MDC_KEY);
-        MDC.remove(SPAN_JSON_MDC_KEY);
+    protected void unconfigureMDC() {
+        for (SpanFieldForLoggerMdc mdcField : this.spanFieldsForLoggerMdc) {
+            MDC.remove(mdcField.mdcKey);
+        }
     }
 
     /**
@@ -901,6 +979,62 @@ public class Tracer {
         this.spanLoggingRepresentation = spanLoggingRepresentation;
     }
 
+    /**
+     * @return The currently selected options for which span fields will be placed in the logger {@link MDC} as
+     * {@link Tracer} works with spans, wrapped in a {@link Collections#unmodifiableSet(Set)} to prevent direct
+     * modification. This will never return null.
+     */
+    public Set<SpanFieldForLoggerMdc> getSpanFieldsForLoggerMdc() {
+        return cachedUnmodifiableSpanFieldsForLoggerMdc;
+    }
+
+    /**
+     * Tells {@link Tracer} which {@link Span} fields should be included in the logger {@link MDC} when the current
+     * span for a thread changes. The default behavior without calling this method just includes
+     * {@link SpanFieldForLoggerMdc#TRACE_ID}.
+     *
+     * <p>NOTE: It's recommended that you always include {@link SpanFieldForLoggerMdc#TRACE_ID}.
+     *
+     * @param fieldsForMdc The fields you want included in the logger {@link MDC}. You can pass null or an empty array,
+     * in which case the MDC will never be updated with span info. NOTE: It's recommended that you always include
+     * {@link SpanFieldForLoggerMdc#TRACE_ID}.
+     */
+    public void setSpanFieldsForLoggerMdc(SpanFieldForLoggerMdc ... fieldsForMdc) {
+        if (fieldsForMdc == null) {
+            fieldsForMdc = new SpanFieldForLoggerMdc[0];
+        }
+        
+        setSpanFieldsForLoggerMdc(new LinkedHashSet<>(Arrays.asList(fieldsForMdc)));
+    }
+
+    /**
+     * Tells {@link Tracer} which {@link Span} fields should be included in the logger {@link MDC} when the current
+     * span for a thread changes. The default behavior without calling this method just includes
+     * {@link SpanFieldForLoggerMdc#TRACE_ID}.
+     *
+     * <p>NOTE: It's recommended that you always include {@link SpanFieldForLoggerMdc#TRACE_ID}.
+     *
+     * @param fieldsForMdc The fields you want included in the logger {@link MDC}. You can pass null or an empty set,
+     * in which case the MDC will never be updated with span info. NOTE: It's recommended that you always include
+     * {@link SpanFieldForLoggerMdc#TRACE_ID}.
+     */
+    public void setSpanFieldsForLoggerMdc(Set<SpanFieldForLoggerMdc> fieldsForMdc) {
+        if (fieldsForMdc == null) {
+            fieldsForMdc = Collections.emptySet();
+        }
+
+        this.spanFieldsForLoggerMdc = fieldsForMdc.toArray(new SpanFieldForLoggerMdc[0]);
+        this.cachedUnmodifiableSpanFieldsForLoggerMdc =
+            Collections.unmodifiableSet(new LinkedHashSet<>(fieldsForMdc));
+
+        if (!fieldsForMdc.contains(SpanFieldForLoggerMdc.TRACE_ID)) {
+            classLogger.warn(
+                "setSpanFieldsForLoggerMdc(...) was called without including TRACE_ID. This is not recommended! "
+                + "It's recommended that you always include TRACE_ID unless you really know what you're doing. "
+                + "span_fields_for_mdc_received={}", fieldsForMdc
+            );
+        }
+    }
 
     /**
      * Notifies all listeners that the given span was started using {@link SpanLifecycleListener#spanStarted(Span)}

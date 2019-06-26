@@ -3,6 +3,7 @@ package com.nike.wingtips.util;
 import com.nike.internal.util.Pair;
 import com.nike.wingtips.Span;
 import com.nike.wingtips.Tracer;
+import com.nike.wingtips.Tracer.SpanFieldForLoggerMdc;
 import com.nike.wingtips.util.asynchelperwrapper.CallableWithTracing;
 import com.nike.wingtips.util.asynchelperwrapper.ExecutorServiceWithTracing;
 import com.nike.wingtips.util.asynchelperwrapper.RunnableWithTracing;
@@ -305,8 +306,7 @@ public class AsyncWingtipsHelperJava7Test {
                 // MDC will have been populated with tracing info.
                 expectedMdcInfo = new HashMap<>();
                 Span expectedSpan = spanStackForLinking.peek();
-                expectedMdcInfo.put(Tracer.TRACE_ID_MDC_KEY, expectedSpan.getTraceId());
-                expectedMdcInfo.put(Tracer.SPAN_JSON_MDC_KEY, expectedSpan.toJSON());
+                expectedMdcInfo.put(SpanFieldForLoggerMdc.TRACE_ID.mdcKey, expectedSpan.getTraceId());
             }
         }
         else {
@@ -314,8 +314,7 @@ public class AsyncWingtipsHelperJava7Test {
             expectedMdcInfo = new HashMap<>(mdcInfoForLinking);
             if (useNullSpanStack) {
                 // In the case of a null span stack, the trace info would be removed from the MDC.
-                expectedMdcInfo.remove(Tracer.TRACE_ID_MDC_KEY);
-                expectedMdcInfo.remove(Tracer.SPAN_JSON_MDC_KEY);
+                expectedMdcInfo.remove(SpanFieldForLoggerMdc.TRACE_ID.mdcKey);
             }
         }
 
@@ -421,13 +420,12 @@ public class AsyncWingtipsHelperJava7Test {
                 // MDC will have been populated with tracing info.
                 expectedMdcInfo = new HashMap<>();
                 Span expectedSpan = spanStackForLinking.peek();
-                expectedMdcInfo.put(Tracer.TRACE_ID_MDC_KEY, expectedSpan.getTraceId());
-                expectedMdcInfo.put(Tracer.SPAN_JSON_MDC_KEY, expectedSpan.toJSON());
+                expectedMdcInfo.put(SpanFieldForLoggerMdc.TRACE_ID.mdcKey, expectedSpan.getTraceId());
             }
         }
         else {
             // Not null MDC. Since unlinkTracingFromCurrentThread doesn't call registerWithThread when
-            //      the span stack is null we don't need to worry about trace ID and span JSON being removed from MDC.
+            //      the span stack is null we don't need to worry about trace ID being removed from MDC.
             //      Therefore it should match mdcInfoForLinking exactly.
             expectedMdcInfo = new HashMap<>(mdcInfoForLinking);
         }

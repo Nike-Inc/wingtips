@@ -1,11 +1,13 @@
 package com.nike.wingtips;
 
 import com.nike.wingtips.Span.SpanPurpose;
+import com.nike.wingtips.Tracer.SpanFieldForLoggerMdc;
 import com.nike.wingtips.lifecyclelistener.SpanLifecycleListener;
 import com.nike.wingtips.sampling.RootSpanSamplingStrategy;
 import com.nike.wingtips.sampling.SampleAllTheThingsStrategy;
 import com.nike.wingtips.util.TracerManagedSpanStatus;
 import com.nike.wingtips.util.TracingState;
+import com.nike.wingtips.util.parser.SpanParser;
 
 import com.tngtech.java.junit.dataprovider.DataProvider;
 import com.tngtech.java.junit.dataprovider.DataProviderRunner;
@@ -23,14 +25,22 @@ import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Deque;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+
+import static java.util.Collections.singleton;
 import static java.util.Collections.singletonList;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.assertj.core.api.Fail.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -48,6 +58,7 @@ public class TracerTest {
         Tracer.getInstance().setRootSpanSamplingStrategy(new SampleAllTheThingsStrategy());
         Tracer.getInstance().removeAllSpanLifecycleListeners();
         Tracer.getInstance().setSpanLoggingRepresentation(Tracer.SpanLoggingRepresentation.JSON);
+        Tracer.getInstance().setSpanFieldsForLoggerMdc(singleton(SpanFieldForLoggerMdc.TRACE_ID));
     }
 
     @Before
@@ -88,8 +99,7 @@ public class TracerTest {
     public void startRequestWithRootSpan_should_start_valid_root_span_without_parent() {
         // given: no span started
         assertThat(Tracer.getInstance().getCurrentSpan()).isNull();
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isNull();
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isNull();
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isNull();
         assertThat(getSpanStackSize()).isEqualTo(0);
 
         // when: Tracer.startRequestWithRootSpan(String) is called to start a span without a parent
@@ -114,16 +124,14 @@ public class TracerTest {
         assertThat(span.isSampleable()).isTrue();
         assertThat(span.getUserId()).isNull();
         assertThat(span.getSpanPurpose()).isEqualTo(SpanPurpose.SERVER);
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(span.getTraceId());
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(span.toJSON());
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isEqualTo(span.getTraceId());
     }
 
     @Test
     public void startRequestWithRootSpan_should_start_valid_root_span_without_parent_with_userid() {
         // given: no span started
         assertThat(Tracer.getInstance().getCurrentSpan()).isNull();
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isNull();
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isNull();
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isNull();
         assertThat(getSpanStackSize()).isEqualTo(0);
 
         // when: Tracer.startRequestWithRootSpan(String) is called to start a span without a parent
@@ -148,8 +156,7 @@ public class TracerTest {
         assertThat(span.isSampleable()).isTrue();
         assertThat(span.getUserId()).isEqualTo("testUserId");
         assertThat(span.getSpanPurpose()).isEqualTo(SpanPurpose.SERVER);
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(span.getTraceId());
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(span.toJSON());
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isEqualTo(span.getTraceId());
     }
 
     @Test
@@ -174,8 +181,7 @@ public class TracerTest {
         // given: no span started and a parent span exists
         Span parentSpan = Span.generateRootSpanForNewTrace("parentspan", SpanPurpose.LOCAL_ONLY).build();
         assertThat(Tracer.getInstance().getCurrentSpan()).isNull();
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isNull();
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isNull();
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isNull();
         assertThat(getSpanStackSize()).isEqualTo(0);
 
         // when: Tracer.startRequestWithChildSpan(Span, String) is called to start a span with a parent
@@ -201,8 +207,7 @@ public class TracerTest {
         assertThat(span.isSampleable()).isEqualTo(parentSpan.isSampleable());
         assertThat(span.getUserId()).isNull();
         assertThat(span.getSpanPurpose()).isEqualTo(SpanPurpose.SERVER);
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(span.getTraceId());
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(span.toJSON());
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isEqualTo(span.getTraceId());
     }
 
     @Test
@@ -212,8 +217,7 @@ public class TracerTest {
                               .withUserId("testUserId")
                               .build();
         assertThat(Tracer.getInstance().getCurrentSpan()).isNull();
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isNull();
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isNull();
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isNull();
         assertThat(getSpanStackSize()).isEqualTo(0);
 
         // when: Tracer.startRequestWithChildSpan(Span, String) is called to start a span with a parent
@@ -239,8 +243,7 @@ public class TracerTest {
         assertThat(span.isSampleable()).isEqualTo(parentSpan.isSampleable());
         assertThat(span.getUserId()).isEqualTo("testUserId");
         assertThat(span.getSpanPurpose()).isEqualTo(SpanPurpose.SERVER);
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(span.getTraceId());
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(span.toJSON());
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isEqualTo(span.getTraceId());
     }
 
     @Test
@@ -284,8 +287,7 @@ public class TracerTest {
         boolean sampleable = false;
         String userId = UUID.randomUUID().toString();
         assertThat(Tracer.getInstance().getCurrentSpan()).isNull();
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isNull();
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isNull();
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isNull();
 
         // when
         long beforeNanoTime = System.nanoTime();
@@ -297,8 +299,7 @@ public class TracerTest {
 
         // then
         assertThat(Tracer.getInstance().getCurrentSpan()).isEqualTo(span);
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(span.getTraceId());
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(span.toJSON());
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isEqualTo(span.getTraceId());
         assertThat(span.getTraceId()).isEqualTo(traceId);
         assertThat(span.getParentSpanId()).isEqualTo(parentSpanId);
         assertThat(span.getSpanId()).isNotEmpty();
@@ -352,8 +353,7 @@ public class TracerTest {
         assertThat(subspan.getSpanId()).isNotNull();
         assertThat(subspan.isSampleable()).isEqualTo(firstSpan.isSampleable());
         assertThat(subspan.getSpanPurpose()).isEqualTo(spanPurpose);
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(subspan.getTraceId());
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(subspan.toJSON());
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isEqualTo(subspan.getTraceId());
     }
 
     @DataProvider(value = {
@@ -366,7 +366,7 @@ public class TracerTest {
     public void startSubSpan_should_function_like_startRequestWithRootSpan_when_there_is_no_parent_span(SpanPurpose spanPurpose) {
         // given: no span started
         assertThat(Tracer.getInstance().getCurrentSpan()).isNull();
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isNull();
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isNull();
         assertThat(getSpanStackSize()).isEqualTo(0);
 
         // when: Tracer.startSubSpan(String) is called to start a subspan
@@ -390,8 +390,7 @@ public class TracerTest {
         assertThat(subspan.getSpanId()).isNotNull();
         assertThat(subspan.isSampleable()).isTrue();
         assertThat(subspan.getSpanPurpose()).isEqualTo(spanPurpose);
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(subspan.getTraceId());
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(subspan.toJSON());
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isEqualTo(subspan.getTraceId());
     }
 
     @DataProvider(value = {
@@ -519,7 +518,7 @@ public class TracerTest {
         return new Object[][] {
                 { null },
                 { new LinkedList<>() },
-                { new LinkedList<>(Collections.singleton(rootSpan)) },
+                { new LinkedList<>(singleton(rootSpan)) },
                 { new LinkedList<>(Arrays.asList(rootSpan, childSpan)) }
         };
     }
@@ -543,33 +542,128 @@ public class TracerTest {
     }
 
     @Test
-    public void configureMDC_should_set_span_values_on_MDC() throws Exception {
+    public void getMdcValueForSpan_works_as_expected() {
+        for (SpanFieldForLoggerMdc fieldForMdc : SpanFieldForLoggerMdc.values()) {
+            // given
+            Span span = Span.newBuilder("foo", SpanPurpose.SERVER)
+                            .withParentSpanId(TraceAndSpanIdGenerator.generateId())
+                            .withTag("fooTag", "fooTagValue")
+                            .withTimestampedAnnotation(Span.TimestampedAnnotation.forCurrentTime("fooEvent"))
+                            .build();
+
+            String expectedResult;
+            switch (fieldForMdc) {
+                case TRACE_ID:
+                    expectedResult = span.getTraceId();
+                    break;
+                case SPAN_ID:
+                    expectedResult = span.getSpanId();
+                    break;
+                case PARENT_SPAN_ID:
+                    expectedResult = span.getParentSpanId();
+                    break;
+                case FULL_SPAN_JSON:
+                    expectedResult = SpanParser.convertSpanToJSON(span);
+                    break;
+                default:
+                    throw new RuntimeException("Test doesn't cover SpanFieldForLoggerMdc enum: " + fieldForMdc);
+            }
+
+            // when
+            String result = fieldForMdc.getMdcValueForSpan(span);
+
+            // then
+            assertThat(result).isEqualTo(expectedResult);
+        }
+    }
+
+    @DataProvider(value = {
+        "null",
+        "",
+        "TRACE_ID",
+        "TRACE_ID,SPAN_ID,PARENT_SPAN_ID,FULL_SPAN_JSON"
+    }, splitBy = "\\|")
+    @Test
+    public void configureMDC_should_set_span_values_on_MDC_based_on_spanFieldsForLoggerMdc(
+        String rawSpanFields
+    ) {
         // given
-        Span span = Span.newBuilder("test-span", SpanPurpose.LOCAL_ONLY).withParentSpanId("3").build();
-        String expected = span.toJSON();
+        Span span = Span.newBuilder("test-span", SpanPurpose.LOCAL_ONLY)
+                        .withParentSpanId("3")
+                        .withTag("fooTag", "fooTagValue")
+                        .withTimestampedAnnotation(Span.TimestampedAnnotation.forCurrentTime("fooEvent"))
+                        .build();
+
+        Set<SpanFieldForLoggerMdc> spanFieldsForMdc = parseRawSpanFieldsForMdc(rawSpanFields);
+        Tracer.getInstance().setSpanFieldsForLoggerMdc(spanFieldsForMdc);
 
         // when
-        Tracer.configureMDC(span);
+        Tracer.getInstance().configureMDC(span);
 
         // then
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(expected);
+        for (SpanFieldForLoggerMdc fieldForMdc : SpanFieldForLoggerMdc.values()) {
+            String actualMdcValue = MDC.get(fieldForMdc.mdcKey);
+            if (spanFieldsForMdc != null && spanFieldsForMdc.contains(fieldForMdc)) {
+                assertThat(actualMdcValue).isEqualTo(fieldForMdc.getMdcValueForSpan(span));
+            }
+            else {
+                assertThat(actualMdcValue).isNull();
+            }
+        }
+    }
+
+    private Set<SpanFieldForLoggerMdc> parseRawSpanFieldsForMdc(String rawSpanFields) {
+        if (rawSpanFields == null) {
+            return null;
+        }
+
+        if (rawSpanFields.trim().isEmpty()) {
+            return Collections.emptySet();
+        }
+
+        return Arrays.stream(rawSpanFields.split(","))
+                     .map(SpanFieldForLoggerMdc::valueOf)
+                     .collect(Collectors.toSet());
+    }
+
+    @DataProvider(value = {
+        "null",
+        "",
+        "TRACE_ID",
+        "TRACE_ID,SPAN_ID,PARENT_SPAN_ID,FULL_SPAN_JSON"
+    }, splitBy = "\\|")
+    @Test
+    public void unconfigureMDC_should_unset_span_values_on_MDC_based_on_spanFieldsForLoggerMdc(
+        String rawSpanFields
+    ) {
+        // given
+        Span span = Span.newBuilder("test-span", SpanPurpose.LOCAL_ONLY)
+                        .withParentSpanId("3")
+                        .withTag("fooTag", "fooTagValue")
+                        .withTimestampedAnnotation(Span.TimestampedAnnotation.forCurrentTime("fooEvent"))
+                        .build();
+
+        Set<SpanFieldForLoggerMdc> spanFieldsForMdc = parseRawSpanFieldsForMdc(rawSpanFields);
+        Tracer.getInstance().setSpanFieldsForLoggerMdc(spanFieldsForMdc);
+
+        Tracer.getInstance().configureMDC(span);
+
+        String miscUnrelatedMdcPropKey = "miscUnrelatedMdcProp";
+        String miscUnrelatedMdcPropValue = UUID.randomUUID().toString();
+        MDC.put(miscUnrelatedMdcPropKey, miscUnrelatedMdcPropValue);
+
+        // when
+        Tracer.getInstance().unconfigureMDC();
+
+        // then
+        for (SpanFieldForLoggerMdc fieldForMdc : SpanFieldForLoggerMdc.values()) {
+            assertThat(MDC.get(fieldForMdc.mdcKey)).isNull();
+        }
+        assertThat(MDC.get(miscUnrelatedMdcPropKey)).isEqualTo(miscUnrelatedMdcPropValue);
     }
 
     @Test
-    public void unconfigureMDC_should_unset_span_values_on_MDC() throws Exception {
-        // given
-        Span span = Span.newBuilder("test-span", SpanPurpose.LOCAL_ONLY).withParentSpanId("3").build();
-        Tracer.configureMDC(span);
-
-        // when
-        Tracer.unconfigureMDC();
-
-        // then
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isNull();
-    }
-
-    @Test
-    public void getCurrentSpan_should_return_current_span() throws Exception {
+    public void getCurrentSpan_should_return_current_span() {
         // given
         Tracer tracer = Tracer.getInstance();
         tracer.startRequestWithRootSpan("test-span");
@@ -609,8 +703,7 @@ public class TracerTest {
         verifyDurationBetweenLowerAndUpperBounds(span, beforeNanoTime, afterNanoTime);
         assertThat(Tracer.getInstance().getCurrentSpan()).isNull();
         assertThat(getSpanStackSize()).isEqualTo(0);
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isNull();
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isNull();
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isNull();
     }
 
     @Test
@@ -644,16 +737,14 @@ public class TracerTest {
         verifyDurationBetweenLowerAndUpperBounds(subspan2, beforeNanoTime, afterNanoTime);
         assertThat(Tracer.getInstance().getCurrentSpan()).isNull();
         assertThat(getSpanStackSize()).isEqualTo(0);
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isNull();
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isNull();
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isNull();
     }
 
     @Test
     public void completeRequestSpan_should_do_nothing_if_there_is_no_span_to_complete() {
         // given: no span started
         assertThat(Tracer.getInstance().getCurrentSpan()).isNull();
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isNull();
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isNull();
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isNull();
         assertThat(getSpanStackSize()).isEqualTo(0);
 
         // when: completeRequestSpan() is called
@@ -661,8 +752,7 @@ public class TracerTest {
 
         // then: nothing should be done
         assertThat(Tracer.getInstance().getCurrentSpan()).isNull();
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isNull();
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isNull();
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isNull();
         assertThat(getSpanStackSize()).isEqualTo(0);
     }
 
@@ -691,8 +781,7 @@ public class TracerTest {
         assertThat(Tracer.getInstance().getCurrentSpan()).isNotNull();
         assertThat(Tracer.getInstance().getCurrentSpan()).isSameAs(parentSpan);
         assertThat(getSpanStackSize()).isEqualTo(1);
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(parentSpan.getTraceId());
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(parentSpan.toJSON());
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isEqualTo(parentSpan.getTraceId());
     }
 
     @Test
@@ -731,7 +820,7 @@ public class TracerTest {
     }
 
     @Test
-    public void starting_request_span_should_configure_MDC_and_completing_it_should_unset_MDC() throws Exception {
+    public void starting_request_span_should_configure_MDC_and_completing_it_should_unset_MDC() {
         // given
         Tracer tracer = Tracer.getInstance();
 
@@ -739,24 +828,19 @@ public class TracerTest {
         tracer.startRequestWithRootSpan("test-span");
 
         // then
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isNotNull();
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isNotNull();
 
         // and when
         tracer.completeRequestSpan();
 
         // then
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isNull();
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isNull();
     }
 
     @Test
     public void setRootSpanSamplingStrategy_should_set_the_strategy() {
         // given: known unique sampling strategy
-        RootSpanSamplingStrategy strategy = new RootSpanSamplingStrategy() {
-            @Override
-            public boolean isNextRootSpanSampleable() {
-                return false;
-            }
-        };
+        RootSpanSamplingStrategy strategy = () -> false;
 
         // when: setRootSpanSamplingStrategy() is called
         Tracer.getInstance().setRootSpanSamplingStrategy(strategy);
@@ -1144,16 +1228,14 @@ public class TracerTest {
         Tracer tracer = Tracer.getInstance();
         Span parentSpan = tracer.startRequestWithRootSpan("foo");
         Span subspan = tracer.startSubSpan("bar", SpanPurpose.LOCAL_ONLY);
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(subspan.getTraceId());
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(subspan.toJSON());
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isEqualTo(subspan.getTraceId());
         assertThat(getSpanStackSize()).isEqualTo(2);
 
         // when
         Deque<Span> unregisteredStack = tracer.unregisterFromThread();
 
         // then
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isNull();
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isNull();
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isNull();
         assertThat(getSpanStackSize()).isEqualTo(0);
 
         assertThat(unregisteredStack).hasSize(2);
@@ -1172,16 +1254,14 @@ public class TracerTest {
         newSpanStack.push(parentSpan);
         newSpanStack.push(subspan);
 
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isNull();
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isNull();
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isNull();
 
         // when
         tracer.registerWithThread(newSpanStack);
 
         // then
         // our stack was registered, so subspan should be current
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(subspan.getTraceId());
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(subspan.toJSON());
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isEqualTo(subspan.getTraceId());
         assertThat(tracer.getCurrentSpan()).isEqualTo(subspan);
 
         // a *copy* of the stack we passed in should have been registered, and modifying the original stack should not affect Tracer's stack
@@ -1197,7 +1277,7 @@ public class TracerTest {
     @Test
     public void registerWithThread_should_work_as_advertised_if_existing_stack_is_empty() {
         // given
-        getSpanStackThreadLocal().set(new LinkedList<Span>());
+        getSpanStackThreadLocal().set(new LinkedList<>());
         Tracer tracer = Tracer.getInstance();
 
         Deque<Span> newSpanStack = new LinkedList<>();
@@ -1206,16 +1286,14 @@ public class TracerTest {
         newSpanStack.push(parentSpan);
         newSpanStack.push(subspan);
 
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isNull();
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isNull();
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isNull();
 
         // when
         tracer.registerWithThread(newSpanStack);
 
         // then
         // our stack was registered, so subspan should be current
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(subspan.getTraceId());
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(subspan.toJSON());
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isEqualTo(subspan.getTraceId());
         assertThat(tracer.getCurrentSpan()).isEqualTo(subspan);
 
         // a *copy* of the stack we passed in should have been registered, and modifying the original stack should not affect Tracer's stack
@@ -1240,15 +1318,13 @@ public class TracerTest {
         newSpanStack.push(parentSpan);
         newSpanStack.push(subspan);
 
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(existingSpan.getTraceId());
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(existingSpan.toJSON());
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isEqualTo(existingSpan.getTraceId());
 
         // when
         tracer.registerWithThread(newSpanStack);
 
         // then
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(subspan.getTraceId());
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(subspan.toJSON());
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isEqualTo(subspan.getTraceId());
 
         Deque<Span> spanStack = getSpanStackThreadLocal().get();
         assertThat(spanStack).isEqualTo(newSpanStack);
@@ -1260,8 +1336,7 @@ public class TracerTest {
         Tracer tracer = Tracer.getInstance();
         tracer.startRequestWithRootSpan("foo");
         Span subspan = tracer.startSubSpan("bar", SpanPurpose.LOCAL_ONLY);
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(subspan.getTraceId());
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(subspan.toJSON());
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isEqualTo(subspan.getTraceId());
 
         // when
         Deque<Span> spanStack = getSpanStackThreadLocal().get();
@@ -1269,8 +1344,7 @@ public class TracerTest {
 
         // then
         assertThat(getSpanStackThreadLocal().get()).isEqualTo(spanStack);
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(subspan.getTraceId());
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(subspan.toJSON());
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isEqualTo(subspan.getTraceId());
     }
 
     @Test
@@ -1279,8 +1353,7 @@ public class TracerTest {
         Tracer tracer = Tracer.getInstance();
         tracer.startRequestWithRootSpan("foo");
         Span subspan = tracer.startSubSpan("bar", SpanPurpose.LOCAL_ONLY);
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(subspan.getTraceId());
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(subspan.toJSON());
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isEqualTo(subspan.getTraceId());
 
         // when
         Deque<Span> spanStack = getSpanStackThreadLocal().get();
@@ -1288,8 +1361,7 @@ public class TracerTest {
 
         // then
         assertThat(getSpanStackThreadLocal().get()).isEqualTo(spanStack);
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(subspan.getTraceId());
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(subspan.toJSON());
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isEqualTo(subspan.getTraceId());
     }
 
     @Test
@@ -1298,16 +1370,14 @@ public class TracerTest {
         Tracer tracer = Tracer.getInstance();
         tracer.startRequestWithRootSpan("foo");
         Span subspan = tracer.startSubSpan("bar", SpanPurpose.LOCAL_ONLY);
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(subspan.getTraceId());
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(subspan.toJSON());
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isEqualTo(subspan.getTraceId());
 
         // when
         tracer.registerWithThread(null);
 
         // then
         assertThat(getSpanStackThreadLocal().get()).isNull();
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isNull();
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isNull();
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isNull();
     }
 
     @Test
@@ -1316,8 +1386,7 @@ public class TracerTest {
         Tracer tracer = Tracer.getInstance();
         tracer.startRequestWithRootSpan("foo");
         Span subspan = tracer.startSubSpan("bar", SpanPurpose.LOCAL_ONLY);
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(subspan.getTraceId());
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(subspan.toJSON());
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isEqualTo(subspan.getTraceId());
 
         // when
         Deque<Span> emptyStack = new LinkedList<>();
@@ -1325,8 +1394,7 @@ public class TracerTest {
 
         // then
         assertThat(getSpanStackThreadLocal().get()).isEqualTo(emptyStack);
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isNull();
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isNull();
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isNull();
     }
 
     @DataProvider
@@ -1373,66 +1441,56 @@ public class TracerTest {
         // Start some spans for request A
         Span reqAParentSpan = tracer.startRequestWithRootSpan("req_A_foo");
         Span reqASubSpan = tracer.startSubSpan("req_A_bar", SpanPurpose.LOCAL_ONLY);
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(reqASubSpan.getTraceId());
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(reqASubSpan.toJSON());
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isEqualTo(reqASubSpan.getTraceId());
         assertThat(tracer.getCurrentSpan()).isEqualTo(reqASubSpan);
 
         // Unregister in preparation for request B
         Deque<Span> reqAStack = tracer.unregisterFromThread();
 
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isNull();
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isNull();
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isNull();
         assertThat(tracer.getCurrentSpan()).isNull();
 
         // Start some spans for request B
         Span reqBParentSpan = tracer.startRequestWithRootSpan("req_B_foo");
         Span reqBSubSpan = tracer.startSubSpan("req_B_bar", SpanPurpose.LOCAL_ONLY);
 
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(reqBSubSpan.getTraceId());
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(reqBSubSpan.toJSON());
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isEqualTo(reqBSubSpan.getTraceId());
         assertThat(tracer.getCurrentSpan()).isEqualTo(reqBSubSpan);
 
         // Unregister in preparation for going back to request A
         Deque<Span> reqBStack = tracer.unregisterFromThread();
 
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isNull();
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isNull();
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isNull();
         assertThat(tracer.getCurrentSpan()).isNull();
 
         // Re-register request A's stack
         tracer.registerWithThread(reqAStack);
 
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(reqASubSpan.getTraceId());
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(reqASubSpan.toJSON());
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isEqualTo(reqASubSpan.getTraceId());
         assertThat(tracer.getCurrentSpan()).isEqualTo(reqASubSpan);
 
         // Complete request A
         tracer.completeSubSpan();
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(reqAParentSpan.getTraceId());
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(reqAParentSpan.toJSON());
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isEqualTo(reqAParentSpan.getTraceId());
         assertThat(tracer.getCurrentSpan()).isEqualTo(reqAParentSpan);
 
         tracer.completeRequestSpan();
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isNull();
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isNull();
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isNull();
         assertThat(tracer.getCurrentSpan()).isNull();
 
         // Re-register request B's stack
         tracer.registerWithThread(reqBStack);
 
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(reqBSubSpan.getTraceId());
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(reqBSubSpan.toJSON());
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isEqualTo(reqBSubSpan.getTraceId());
         assertThat(tracer.getCurrentSpan()).isEqualTo(reqBSubSpan);
 
         // Complete request B
         tracer.completeSubSpan();
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(reqBParentSpan.getTraceId());
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(reqBParentSpan.toJSON());
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isEqualTo(reqBParentSpan.getTraceId());
         assertThat(tracer.getCurrentSpan()).isEqualTo(reqBParentSpan);
 
         tracer.completeRequestSpan();
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isNull();
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isNull();
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isNull();
         assertThat(tracer.getCurrentSpan()).isNull();
     }
 
@@ -1453,8 +1511,7 @@ public class TracerTest {
         Span parentSpan = tracer.startRequestWithRootSpan("foo");
         Span subspan = tracer.startSubSpan("bar", SpanPurpose.LOCAL_ONLY);
 
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(subspan.getTraceId());
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(subspan.toJSON());
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isEqualTo(subspan.getTraceId());
 
         // when
         Deque<Span> stack = tracer.getCurrentSpanStackCopy();
@@ -1466,17 +1523,15 @@ public class TracerTest {
 
         // Clear the returned stack
         stack.clear();
-        assertThat(stack.isEmpty()).isTrue();
+        assertThat(stack).isEmpty();
 
         // then
         // Now verify that tracer still points to a stack that contains both spans. This proves that getCurrentSpanStackCopy() returned a copy, not the original
         assertThat(tracer.getCurrentSpan()).isEqualTo(subspan);
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(subspan.getTraceId());
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(subspan.toJSON());
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isEqualTo(subspan.getTraceId());
         tracer.completeSubSpan();
         assertThat(tracer.getCurrentSpan()).isEqualTo(parentSpan);
-        assertThat(MDC.get(Tracer.TRACE_ID_MDC_KEY)).isEqualTo(parentSpan.getTraceId());
-        assertThat(MDC.get(Tracer.SPAN_JSON_MDC_KEY)).isEqualTo(parentSpan.toJSON());
+        assertThat(MDC.get(SpanFieldForLoggerMdc.TRACE_ID.mdcKey)).isEqualTo(parentSpan.getTraceId());
     }
 
     @Test
@@ -1494,7 +1549,7 @@ public class TracerTest {
 
         {
             // and when - empty stack
-            tracer.registerWithThread(new LinkedList<Span>());
+            tracer.registerWithThread(new LinkedList<>());
 
             // then
             assertThat(tracer.getCurrentSpanStackSize()).isEqualTo(0);
@@ -1773,6 +1828,7 @@ public class TracerTest {
         // given
         Span nonCurrentRootSpan = Tracer.getInstance().startRequestWithRootSpan("root");
         Span nonCurrentSubspan = Tracer.getInstance().startSubSpan("subspan1", SpanPurpose.LOCAL_ONLY);
+        @SuppressWarnings("unused")
         Span currentSubspan = Tracer.getInstance().startSubSpan("subspan2", SpanPurpose.LOCAL_ONLY);
 
         // expect
@@ -1799,10 +1855,133 @@ public class TracerTest {
     }
 
     @Test
-    public void make_code_coverage_happy() {
+    public void setSpanFieldsForLoggerMdc_varargs_sets_fields_as_expected() {
+        // given
+        SpanFieldForLoggerMdc[] selectedFields = new SpanFieldForLoggerMdc[] {
+            SpanFieldForLoggerMdc.TRACE_ID,
+            SpanFieldForLoggerMdc.SPAN_ID
+        };
+
+        assertThat(Tracer.getInstance().getSpanFieldsForLoggerMdc())
+            .isEqualTo(singleton(SpanFieldForLoggerMdc.TRACE_ID));
+
+        // when
+        Tracer.getInstance().setSpanFieldsForLoggerMdc(selectedFields);
+
+        // then
+        assertThat(Tracer.getInstance().getSpanFieldsForLoggerMdc())
+            .isEqualTo(new HashSet<>(Arrays.asList(selectedFields)));
+    }
+
+    @DataProvider(value = {
+        "true",
+        "false"
+    })
+    @Test
+    public void setSpanFieldsForLoggerMdc_varargs_handles_empty_or_null_array_gracefully(boolean isNullArray) {
+        // given
+        SpanFieldForLoggerMdc[] selectedFields = (isNullArray) ? null : new SpanFieldForLoggerMdc[0];
+
+        assertThat(Tracer.getInstance().getSpanFieldsForLoggerMdc())
+            .isEqualTo(singleton(SpanFieldForLoggerMdc.TRACE_ID));
+        
+        // when
+        Tracer.getInstance().setSpanFieldsForLoggerMdc(selectedFields);
+
+        // then
+        assertThat(Tracer.getInstance().getSpanFieldsForLoggerMdc()).isEmpty();
+    }
+
+    @Test
+    public void setSpanFieldsForLoggerMdc_with_Set_arg_sets_fields_as_expected() {
+        // given
+        Set<SpanFieldForLoggerMdc> selectedFields = new HashSet<>(Arrays.asList(
+            SpanFieldForLoggerMdc.TRACE_ID,
+            SpanFieldForLoggerMdc.SPAN_ID
+        ));
+
+        assertThat(Tracer.getInstance().getSpanFieldsForLoggerMdc())
+            .isEqualTo(singleton(SpanFieldForLoggerMdc.TRACE_ID));
+
+        // when
+        Tracer.getInstance().setSpanFieldsForLoggerMdc(selectedFields);
+
+        // then
+        assertThat(Tracer.getInstance().getSpanFieldsForLoggerMdc()).isEqualTo(selectedFields);
+    }
+
+    @DataProvider(value = {
+        "true",
+        "false"
+    })
+    @Test
+    public void setSpanFieldsForLoggerMdc_with_Set_arg_handles_empty_or_null_array_gracefully(boolean isNullSet) {
+        // given
+        Set<SpanFieldForLoggerMdc> selectedFields = (isNullSet) ? null : new HashSet<>();
+
+        assertThat(Tracer.getInstance().getSpanFieldsForLoggerMdc())
+            .isEqualTo(singleton(SpanFieldForLoggerMdc.TRACE_ID));
+
+        // when
+        Tracer.getInstance().setSpanFieldsForLoggerMdc(selectedFields);
+
+        // then
+        assertThat(Tracer.getInstance().getSpanFieldsForLoggerMdc()).isEmpty();
+    }
+
+    @Test
+    public void getSpanFieldsForLoggerMdc_returns_unmodifiable_Set() {
+        // given
+        Set<SpanFieldForLoggerMdc> spanFieldsForMdcGetterResult = Tracer.getInstance().getSpanFieldsForLoggerMdc();
+
+        // when
+        Throwable ex1 = catchThrowable(() -> spanFieldsForMdcGetterResult.add(SpanFieldForLoggerMdc.TRACE_ID));
+        Throwable ex2 = catchThrowable(() -> spanFieldsForMdcGetterResult.remove(SpanFieldForLoggerMdc.TRACE_ID));
+        Throwable ex3 = catchThrowable(spanFieldsForMdcGetterResult::clear);
+
+        // then
+        assertThat(ex1).isInstanceOf(UnsupportedOperationException.class);
+        assertThat(ex2).isInstanceOf(UnsupportedOperationException.class);
+        assertThat(ex3).isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
+    public void make_code_coverage_happy1() {
         // Some code coverage tools force you to exercise valueOf() (for example) or you get uncovered lines.
         for (Tracer.SpanLoggingRepresentation option : Tracer.SpanLoggingRepresentation.values()) {
             assertThat(Tracer.SpanLoggingRepresentation.valueOf(option.name())).isEqualTo(option);
+        }
+    }
+
+    @Test
+    public void make_code_coverage_happy2() {
+        Logger tracerValidSpanLogger = (Logger) Whitebox.getInternalState(Tracer.getInstance(), "validSpanLogger");
+        Level origLevel = tracerValidSpanLogger.getLevel();
+        try {
+            // Disable info logging.
+            tracerValidSpanLogger.setLevel(Level.WARN);
+            // Exercise the span completion logic to trigger the do-nothing branch when info logging is disabled.
+            Tracer.getInstance().startRequestWithRootSpan("foo");
+            Tracer.getInstance().completeRequestSpan();
+        }
+        finally {
+            tracerValidSpanLogger.setLevel(origLevel);
+        }
+    }
+
+    @Test
+    public void make_code_coverage_happy3() {
+        Logger tracerClassLogger = (Logger) Whitebox.getInternalState(Tracer.getInstance(), "classLogger");
+        Level origLevel = tracerClassLogger.getLevel();
+        try {
+            // Enable debug logging.
+            tracerClassLogger.setLevel(Level.DEBUG);
+            // Exercise a span lifecycle to trigger the code branches that only do something if debug logging is on.
+            Tracer.getInstance().startRequestWithRootSpan("foo");
+            Tracer.getInstance().completeRequestSpan();
+        }
+        finally {
+            tracerClassLogger.setLevel(origLevel);
         }
     }
 

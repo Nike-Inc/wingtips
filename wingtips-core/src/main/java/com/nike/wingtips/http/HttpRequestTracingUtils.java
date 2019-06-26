@@ -140,7 +140,7 @@ public class HttpRequestTracingUtils {
     protected static String getTraceId(RequestWithHeaders request) {
         String requestTraceId = getHeaderWithAttributeAsBackup(request, TraceHeaders.TRACE_ID);
 
-        logger.debug(String.format("TraceId from client is TraceId=%s", requestTraceId));
+        logger.debug("TraceId from client is TraceId={}", requestTraceId);
 
         return requestTraceId;
     }

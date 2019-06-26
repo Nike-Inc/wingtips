@@ -198,7 +198,11 @@ When `Tracer` completes a span it will log it to a SLF4J logger named `VALID_WIN
 <a name="mdc_info"></a> 
 #### Automatically attaching trace information to all log messages
 
-In addition to the logs this class outputs for completed spans it puts the trace ID and span JSON for the "current" span into the SLF4J [MDC](http://www.slf4j.org/manual.html#mdc) so that all your logs can be tagged with the current span's trace ID and/or full JSON. To utilize this you would need to add `%X{traceId}` and/or `%X{spanJson}` to your log pattern (*NOTE: this only works with SLF4J frameworks that support MDC, e.g. Logback and Log4j*). This causes *all* log messages, including ones that come from third party libraries and have no knowledge of distributed tracing, to be output with the current span's tracing information.
+In addition to the logs this class outputs for completed spans it puts the trace ID for the "current" span into the 
+SLF4J [MDC](http://www.slf4j.org/manual.html#mdc) so that all your logs can be tagged with the current span's trace ID. 
+To utilize this you would need to add `%X{traceId}` to your log pattern (*NOTE: this only works with SLF4J frameworks 
+that support MDC, e.g. Logback and Log4j*). This causes *all* log messages, including ones that come from third party 
+libraries and have no knowledge of distributed tracing, to be output with the current span's tracing information.
 
 Here is an example [Logback pattern](http://logback.qos.ch/manual/layouts.html) utilizing the tracing MDC info:
 
@@ -212,9 +216,16 @@ And here is what a log message output would look like when using this pattern:
 traceId=520819c556734c0c 14:43:53.483 INFO  [main] com.foo.Bar - important log message
 ```
 
-***This is one of the primary features and benefits of Wingtips - if you utilize this MDC feature then you'll be able to trivially collect all log messages related to a specific request across all services it touched even if some of those messages came from third party libraries.***
+***This is one of the primary features and benefits of Wingtips - if you utilize this MDC feature then you'll be able 
+to trivially collect all log messages related to a specific request across all services it touched even if some of 
+those messages came from third party libraries.***
 
-A [Log4j pattern](https://logging.apache.org/log4j/1.2/apidocs/org/apache/log4j/PatternLayout.html) would look similar - in particular `%X{traceId}` to access the trace ID in the MDC is identical.
+A [Log4j pattern](https://logging.apache.org/log4j/1.2/apidocs/org/apache/log4j/PatternLayout.html) would look 
+similar - in particular `%X{traceId}` to access the trace ID in the MDC is identical.
+
+Note: You can adjust which span fields are included in the MDC behavior by calling 
+`Tracer.setSpanFieldsForLoggerMdc(...)`. It's recommended that you always include trace ID, but if you want to also 
+include span ID, parent span ID, or even the full span JSON in the MDC (not recommended), you can.
 
 #### Changing output format
 
