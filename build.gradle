@@ -95,7 +95,7 @@ ext {
     jettyVersion = '9.3.21.v20170918'
 
     // JACOCO PROPERTIES
-    jacocoToolVersion = '0.8.2'
+    jacocoToolVersion = '0.8.4'
     // Anything in this jacocoExclusions list will be excluded from coverage reports.
     jacocoExclusions = []
     jacocoCoverageThresholdSetup = {
