@@ -774,11 +774,11 @@ public class Tracer {
     void handleSpanCloseMethod(Span span) {
         // See if this span has already been completed - if so then this method should not have been called.
         if (span.isCompleted()) {
-            classLogger.error(
-                "WINGTIPS USAGE ERROR - An attempt was made to close() a span that was already completed. "
+            classLogger.debug(
+                "POSSIBLE WINGTIPS USAGE ERROR - An attempt was made to close() a span that was already completed. "
                 + "This call to Span.close() will be ignored. "
-                + "wingtips_usage_error=true, already_completed_span=true, trace_id={}, span_id={}",
-                span.getTraceId(), span.getSpanId(), new Exception("Stack trace for debugging purposes")
+                + "possible_wingtips_usage_error=true, already_completed_span=true, trace_id={}, span_id={}",
+                span.getTraceId(), span.getSpanId()
             );
             return;
         }
@@ -832,17 +832,20 @@ public class Tracer {
      *                                    when it was supposed to have been completed), pass in false if the span's timing info is good. This affects how the span is logged.
      */
     protected void completeAndLogSpan(Span span, boolean containsIncorrectTimingInfo) {
-        // Complete the span.
-        if (span.isCompleted()) {
-            classLogger.error(
-                "WINGTIPS USAGE ERROR - An attempt was made to complete a span that was already completed. This call will be ignored. "
-                + "wingtips_usage_error=true, already_completed_span=true, trace_id={}, span_id={}",
-                span.getTraceId(), span.getSpanId(), new Exception("Stack trace for debugging purposes")
+        // Call span.complete(), and keep track of whether our call completed it (in case it was previously completed).
+        boolean thisCallCompletedTheSpan = span.complete();
+
+        if (!thisCallCompletedTheSpan) {
+            // The span was completed previously (or simultaneously by another thread). We didn't complete the span,
+            //      so we shouldn't do any notifications or logging. This *can* indicate an error in Wingtips usage,
+            //      but there are some use cases where it can happen legitimately. So we'll log a debug warning.
+            classLogger.debug(
+                "POSSIBLE WINGTIPS USAGE ERROR - An attempt was made to complete a span that was already completed. "
+                + "This call will be ignored. "
+                + "possible_wingtips_usage_error=true, already_completed_span=true, trace_id={}, span_id={}",
+                span.getTraceId(), span.getSpanId()
             );
             return;
-        }
-        else {
-            span.complete();
         }
 
         // Notify listeners after completion but before logging to allow listeners to do final span modifications and

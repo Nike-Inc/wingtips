@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Represents some logical "unit of work" that is part of the larger distributed trace. A given request's trace tree is made up of all the spans with the same {@link #traceId}
@@ -73,6 +74,8 @@ public class Span implements Closeable, Serializable {
     private final List<TimestampedAnnotation> unmodifiableAnnotations = Collections.unmodifiableList(annotations);
 
     private Long durationNanos;
+    // Used to prevent two threads from trying to close the span at the same time.
+    private final AtomicBoolean completedFlag = new AtomicBoolean(false);
 
     private String cachedJsonRepresentation;
     private String cachedKeyValueRepresentation;
@@ -357,19 +360,38 @@ public class Span implements Closeable, Serializable {
     }
 
     /**
-     * Indicates that this {@link Span} is completed/finished/finalized and sets {@link #getDurationNanos()} to be {@link System#nanoTime()} minus
-     * {@link #getSpanStartTimeNanos()}. After this is called then {@link #isCompleted()} will return true and {@link #getDurationNanos()} will return
-     * the value calculated here. An {@link IllegalStateException} will be thrown if this method is called after the span has already been completed.
-     * <p/>
-     * NOTE: This is intentionally package scoped to make sure completions and logging/span output logic happens centrally through {@link Tracer}.
+     * Causes this {@link Span} to be completed/finished/finalized by setting {@link #getDurationNanos()} to
+     * {@link System#nanoTime()} minus {@link #getSpanStartTimeNanos()}. After this is called then
+     * {@link #isCompleted()} will return true and {@link #getDurationNanos()} will return the value calculated here.
+     * A return value of true means this span wasn't previously completed, and this method call was the one that
+     * caused it to be completed. This is done atomically to guarantee only one caller can ever return true for this
+     * method for a given span. If this span has already been completed, then this method will return false and won't
+     * do anything.
+     *
+     * <p>This atomic completion behavior is necessary to support some asynchronous use cases, where multiple threads
+     * may try to complete the span at the same time (most often in the case of a problem that can trigger multiple
+     * simultaneous errors).
+     *
+     * <p>NOTE: This is intentionally package scoped to make sure completions and logging/span output logic happens
+     * centrally through {@link Tracer}.
+     *
+     * @return true if this span was *not* previously completed and the call to this method caused it to become
+     * completed, false if this span was previously completed (and therefore the call to this method did nothing).
      */
-    /*package*/ void complete() {
-        if (this.durationNanos != null)
-            throw new IllegalStateException("This Span is already completed.");
+    /*package*/ boolean complete() {
+        boolean allowedToComplete = completedFlag.compareAndSet(false, true);
+        if (!allowedToComplete) {
+            // This span was completed previously (or simultaneously by another thread, and that other thread won).
+            //      So we're not allowed to complete the span since someone else already did it. Return false
+            //      to let the caller know this.
+            return false;
+        }
 
+        // This span wasn't already completed, so do it now.
         this.durationNanos = System.nanoTime() - spanStartTimeNanos;
         // This span's state changed, so clear the cached serialized representations.
         clearCachedDataDueToStateChange();
+        return true;
     }
 
     /**

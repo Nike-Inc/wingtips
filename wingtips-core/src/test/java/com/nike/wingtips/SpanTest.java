@@ -37,7 +37,6 @@ import static com.nike.wingtips.util.parser.SpanParserTest.deserializeKeyValueSp
 import static java.util.Collections.singletonList;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
-import static org.assertj.core.api.Fail.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verifyZeroInteractions;
@@ -429,10 +428,11 @@ public class SpanTest {
             // when
             Thread.sleep((long) (Math.random() * 10));
             long beforeCompleteNanoTime = System.nanoTime();
-            validSpan.complete();
+            boolean result = validSpan.complete();
             long afterCompleteNanoTime = System.nanoTime();
 
             // then
+            assertThat(result).isTrue();
             assertThat(validSpan.isCompleted()).isTrue();
             long lowerBoundDuration = beforeCompleteNanoTime - validSpan.getSpanStartTimeNanos();
             long upperBoundDuration = afterCompleteNanoTime - validSpan.getSpanStartTimeNanos();
@@ -440,16 +440,21 @@ public class SpanTest {
         }
     }
 
-    @Test(expected = IllegalStateException.class)
+    @Test
     public void complete_should_throw_IllegalStateException_if_span_is_already_completed() {
         // given
         Span validSpan = Span.generateRootSpanForNewTrace(spanName, spanPurpose).build();
         validSpan.complete();
         assertThat(validSpan.isCompleted()).isTrue();
 
+        long durationAfterInitialCompletion = validSpan.getDurationNanos();
+
+        // when
+        boolean result = validSpan.complete();
+
         // expect
-        validSpan.complete();
-        fail("Expected IllegalStateException but no exception was thrown");
+        assertThat(result).isFalse();
+        assertThat(validSpan.getDurationNanos()).isEqualTo(durationAfterInitialCompletion);
     }
 
     @Test
