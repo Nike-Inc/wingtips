@@ -2,116 +2,198 @@
 //                           Individual reports for each submodule can be found at: [project_root]/[submodule]/build/reports/jacoco/test/html/index.html
 allprojects {
     apply plugin: 'jacoco'
-    apply plugin: 'com.palantir.jacoco-coverage'
-    apply plugin: 'com.github.ksoichiro.console.reporter'
 
     jacoco {
         toolVersion = jacocoToolVersion
     }
 }
 
-// Tell subprojects to generate reports/data
+ext {
+    jacocoRootReportCoverageSummary = null
+    jacocoCoverageSummaries = new LinkedHashMap<String, Double>()
+}
+
+// ========== SUBPROJECT JACOCO REPORTS
+
+// Tell subprojects to generate jacoco reports.
 subprojects {
     jacocoTestReport {
-        additionalSourceDirs = files(sourceSets.main.allSource.srcDirs)
-        sourceDirectories = files(sourceSets.main.allSource.srcDirs)
-        classDirectories =  files(sourceSets.main.output)
+        additionalSourceDirs.from(files(sourceSets.main.allSource.srcDirs))
+        sourceDirectories.from(files(sourceSets.main.allSource.srcDirs))
+        classDirectories.from(files(sourceSets.main.output))
         reports {
             html.enabled = true
             xml.enabled = true
             csv.enabled = false
         }
         afterEvaluate {
-            classDirectories = files(classDirectories.files.collect {
-                fileTree(dir: it, exclude: jacocoExclusions)
-            })
+            //noinspection GroovyAssignabilityCheck
+            classDirectories.setFrom(
+                    files(classDirectories.files.collect {
+                        fileTree(dir: it, exclude: jacocoExclusions)
+                    })
+            )
+        }
+
+    }
+
+    jacocoTestCoverageVerification { JacocoCoverageVerification v ->
+        // The coverage rules are defined in the base build.gradle for convenience, but we can configure the
+        //      exclusions here.
+        afterEvaluate {
+            //noinspection GroovyAssignabilityCheck
+            classDirectories.setFrom(
+                    files(classDirectories.files.collect {
+                        fileTree(dir: it, exclude: jacocoExclusions)
+                    })
+            )
         }
     }
+
+    // Force jacoco reports and coverage verification to run after tests.
+    test.finalizedBy(jacocoTestReport)
+    test.finalizedBy(jacocoTestCoverageVerification)
 }
 
+// ========== COMBO JACOCO ROOT REPORT
+
+// Define which subprojects we want to include in the combo root report.
 def subprojectsToIncludeForJacocoComboReport(Set<Project> origSubprojects) {
     Set<Project> projectsToInclude = new HashSet<>()
     for (Project subproj : origSubprojects) {
-        // For this project we'll include everything that's not a sample or a testonly module
-        if (!subproj.getName().startsWith("sample") && !subproj.getName().startsWith("testonly")) {
+        if (isSubprojectIncludedInJacocoReports(subproj)) {
             projectsToInclude.add(subproj)
         }
     }
     return projectsToInclude
 }
 
-// Do a root report to generate the combined report
-task jacocoRootReport(type: org.gradle.testing.jacoco.tasks.JacocoReport) {
+// Define a task for generating the combo root report.
+//noinspection GroovyAssignabilityCheck
+task jacocoRootReport(type: JacocoReport) {
     def subprojectsToInclude = subprojectsToIncludeForJacocoComboReport(subprojects)
-    dependsOn = subprojectsToInclude.test
-    additionalSourceDirs = files(subprojectsToInclude.sourceSets.main.allSource.srcDirs)
-    sourceDirectories = files(subprojectsToInclude.sourceSets.main.allSource.srcDirs)
-    classDirectories =  files(subprojectsToInclude.sourceSets.main.output)
-    executionData = files(subprojectsToInclude.jacocoTestReport.executionData)
+
+    // This can only run after all the subprojects' test and jacocoTestReport tasks.
+    //      It feels like we should only have to specify jacocoTestReport since those run after tests anyway,
+    //      but it doesn't appear to be honored that way when running the gradle build with the --parallel flag.
+    mustRunAfter subprojectsToInclude*.test
+    mustRunAfter subprojectsToInclude*.jacocoTestReport
+
+    additionalSourceDirs.from(files(subprojectsToInclude.sourceSets.main.allSource.srcDirs))
+    sourceDirectories.from(files(subprojectsToInclude.sourceSets.main.allSource.srcDirs))
+    classDirectories.from(files(subprojectsToInclude.sourceSets.main.output))
+    executionData.from(files(subprojectsToInclude.jacocoTestReport.executionData))
     reports {
         html.enabled = true
         xml.enabled = true
         csv.enabled = false
     }
     afterEvaluate {
-        classDirectories = files(classDirectories.files.collect {
-            fileTree(dir: it, exclude: jacocoExclusions)
-        })
+        //noinspection GroovyAssignabilityCheck
+        classDirectories.setFrom(
+                files(classDirectories.files.collect {
+                    fileTree(dir: it, exclude: jacocoExclusions)
+                })
+        )
     }
     onlyIf = {
         true
     }
     doFirst {
-        executionData = files(executionData.findAll {
-            it.exists()
-        })
+        executionData.from(
+                files(executionData.findAll {
+                    it.exists()
+                })
+        )
     }
 }
 
+// Ensure that the combo root report runs after tests.
+test.finalizedBy(jacocoRootReport)
+
+// Configure coverage violation rules.
 jacocoCoverageThresholdSetup()
 
-// consoleReporter is the task used for outputting code coverage numbers to the command line after a build.
-// See https://github.com/ksoichiro/gradle-console-reporter for full configuration details and options
+// This dummy task forces all submodules' test tasks to run, even if one of them has failed tests.
+//      NOTE: For the jacocoRootReport to work properly in the case a submodule has failed tests, the name
+//      of this dummy task matters: it must have a name that alphabetically comes later than jacocoRootReport.
+//noinspection GroovyAssignabilityCheck
+task zForceAllSubprojectTestsToRunDummyTask {
+    def subprojectsToInclude = subprojectsToIncludeForJacocoComboReport(subprojects)
+    dependsOn = subprojectsToInclude.test
+}
 
-// Configure the common stuff for all projects
-allprojects {
-    consoleReporter {
-        jacoco {
-            // Disable by default - enabling for specific root/subprojects will be done below
-            enabled false
+test.finalizedBy(zForceAllSubprojectTestsToRunDummyTask)
 
-            // We don't need the gradle-console-reporter plugin to adjust any of the jacoco settings
-            autoconfigureCoverageConfig false
-        }
+// ========== CONSOLE COVERAGE SUMMARY OUTPUT
 
-        junit {
-            enabled false
-        }
+// This method parses jacoco report XML to pull out the instruction coverage summary value and store it for later.
+def parseJacocoSummaryInfo(JacocoReport task, boolean isRootReport) {
+    File xmlFile = task.reports.xml.destination
+    if (xmlFile == null || !xmlFile.exists()) {
+        return
+    }
 
-        cobertura {
-            enabled false
+    Node rootNode = new XmlParser(false, false).parseText(
+            xmlFile.text.replaceAll("<!DOCTYPE[^>]*>", "")
+    )
+    Double instructionPctCovered = null
+    rootNode.counter.each { counter ->
+        try {
+            double missed = Integer.valueOf(counter.@missed as String).toDouble()
+            double covered = Integer.valueOf(counter.@covered as String).toDouble()
+            String type = counter.@type as String
+            if (type == "INSTRUCTION") {
+                instructionPctCovered = covered / (missed + covered)
+            }
+        } catch (ignore) {
         }
     }
-}
-// Configure stuff specifically for the root project
-consoleReporter {
-    jacoco {
-        enabled true
 
-        // gradle-console-reporter finds and reports on the individual submodules fine, but our combo report is in a different location.
-        reportFile new File("${project.buildDir}/reports/jacoco/jacocoRootReport/jacocoRootReport.xml")
+    if (isRootReport) {
+        jacocoRootReportCoverageSummary = instructionPctCovered
+    }
+    else {
+        jacocoCoverageSummaries.put(task.project.name, instructionPctCovered)
     }
 }
-// Enable subprojects that are included in the combo report
+
+// For subprojects included in the jacoco combo report, we want to report subproject coverage summaries on the console,
+//      so tell the subproject's jacoco report tasks to parse summary info and put it somewhere we can access at the
+//      end of the gradle build.
 configure(subprojectsToIncludeForJacocoComboReport(subprojects)) {
-    consoleReporter {
-        jacoco {
-            enabled true
-        }
-
-        junit {
-            // The junit reporter is actually really handy when a test fails.
-            enabled true
+    jacocoTestReport {
+        doLast { JacocoReport jr ->
+            parseJacocoSummaryInfo(jr, false)
         }
     }
+}
+
+// Do the same for the main project's combo root report.
+jacocoRootReport {
+    doLast { JacocoReport jr ->
+        parseJacocoSummaryInfo(jr, true)
+    }
+}
+
+// Output the overall coverage summary and summaries for all the submodules' coverage when the gradle build
+//      completely finishes.
+gradle.buildFinished { BuildResult buildResult ->
+    println("\n=== COVERAGE SUMMARY ===")
+
+    println("${rootProject.name}: " + getCoveragePercentageAsString(jacocoRootReportCoverageSummary))
+
+    jacocoCoverageSummaries.forEach({ String projectName, Double value ->
+        println("${projectName}: " + getCoveragePercentageAsString(value))
+    })
+
+    println("")
+}
+
+static String getCoveragePercentageAsString(Double pct) {
+    if (pct == null) {
+        return "??.?%"
+    }
+
+    return (pct * 100.0d).trunc(2) + "%"
 }
