@@ -8,6 +8,7 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 
 #### 0.x Releases
 
+- `0.20.x` Releases - [0.20.0](#0200)
 - `0.19.x` Releases - [0.19.2](#0192), [0.19.1](#0191), [0.19.0](#0190)
 - `0.18.x` Releases - [0.18.1](#0181), [0.18.0](#0180)
 - `0.17.x` Releases - [0.17.0](#0170)
@@ -20,6 +21,86 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 - `0.10.x` Releases - [0.10.0](#0100)
 - `0.9.x` Releases - [0.9.0.1](#0901), [0.9.0](#090)
 
+## [0.20.0](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.20.0)
+
+Released on 2019-07-01.
+
+### Breaking Changes
+
+* The span's full serialized JSON will no longer be included in the logger MDC by default. Now, only the span's 
+trace ID is included in the logger MDC by default. This should only affect you if your logger pattern includes 
+`%X{spanJson}` and you rely on that behavior. If you do rely on the full `%X{spanJson}` MDC behavior, you can do the 
+following after updating Wingtips to revert to the previous behavior:
+`Tracer.getInstance().setSpanFieldsForLoggerMdc(Tracer.SpanFieldForLoggerMdc.TRACE_ID, Tracer.SpanFieldForLoggerMdc.FULL_SPAN_JSON)`.
+* `Span.getTags()` and `Span.getTimestampedAnnotations()` now return unmodifiable collections. You must use the other 
+methods on `Span` to modify tags/annotations rather than through the collections directly.
+
+### Added
+
+* `Tracer` now has a few new methods for dealing with `SpanLifecycleListener`s: 
+`addSpanLifecycleListenerFirst(SpanLifecycleListener)` and `removeAllSpanLifecycleListeners()`. The 
+`addSpanLifecycleListenerFirst(...)` method in particular is useful if you need a specific listener to come first 
+so that changes it makes can be seen by other listeners.
+    - Added by [Nic Munroe][contrib_nicmunroe] in pull request [#97](https://github.com/Nike-Inc/wingtips/pull/97).
+* `Tracer` now allows you to select which `Span` fields are included in the logger MDC via the 
+`Tracer.setSpanFieldsForLoggerMdc(...)` methods. You can choose from one or more of: trace ID, span ID, parent span ID,
+and full span JSON. (Trace ID is now the only field included by default, for performance reasons.)
+    - Added by [Nic Munroe][contrib_nicmunroe] in pull request [#102](https://github.com/Nike-Inc/wingtips/pull/102).
+    
+### Fixed
+
+* Fixed `Tracer` so that `SpanLifecycleListener.notifySpanCompleted(Span)` is called on all `SpanLifecycleListener`s
+after the span is completed but before it is logged. This gives you a chance to make final changes to the span
+(e.g. span name, tags, annotations, etc) after it is completed and have those changes reflected in the span info
+log output.
+    - Fixed by [Nic Munroe][contrib_nicmunroe] in pull request [#98](https://github.com/Nike-Inc/wingtips/pull/98).
+* Improved the precision of `Span.getSpanStartTimeEpochMicros()` for spans that are generated as sub/child spans.
+This affects spans generated through `Tracer.startSubSpan(...)`, `Tracer.startSpanInCurrentContext(...)`, and
+`Span.generateChildSpan(...)`.
+    - Fixed by [Nic Munroe][contrib_nicmunroe] in pull request [#101](https://github.com/Nike-Inc/wingtips/pull/101).
+* Fixed `Span` to clear cached JSON and key/value string serializations after *any* state change (span 
+completion, span name change, tags, or timestamped annotations). Previously, only span completion would clear cached
+string serializations. NOTE: In order to enforce this behavior, `Span.getTags()` and `Span.getTimestampedAnnotations()`
+now return unmodifiable collections. You must use the other methods on `Span` to modify tags/annotations rather than
+through the collections directly.
+    - Fixed by [Nic Munroe][contrib_nicmunroe] in pull request [#102](https://github.com/Nike-Inc/wingtips/pull/102).
+* Prevented span-to-string serializations for logging when those log statements would be ignored due to having
+debug or info logging turned off. This should result in a performance boost in some cases.
+    - Fixed by [Nic Munroe][contrib_nicmunroe] in pull request [#102](https://github.com/Nike-Inc/wingtips/pull/102).
+* Fixed span completion to be atomic, guaranteeing that a completed span will only be logged once and 
+`SpanLifecycleListener.notifySpanCompleted(Span)` only called once for each listener. Additionally, there are some 
+valid asynchronous use cases where multiple completion attempts may occur due to a race condition (i.e. certain types 
+of errors triggering simultaneous completion attempts from different areas of code), so this situation is no longer 
+considered an error, and will therefore only be logged as a debug warning instead of triggering an exception or 
+error log message.  
+    - Fixed by [Nic Munroe][contrib_nicmunroe] in pull request [#103](https://github.com/Nike-Inc/wingtips/pull/103).
+* Fixed some tests throughout the Wingtips codebase that were brittle due to race conditions.
+    - Fixed by [Nic Munroe][contrib_nicmunroe] in pull request [#100](https://github.com/Nike-Inc/wingtips/pull/100).    
+    
+### Changed
+
+* Changed `WingtipsToZipkinSpanConverterDefaultImpl` and `WingtipsToLightStepLifecycleListener` to add sanitized
+IDs as `sanitized_[trace|span|parent]_id` tags on the Wingtips `Span` rather than as separate log messages. This should
+reduce log spam if you're receiving trace/span/parent IDs in an invalid format, it'll be easier to correlate sanitized
+IDs with the span they're associated with, and will have no effect for requests where the IDs don't need sanitization.
+    - Changed by [Nic Munroe][contrib_nicmunroe] in pull request [#99](https://github.com/Nike-Inc/wingtips/pull/99).
+* Changed the verbosity of the default `JRETracer` in `WingtipsToLightStepLifecycleListener` from 4 down to 1. This
+will eliminate log spam in the event the `WingtipsToLightStepLifecycleListener` has trouble communicating with the span
+ingestor.
+    - Changed by [Nic Munroe][contrib_nicmunroe] in pull request [#99](https://github.com/Nike-Inc/wingtips/pull/99). 
+* Changed the default logger MDC behavior of Wingtips. The span's full serialized JSON will no longer be included
+in the logger MDC by default. This should only affect you if your logger pattern includes `%X{spanJson}` and you
+rely on that behavior. Trace ID is now the only field that is included by default. This should result in a performance
+boost for many users. 
+    - Changed by [Nic Munroe][contrib_nicmunroe] in pull request [#102](https://github.com/Nike-Inc/wingtips/pull/102).
+ 
+### Project Build
+
+* Upgraded to Jacoco `0.8.4`.
+    - Upgraded by [Nic Munroe][contrib_nicmunroe] in pull request [#102](https://github.com/Nike-Inc/wingtips/pull/102).
+* Changed the Travis CI config to use `openjdk8` instead of `oraclejdk8`. 
+    - Changed by [Nic Munroe][contrib_nicmunroe] in pull request [#104](https://github.com/Nike-Inc/wingtips/pull/104).
+                                                     
 ## [0.19.2](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.19.2)
 
 Released on 2019-06-14.
