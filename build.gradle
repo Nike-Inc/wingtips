@@ -4,13 +4,6 @@ buildscript {
         jcenter()
     }
     dependencies {
-        // STUFF FOR JACOCO
-        classpath 'com.palantir:jacoco-coverage:0.4.0'
-        // jacoco-coverage blows up unless you specify guava dependency
-        classpath 'com.google.guava:guava:18.0'
-        // Plugin for spitting out coverage numbers to the console
-        classpath 'com.github.ksoichiro:gradle-console-reporter:0.5.0'
-
         // STUFF FOR BINTRAY
         classpath 'com.jfrog.bintray.gradle:gradle-bintray-plugin:1.8.4'
     }
@@ -48,6 +41,20 @@ allprojects {
         module {
             downloadSources = true
         }
+    }
+
+    test {
+        // Minimize console spam while running tests without swallowing critical debugging info.
+        testLogging {
+            exceptionFormat "FULL"
+            events "passed", "skipped", "failed"
+            displayGranularity = 0
+            showExceptions true
+            showCauses true
+            showStackTraces true
+        }
+
+        ignoreFailures = false
     }
 
     // http://www.gradle.org/docs/current/userguide/java_plugin.html
@@ -96,36 +103,48 @@ ext {
 
     // JACOCO PROPERTIES
     jacocoToolVersion = '0.8.4'
-    // Anything in this jacocoExclusions list will be excluded from coverage reports.
+    // Anything in this jacocoExclusions list will be excluded from coverage reports. The format is paths to class
+    //      files, with wildcards allowed. e.g.: jacocoExclusions = [ "com/nike/Foo.class", "**/Bar*.*" ]
     jacocoExclusions = []
     jacocoCoverageThresholdSetup = {
-        // We have to split out the wingtips-zipkin coverage numbers because (1) it doesn't contain much code, and (2) uses some features
-        //      like try-with-resources that generate many many branches in the bytecode that are realistically impossible to get coverage for.
-        //      The combination of those issues mean we get artificially low coverage numbers even though it's clean correct code, so we just
-        //      have to visually verify it.
-        configure(subprojects.findAll { !it.name.contains("wingtips-zipkin") && !it.name.startsWith("sample") && !it.name.startsWith("testonly")}) {
-            jacocoCoverage {
-                // Enforce minimum code coverage. See https://github.com/palantir/gradle-jacoco-coverage for the full list of options.
-                reportThreshold 0.95, INSTRUCTION
-                reportThreshold 0.95, BRANCH
+        configure(subprojects.findAll { isSubprojectIncludedInJacocoReports(it) }) {
+            // We have to split out the wingtips-zipkin and wingtips-lightstep coverage numbers because (1) they don't
+            //      contain much code, and (2) they use some features like try-with-resources that generate many many
+            //      branches in the bytecode that are realistically impossible to get coverage for. The combination of
+            //      those issues mean we get artificially low coverage numbers even though it's clean correct code,
+            //      so we just have to visually verify it.
+            boolean isModuleWithLowerCodeCovReqs = (it.name.contains("wingtips-zipkin") ||
+                                                    it.name.contains("wingtips-lightstep"))
+            float minInstructionCodeCov = (isModuleWithLowerCodeCovReqs) ? 0.9 : 0.95
+            float minBranchCodeCov = (isModuleWithLowerCodeCovReqs) ? 0.8 : 0.95
+
+            // Configure the minimum code coverage rules.
+            jacocoTestCoverageVerification { JacocoCoverageVerification v ->
+                violationRules {
+                    rule { JacocoViolationRule r ->
+                        enabled = true
+                        limit {
+                            minimum = minInstructionCodeCov
+                            counter = "INSTRUCTION"
+                        }
+                    }
+
+                    rule { JacocoViolationRule r ->
+                        enabled = true
+                        limit {
+                            minimum = minBranchCodeCov
+                            counter = "BRANCH"
+                        }
+                    }
+                }
             }
         }
-        configure(subprojects.findAll { it.name.contains("wingtips-zipkin") }) {
-            jacocoCoverage {
-                // Enforce minimum code coverage. See https://github.com/palantir/gradle-jacoco-coverage for the full list of options.
-                reportThreshold 0.8, INSTRUCTION
-                reportThreshold 0.5, BRANCH
-            }
-        }
-        // Similarly to Zipkin, LightStep doesn't contain much code and the current tracer version doesn't allow for
-        // easy assertions when implemented within a broader tracing framework like Wingtips. We will monitor and continue to make improvements.
-        configure(subprojects.findAll { it.name.contains("wingtips-lightstep") }) {
-            jacocoCoverage {
-                // Enforce minimum code coverage. See https://github.com/palantir/gradle-jacoco-coverage for the full list of options.
-                reportThreshold 0.8, INSTRUCTION
-                reportThreshold 0.5, BRANCH
-            }
-        }
+    }
+
+    // Configure which subprojects we're doing jacoco for.
+    isSubprojectIncludedInJacocoReports = { Project subProj ->
+        // For this repo we'll include everything that's not a sample or testonly module.
+        return !subProj.name.startsWith("sample") && !subProj.getName().startsWith("testonly")
     }
 
     // BINTRAY STUFF

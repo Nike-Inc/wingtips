@@ -1,4 +1,7 @@
+import groovy.time.TimeCategory
+
 // ========== COMBO TEST REPORT - View the combined/merged report at: [project_root]/build/reports/tests/index.html
+//noinspection GroovyAssignabilityCheck
 task testReport(type: TestReport) {
     destinationDir = file("$buildDir/reports/tests")
     // Include the results from the `test` task's output dir in all subprojects
@@ -10,49 +13,180 @@ subprojects {
     test {
         reports.html.enabled = true
         reports.junitXml.enabled = true
-        reports.junitXml.destination = rootProject.test.reports.junitXml.destination
+        reports.junitXml.destination = file("${rootProject.test.reports.junitXml.destination}/${project.name}")
     }
     // Tell testReport to run after the tests run
     test.finalizedBy(testReport)
 }
 
+// ========== TEST SUMMARY CONSOLE OUTPUT
 ext {
-    testSummaryOutput = new ArrayList<>()
+    submoduleTestSuccessSummaries = new ArrayList<>()
+    submoduleTestFailureSummaries = new ArrayList<>()
+    suiteToSkippedTestDetails = new LinkedHashMap<String, List<String>>()
+    suiteToFailedTestDetails = new LinkedHashMap<String, List<String>>()
 }
 
-// Tell tests to do full exception outputting (we get *much* better info at the command line with this), output started/skipped/failed notifications,
-// and calculate post-submodule-test-suite summaries
+// Listen to the test executions (both individual and suite-level), and capture some info for later summary output.
 subprojects {
     test {
-        testLogging {
-            exceptionFormat "FULL"
-            events "passed", "skipped", "failed"
-            displayGranularity = 0
-        }
+        // For each test capture some extra info if the test was failed or skipped.
+        afterTest { TestDescriptor desc, TestResult result ->
 
-        afterSuite { desc, result ->
-            // Calculate a summary block of this test suite for output to the console, and store it for when the gradle.buildFinished notification is called.
-            if (!desc.parent) { // Ignore individual tests - just do submodule summaries
-                def output = "Test Results for ${desc.getId()}: ${result.resultType} (${result.testCount} tests, ${result.successfulTestCount} successes, ${result.failedTestCount} failures, ${result.skippedTestCount} skipped)"
-                def startItem = '|  ', endItem = '  |'
-                def repeatLength = startItem.length() + output.length() + endItem.length()
-                def fullOutput = ('-' * repeatLength) + '\n' + startItem + output + endItem + '\n' + ('-' * repeatLength)
-                testSummaryOutput.add(fullOutput)
+            String outermostParentName = findOutermostParent(desc).getId()
+            String testName = "${desc.className} > ${desc.name}"
+
+            if (result.resultType == TestResult.ResultType.FAILURE) {
+                testName += " FAILED"
+                List<String> failedDetailsList = suiteToFailedTestDetails.get(outermostParentName)
+                if (failedDetailsList == null) {
+                    failedDetailsList = new ArrayList<>()
+                    suiteToFailedTestDetails.put(outermostParentName, failedDetailsList)
+                }
+                String failedDetails = testName
+                if (result.getException() != null) {
+                    failedDetails += "\n" + sanitizeStackTraceForSummary(result.getException(), desc.className, desc.name, "\t")
+                }
+                failedDetailsList.add(
+                        failedDetails
+                )
+            }
+            else if (result.resultType == TestResult.ResultType.SKIPPED) {
+                testName += " SKIPPED"
+                List<String> skippedDetailsList = suiteToSkippedTestDetails.get(outermostParentName)
+                if (skippedDetailsList == null) {
+                    skippedDetailsList = new ArrayList<>()
+                    suiteToSkippedTestDetails.put(outermostParentName, skippedDetailsList)
+                }
+                skippedDetailsList.add(testName)
             }
         }
+
+        // For each suite capture an overall summary block for the submodule's tests.
+        afterSuite { TestDescriptor desc, TestResult result ->
+
+            if (!desc.parent) { // Ignore individual tests - just do submodule summaries
+                List<String> outputLinesRaw = new ArrayList<>([
+                        "Test Results for ${desc.getId()}: ${result.resultType} (${result.testCount} tests, ${result.successfulTestCount} successes, ${result.failedTestCount} failures, ${result.skippedTestCount} skipped)" +
+                                " in ${TimeCategory.minus(new Date(result.endTime), new Date(result.startTime))}",
+                        "Report file: ${reports.html.entryPoint}"
+                ])
+
+                List<String> summaryListToUse = (result.resultType == TestResult.ResultType.SUCCESS)
+                        ? submoduleTestSuccessSummaries
+                        : submoduleTestFailureSummaries
+
+                summaryListToUse.add(surroundWithAsciiBox(outputLinesRaw))
+            }
+        }
+
     }
 }
 
-// Output summaries for all the submodules' unit tests when the build finishes
+// Output summaries for all the submodules' unit tests when the build finishes.
 gradle.buildFinished {
-    println("\nTesting summary:")
+    println("\n=== TESTING SUMMARY ===")
+    println("Skipped Tests:")
 
-    if (testSummaryOutput.isEmpty()) {
+    if (suiteToSkippedTestDetails.isEmpty()) {
+        println("None")
+    }
+    else {
+        suiteToSkippedTestDetails.forEach({ String descId, List<String> skippedTests ->
+            List<String> outputLinesRaw = new ArrayList<>()
+            outputLinesRaw.add("${descId}")
+            //noinspection GroovyAssignabilityCheck
+            outputLinesRaw.addAll(skippedTests.collect { "  " + it })
+            println(surroundWithAsciiBox(outputLinesRaw))
+        })
+    }
+
+    println("\nFailed Tests:")
+
+    if (suiteToFailedTestDetails.isEmpty()) {
+        println("None")
+    }
+    else {
+        suiteToFailedTestDetails.forEach({ String descId, List<String> failedTests ->
+            List<String> outputLinesRaw = new ArrayList<>()
+            outputLinesRaw.add("${descId}")
+            //noinspection GroovyAssignabilityCheck
+            outputLinesRaw.addAll(failedTests.collect { [""] + it.readLines() }.flatten().collect { "  " + it.toString().replace("\t", "  ") })
+            println(surroundWithAsciiBox(outputLinesRaw))
+        })
+    }
+
+    println("\nIndividual Project Testing Summaries:")
+
+    if (submoduleTestSuccessSummaries.isEmpty() && submoduleTestFailureSummaries.isEmpty()) {
         println("No test results found - were tests skipped?")
     }
     else {
-        for (String submoduleSummaryOutput : testSummaryOutput) {
+        for (String submoduleSummaryOutput : submoduleTestSuccessSummaries) {
+            println(submoduleSummaryOutput)
+        }
+
+        for (String submoduleSummaryOutput : submoduleTestFailureSummaries) {
             println(submoduleSummaryOutput)
         }
     }
+}
+
+static TestDescriptor findOutermostParent(TestDescriptor desc) {
+    TestDescriptor result = desc
+    while (result.parent != null) {
+        result = result.parent
+    }
+    return result
+}
+
+static String sanitizeStackTraceForSummary(Throwable t, String failedTestClass, String failedTestName, String indent) {
+    if (t == null) {
+        return null
+    }
+
+    String result = indent + t.toString()
+    StackTraceElement[] stackTrace = t.stackTrace
+    boolean seenStopElement = false
+    int elementsIncluded = 0
+    for (int i = 0; i < stackTrace.length; i++) {
+        if (!seenStopElement) {
+            StackTraceElement ste = stackTrace[i]
+            result += "\n${indent}\tat " + ste.toString()
+
+            elementsIncluded++
+
+            if (ste.className == failedTestClass && ste.methodName == failedTestName) {
+                seenStopElement = true
+            }
+        }
+    }
+
+    if (elementsIncluded < stackTrace.length) {
+        result += "\n${indent}\t..."
+    }
+
+    return result
+}
+
+static String surroundWithAsciiBox(List<String> outputLinesRaw) {
+    int maxOutputLineLength = outputLinesRaw*.readLines().flatten().collect { it.length() }.max()
+    //noinspection GroovyAssignabilityCheck
+    List<String> outputLines = outputLinesRaw.collect { rawLine ->
+        if (rawLine.length() < maxOutputLineLength) {
+            rawLine + (' ' * (maxOutputLineLength - rawLine.length()))
+        }
+        else {
+            rawLine
+        }
+    }
+
+    def startItem = '|  ', endItem = '  |'
+    def repeatLength = startItem.length() + maxOutputLineLength + endItem.length()
+    def fullOutput = ('-' * repeatLength)
+    outputLines.forEach({
+        fullOutput += '\n' + startItem + it + endItem
+    })
+    fullOutput += '\n' + ('-' * repeatLength)
+    return fullOutput
 }
