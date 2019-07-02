@@ -8,7 +8,7 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 
 #### 0.x Releases
 
-- `0.20.x` Releases - [0.20.0](#0200)
+- `0.20.x` Releases - [0.20.1](#0201), [0.20.0](#0200)
 - `0.19.x` Releases - [0.19.2](#0192), [0.19.1](#0191), [0.19.0](#0190)
 - `0.18.x` Releases - [0.18.1](#0181), [0.18.0](#0180)
 - `0.17.x` Releases - [0.17.0](#0170)
@@ -21,9 +21,26 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 - `0.10.x` Releases - [0.10.0](#0100)
 - `0.9.x` Releases - [0.9.0.1](#0901), [0.9.0](#090)
 
+## [0.20.1](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.20.1)
+
+Released on 2019-07-01.
+
+### Fixed
+
+* The library jars for the `0.20.0` release may not have been published properly. This `0.20.1` release should fix any
+problems with the `0.20.0` artifacts.
+
+### Project Build
+
+* Upgraded to Gradle `5.4.1` and got rid of plugins for console summaries.
+    - Upgraded by [Nic Munroe][contrib_nicmunroe] in pull request [#106](https://github.com/Nike-Inc/wingtips/pull/106).
+
 ## [0.20.0](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.20.0)
 
 Released on 2019-07-01.
+
+**WARNING - the library jars for this release may not have been published correctly. 
+Please use version `0.20.1` instead!** 
 
 ### Breaking Changes
 
