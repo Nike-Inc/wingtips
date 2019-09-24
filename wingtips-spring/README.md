@@ -4,7 +4,15 @@ Wingtips is a distributed tracing solution for Java based on the
 [Google Dapper paper](http://static.googleusercontent.com/media/research.google.com/en/us/pubs/archive/36356.pdf). 
 
 This module is a plugin extension module of the core Wingtips library and contains support for distributed tracing in a 
-[Spring](https://spring.io/) environment. It contains the following features/classes:
+[Spring](https://spring.io/) environment.
+
+**NOTE:** This module does not include Spring WebFlux support. If you're looking for Wingtips + Spring WebFlux 
+support (both serverside and clientside), see the [wingtips-spring-webflux](../wingtips-spring-webflux) module instead. 
+This module mainly revolves around supporting the old Spring HTTP clients (`RestTemplate` and `AsyncRestTemplate`). 
+And if you're looking for serverside support for a Spring Web MVC (not WebFlux) project, you'll want 
+`RequestTracingFilter` from the [wingtips-servlet-api](../wingtips-servlet-api) module.     
+
+This module contains the following features/classes:
 
 * **`WingtipsClientHttpRequestInterceptor`** - An interceptor for Spring's synchronous `RestTemplate` HTTP client that
 automatically [propagates](../README.md#propagating_traces) Wingtips tracing information on the downstream call's 

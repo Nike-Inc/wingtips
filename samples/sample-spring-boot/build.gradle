@@ -7,7 +7,7 @@ dependencies {
     compile(
             project(":wingtips-zipkin2-spring-boot"),
             project(":wingtips-java8"),
-            "org.springframework.boot:spring-boot-starter-web:$springbootVersion",
+            "org.springframework.boot:spring-boot-starter-web:$springboot1Version",
             "ch.qos.logback:logback-classic:$logbackVersion"
     )
     testCompile(

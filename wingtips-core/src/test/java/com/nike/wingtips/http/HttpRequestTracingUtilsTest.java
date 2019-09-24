@@ -98,7 +98,7 @@ public class HttpRequestTracingUtilsTest {
         // when: creating span object from HTTP request
         Span goodSpan = HttpRequestTracingUtils.fromRequestWithHeaders(request, USER_ID_HEADER_KEYS);
 
-        // then: ensure span object gets identical values from corresponding headers, and the span purpose is set to SERVER
+        // then: ensure span object gets identical values from corresponding headers, and the span purpose is set to CLIENT
         assertThat(goodSpan.getTraceId()).isEqualTo(sampleTraceID);
         assertThat(goodSpan.isSampleable()).isTrue();
         assertThat(goodSpan.getSpanId()).isEqualTo(sampleSpanID);
@@ -124,7 +124,7 @@ public class HttpRequestTracingUtilsTest {
             // when: creating span object from HTTP request
             Span goodSpan = HttpRequestTracingUtils.fromRequestWithHeaders(request, USER_ID_HEADER_KEYS);
 
-            // then: ensure span object gets identical values from corresponding headers, and sets the span purpose to SERVER
+            // then: ensure span object gets identical values from corresponding headers, and sets the span purpose to CLIENT
             assertThat(goodSpan.getTraceId()).isEqualTo(sampleTraceID);
             assertThat(goodSpan.isSampleable()).isTrue();
             assertThat(goodSpan.getSpanId()).isEqualTo(sampleSpanID);

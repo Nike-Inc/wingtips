@@ -19,8 +19,14 @@ MDC information to hop threads in asynchronous/non-blocking use cases.
 distributed tracing with a simple Servlet Filter. Supports Servlet 2.x and Servlet 3 (async request) environments. 
 * [wingtips-zipkin2](wingtips-zipkin2/README.md) - A plugin providing easy [Zipkin](http://zipkin.io/) integration by 
 converting Wingtips spans to Zipkin spans and sending them to a Zipkin server.
-* [wingtips-spring](wingtips-spring/README.md) - A plugin to help with Wingtips distributed tracing in 
-[Spring](https://spring.io/) environments.
+* [wingtips-spring](wingtips-spring/README.md) - A plugin to help with Wingtips distributed tracing in older
+[Spring](https://spring.io/) environments (i.e. not Spring WebFlux). This is mostly for the older non-WebFlux 
+HTTP clients - for Spring MVC serverside support, see 
+[wingtips-servlet-api](wingtips-servlet-api), and for Spring WebFlux (both serverside and clientside) see
+[wingtips-spring-webflux](wingtips-spring-webflux).
+* [wingtips-spring-webflux](wingtips-spring-webflux/README.md) - A plugin to help with Wingtips distributed tracing in 
+[Spring WebFlux](https://docs.spring.io/spring/docs/current/spring-framework-reference/web-reactive.html#webflux) 
+environments.
 * [wingtips-spring-boot](wingtips-spring-boot/README.md) - A plugin to help with Wingtips distributed tracing in 
 [Spring Boot](https://spring.io/guides/gs/spring-boot/) environments.
 * [wingtips-zipkin2-spring-boot](wingtips-zipkin2-spring-boot/README.md) - A plugin to help with Wingtips distributed
@@ -130,7 +136,8 @@ The `extractParentSpanFromRequest()` method is potentially different for differe
 <a name="servlet_filter_info"></a>  
 #### Is your application running in a Servlet-based framework?
 
-If your application is running in a Servlet environment (e.g. Spring Boot, Spring MVC, Jersey, raw Servlets, etc) then 
+If your application is running in a Servlet environment (e.g. Spring Boot w/ Spring MVC, raw Spring MVC, Jersey, 
+raw Servlets, etc) then 
 this entire lifecycle can be handled by a Servlet `Filter`. We've created one for you that's ready to drop in and go - 
 see the [wingtips-servlet-api](wingtips-servlet-api/README.md) Wingtips plugin module library for details. That plugin 
 module is also a good resource to see how the code for a production-ready implementation of this library might look.
@@ -289,7 +296,8 @@ control you may wish to exclude it to prevent unintentional information leakage.
 The following Wingtips modules have helpers to simplify tracing propagation when using their respective technologies:
 
 * [wingtips-apache-http-client](wingtips-apache-http-client)
-* [wingtips-spring](wingtips-spring)
+* [wingtips-spring](wingtips-spring) (for the older `RestTemplate` and `AsyncRestTemplate` HTTP clients)
+* [wingtips-spring-webflux](wingtips-spring-webflux) (for the newer `WebClient` reactive HTTP client)
 
 <a name="adjusting_behavior"></a>
 ### Adjusting Behavior and Execution Options
@@ -371,6 +379,10 @@ We currently have the following default adapters you can use:
 
 * [ServletRequestTagAdapter](wingtips-servlet-api/src/main/java/com/nike/wingtips/servlet/tag/ServletRequestTagAdapter.java) -
 Knows how to extract data from Servlet `HttpServletRequest` and `HttpServletResponse` objects.
+* [SpringWebfluxServerRequestTagAdapter](wingtips-spring-webflux/src/main/java/com/nike/wingtips/spring/webflux/server/SpringWebfluxServerRequestTagAdapter.java) -
+Knows how to extract data from Spring WebFlux `ServerWebExchange` and `ServerHttpResponse` objects (serverside).
+* [SpringWebfluxClientRequestTagAdapter](wingtips-spring-webflux/src/main/java/com/nike/wingtips/spring/webflux/client/SpringWebfluxClientRequestTagAdapter.java) -
+Knows how to extract data from Spring WebFlux `ClientRequest` `ClientResponse` objects (clientside).
 * [SpringHttpClientTagAdapter](wingtips-spring/src/main/java/com/nike/wingtips/spring/interceptor/tag/SpringHttpClientTagAdapter.java) -
 Knows how to extract data from Spring `HttpRequest` and `ClientHttpResponse` objects.
 * [ApacheHttpClientTagAdapter](wingtips-apache-http-client/src/main/java/com/nike/wingtips/apache/httpclient/tag/ApacheHttpClientTagAdapter.java) -
@@ -386,12 +398,16 @@ those classes for details on how to customize the strategy and/or adapter that g
 
 * [RequestTracingFilter](wingtips-servlet-api/src/main/java/com/nike/wingtips/servlet/RequestTracingFilter.java) - For
 Servlet-based containers or frameworks, including (but not limited to) Spring/Springboot, Jersey 1, Jersey 2, etc.
+* [WingtipsSpringWebfluxWebFilter](wingtips-spring-webflux/src/main/java/com/nike/wingtips/spring/webflux/server/WingtipsSpringWebfluxWebFilter.java) -
+For Spring WebFlux servers.
+* [WingtipsSpringWebfluxExchangeFilterFunction](wingtips-spring-webflux/src/main/java/com/nike/wingtips/spring/webflux/client/WingtipsSpringWebfluxExchangeFilterFunction.java) -
+For Spring WebFlux `WebClient` HTTP clients.
 * [WingtipsClientHttpRequestInterceptor](wingtips-spring/src/main/java/com/nike/wingtips/spring/interceptor/WingtipsClientHttpRequestInterceptor.java)
 and [WingtipsAsyncClientHttpRequestInterceptor](wingtips-spring/src/main/java/com/nike/wingtips/spring/interceptor/WingtipsAsyncClientHttpRequestInterceptor.java) -
-For Spring RestTemplate and AsyncRestTemplate HTTP clients.
+For Spring `RestTemplate` and `AsyncRestTemplate` HTTP clients.
 * [WingtipsHttpClientBuilder](wingtips-apache-http-client/src/main/java/com/nike/wingtips/apache/httpclient/WingtipsHttpClientBuilder.java) 
 and [WingtipsApacheHttpClientInterceptor](wingtips-apache-http-client/src/main/java/com/nike/wingtips/apache/httpclient/WingtipsApacheHttpClientInterceptor.java) -
-For Apache HttpClient.
+For Apache `HttpClient`.
  
 <a name="default_http_tags"></a> 
 #### Default HTTP Tags 
@@ -597,6 +613,7 @@ See the sample app readmes for further information on building and running the s
 * [samples/sample-jersey2](samples/sample-jersey2/)
 * [samples/sample-spring-web-mvc](samples/sample-spring-web-mvc/)
 * [samples/sample-spring-boot](samples/sample-spring-boot/)
+* [samples/sample-spring-boot2-webflux](samples/sample-spring-boot2-webflux/)
 
 <a name="license"></a>
 ## License

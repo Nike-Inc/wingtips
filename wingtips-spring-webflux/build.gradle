@@ -1,0 +1,31 @@
+evaluationDependsOn(':')
+
+sourceCompatibility = JavaVersion.VERSION_1_8
+targetCompatibility = JavaVersion.VERSION_1_8
+
+ext {
+    // This should match the version of Project Reactor pulled in by whatever springboot2Version is using.
+    projectReactorVersion = '3.2.12.RELEASE'
+}
+
+dependencies {
+    compile(
+            project(":wingtips-core"),
+            project(":wingtips-java8")
+    )
+    compileOnly(
+            "org.springframework:spring-webflux:$spring5Version",
+            "org.jetbrains:annotations:$jetbrainsAnnotationsVersion",
+    )
+    testCompile(
+            "junit:junit-dep:$junitVersion",
+            "org.mockito:mockito-core:$mockitoVersion",
+            "org.assertj:assertj-core:$assertJVersion",
+            "com.tngtech.java:junit-dataprovider:$junitDataproviderVersion",
+            "io.rest-assured:rest-assured:$restAssuredVersion",
+            "org.jetbrains:annotations:$jetbrainsAnnotationsVersion",
+            "ch.qos.logback:logback-classic:$logbackVersion",
+            "org.springframework.boot:spring-boot-starter-webflux:$springboot2Version",
+            "io.projectreactor:reactor-test:$projectReactorVersion"
+    )
+}

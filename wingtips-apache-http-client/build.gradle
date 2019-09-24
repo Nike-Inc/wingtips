@@ -24,6 +24,6 @@ dependencies {
             "io.rest-assured:rest-assured:$restAssuredVersion",
             "org.jetbrains:annotations:$jetbrainsAnnotationsVersion",
             "commons-io:commons-io:$apacheCommonsIoVersion",
-            "org.springframework.boot:spring-boot-starter-web:$springbootVersion"
+            "org.springframework.boot:spring-boot-starter-web:$springboot1Version"
     )
 }
