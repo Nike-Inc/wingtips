@@ -3,8 +3,10 @@ package com.nike.wingtips.componenttest;
 import com.nike.internal.util.MapBuilder;
 import com.nike.internal.util.Pair;
 import com.nike.wingtips.Span;
+import com.nike.wingtips.TraceAndSpanIdGenerator;
 import com.nike.wingtips.TraceHeaders;
 import com.nike.wingtips.Tracer;
+import com.nike.wingtips.http.HttpRequestTracingUtils;
 import com.nike.wingtips.lifecyclelistener.SpanLifecycleListener;
 import com.nike.wingtips.servlet.RequestTracingFilter;
 import com.nike.wingtips.tags.KnownZipkinTags;
@@ -43,6 +45,7 @@ import javax.servlet.http.HttpServletResponse;
 
 import io.restassured.response.ExtractableResponse;
 
+import static com.nike.wingtips.http.HttpRequestTracingUtils.CHILD_OF_SPAN_FROM_HEADERS_WHERE_CALLER_DID_NOT_SEND_SPAN_ID_TAG_KEY;
 import static io.restassured.RestAssured.given;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -373,6 +376,48 @@ public class RequestTracingFilterComponentTest {
             null,
             "servlet"
         );
+    }
+
+    @Test
+    public void verify_passing_trace_id_header_but_not_span_id_results_in_a_server_span_with_desired_trace_id_but_null_parent_and_indicator_tag() {
+        String expectedTraceId = TraceAndSpanIdGenerator.generateId();
+
+        ExtractableResponse response =
+            given()
+                .baseUri("http://localhost")
+                .port(port)
+                .header(TraceHeaders.TRACE_ID, expectedTraceId)
+                .log().all()
+                .when()
+                .get(BLOCKING_PATH)
+                .then()
+                .log().all()
+                .extract();
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.asString()).isEqualTo(BLOCKING_RESULT);
+        // Sanity check basic completed span values (except don't have it compare against any expected upstream info,
+        //      we'll do that ourselves later).
+        Span completedSpan =
+            verifySingleSpanCompletedAndReturnedInResponse(response, SLEEP_TIME_MILLIS, null);
+        verifySpanNameAndTags(
+            completedSpan,
+            "GET",
+            "GET",
+            BLOCKING_PATH,
+            "http://localhost:" + port + BLOCKING_PATH,
+            null,
+            response.statusCode(),
+            null,
+            "servlet"
+        );
+        // Now validate that it has the expected trace ID, but null parent. And it should have the expected
+        //      indicator tag showing the caller didn't send a span ID.
+        assertThat(completedSpan.getTraceId()).isEqualTo(expectedTraceId);
+        assertThat(completedSpan.getParentSpanId()).isNull();
+        assertThat(HttpRequestTracingUtils.hasInvalidParentIdBecauseCallerDidNotSendSpanId(completedSpan)).isTrue();
+        assertThat(completedSpan.getTags().get(CHILD_OF_SPAN_FROM_HEADERS_WHERE_CALLER_DID_NOT_SEND_SPAN_ID_TAG_KEY))
+            .isEqualTo("true");
     }
 
     private Pair<Span, Map<String, String>> generateUpstreamSpanHeaders() {

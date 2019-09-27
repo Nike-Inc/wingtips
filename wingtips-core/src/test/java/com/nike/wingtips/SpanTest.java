@@ -3,6 +3,7 @@ package com.nike.wingtips;
 import com.nike.internal.util.MapBuilder;
 import com.nike.wingtips.Span.SpanPurpose;
 import com.nike.wingtips.Span.TimestampedAnnotation;
+import com.nike.wingtips.http.HttpRequestTracingUtils;
 import com.nike.wingtips.util.TracerManagedSpanStatus;
 import com.nike.wingtips.util.parser.SpanParser;
 
@@ -33,6 +34,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import static com.nike.wingtips.http.HttpRequestTracingUtils.CHILD_OF_SPAN_FROM_HEADERS_WHERE_CALLER_DID_NOT_SEND_SPAN_ID_TAG_KEY;
 import static com.nike.wingtips.util.parser.SpanParserTest.deserializeKeyValueSpanString;
 import static java.util.Collections.singletonList;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -329,17 +331,35 @@ public class SpanTest {
     }
 
     @DataProvider(value = {
-        "SERVER",
-        "CLIENT",
-        "LOCAL_ONLY",
-        "UNKNOWN"
+        "SERVER     |   true",
+        "SERVER     |   false",
+        "CLIENT     |   true",
+        "CLIENT     |   false",
+        "LOCAL_ONLY |   true",
+        "LOCAL_ONLY |   false",
+        "UNKNOWN    |   true",
+        "UNKNOWN    |   false",
     }, splitBy = "\\|")
     @Test
-    public void generateChildSpan_works_as_expected_for_incomplete_parent_span(SpanPurpose childSpanPurpose) {
+    public void generateChildSpan_works_as_expected_for_incomplete_parent_span(
+        SpanPurpose childSpanPurpose, boolean parentHasInvalidSpanIdDueToCallerNotSendingOne
+    ) {
         // given: span object with known values that is not completed
         Span parentSpan = createFilledOutSpan(false);
+        if (parentHasInvalidSpanIdDueToCallerNotSendingOne) {
+            parentSpan.putTag(
+                HttpRequestTracingUtils.SPAN_FROM_HEADERS_WHERE_CALLER_DID_NOT_SEND_SPAN_ID_TAG_KEY,
+                "true"
+            );
+        }
         String childSpanName = UUID.randomUUID().toString();
         assertThat(parentSpan.isCompleted()).isFalse();
+
+        String expectedParentSpanIdForChild = (parentHasInvalidSpanIdDueToCallerNotSendingOne)
+                                              ? null
+                                              : parentSpan.getSpanId();
+
+        int expectedNumChildTags = (parentHasInvalidSpanIdDueToCallerNotSendingOne) ? 1 : 0;
 
         // when: generateChildSpan is used to create a child span with a new span name
         long beforeCallNanos = System.nanoTime();
@@ -352,7 +372,7 @@ public class SpanTest {
         assertThat(childSpan.getSpanId()).isNotEmpty();
         assertThat(childSpan.getSpanId()).isNotEqualTo(parentSpan.getSpanId());
         assertThat(childSpan.getSpanName()).isEqualTo(childSpanName);
-        assertThat(childSpan.getParentSpanId()).isEqualTo(parentSpan.getSpanId());
+        assertThat(childSpan.getParentSpanId()).isEqualTo(expectedParentSpanIdForChild);
 
         assertThat(childSpan.getTraceId()).isEqualTo(parentSpan.getTraceId());
         assertThat(childSpan.getUserId()).isEqualTo(parentSpan.getUserId());
@@ -369,22 +389,54 @@ public class SpanTest {
         assertThat(childSpan.isCompleted()).isFalse();
         assertThat(childSpan.getDurationNanos()).isNull();
 
-        assertThat(childSpan.getTags()).isEmpty();
+        assertThat(childSpan.getTags()).hasSize(expectedNumChildTags);
         assertThat(childSpan.getTimestampedAnnotations()).isEmpty();
+
+        verifyInvalidParentIdBecauseCallerDidNotSendSpanId(childSpan, parentHasInvalidSpanIdDueToCallerNotSendingOne);
+    }
+
+    private void verifyInvalidParentIdBecauseCallerDidNotSendSpanId(Span childSpan, boolean expectInvalid) {
+        String expectedIndicatorTagValue = (expectInvalid) ? "true" : null;
+
+        boolean isInvalidParent = HttpRequestTracingUtils.hasInvalidParentIdBecauseCallerDidNotSendSpanId(childSpan);
+        String indicatorTagValue = childSpan.getTags().get(
+            CHILD_OF_SPAN_FROM_HEADERS_WHERE_CALLER_DID_NOT_SEND_SPAN_ID_TAG_KEY
+        );
+
+        assertThat(isInvalidParent).isEqualTo(expectInvalid);
+        assertThat(indicatorTagValue).isEqualTo(expectedIndicatorTagValue);
     }
 
     @DataProvider(value = {
-        "SERVER",
-        "CLIENT",
-        "LOCAL_ONLY",
-        "UNKNOWN"
+        "SERVER     |   true",
+        "SERVER     |   false",
+        "CLIENT     |   true",
+        "CLIENT     |   false",
+        "LOCAL_ONLY |   true",
+        "LOCAL_ONLY |   false",
+        "UNKNOWN    |   true",
+        "UNKNOWN    |   false",
     }, splitBy = "\\|")
     @Test
-    public void generateChildSpan_works_as_expected_for_completed_parent_span(SpanPurpose childSpanPurpose) {
+    public void generateChildSpan_works_as_expected_for_completed_parent_span(
+        SpanPurpose childSpanPurpose, boolean parentHasInvalidSpanIdDueToCallerNotSendingOne
+    ) {
         // given: span with known values that is completed
         Span parentSpan = createFilledOutSpan(true);
+        if (parentHasInvalidSpanIdDueToCallerNotSendingOne) {
+            parentSpan.putTag(
+                HttpRequestTracingUtils.SPAN_FROM_HEADERS_WHERE_CALLER_DID_NOT_SEND_SPAN_ID_TAG_KEY,
+                "true"
+            );
+        }
         String childSpanName = UUID.randomUUID().toString();
         assertThat(parentSpan.isCompleted()).isTrue();
+
+        String expectedParentSpanIdForChild = (parentHasInvalidSpanIdDueToCallerNotSendingOne)
+                                              ? null
+                                              : parentSpan.getSpanId();
+
+        int expectedNumChildTags = (parentHasInvalidSpanIdDueToCallerNotSendingOne) ? 1 : 0;
 
         // when: generateChildSpan is used to create a child span with a new span name
         long beforeCallNanos = System.nanoTime();
@@ -397,7 +449,7 @@ public class SpanTest {
         assertThat(childSpan.getSpanId()).isNotEmpty();
         assertThat(childSpan.getSpanId()).isNotEqualTo(parentSpan.getSpanId());
         assertThat(childSpan.getSpanName()).isEqualTo(childSpanName);
-        assertThat(childSpan.getParentSpanId()).isEqualTo(parentSpan.getSpanId());
+        assertThat(childSpan.getParentSpanId()).isEqualTo(expectedParentSpanIdForChild);
 
         assertThat(childSpan.getTraceId()).isEqualTo(parentSpan.getTraceId());
         assertThat(childSpan.getUserId()).isEqualTo(parentSpan.getUserId());
@@ -414,8 +466,10 @@ public class SpanTest {
         assertThat(childSpan.isCompleted()).isFalse();
         assertThat(childSpan.getDurationNanos()).isNull();
 
-        assertThat(childSpan.getTags()).isEmpty();
+        assertThat(childSpan.getTags()).hasSize(expectedNumChildTags);
         assertThat(childSpan.getTimestampedAnnotations()).isEmpty();
+
+        verifyInvalidParentIdBecauseCallerDidNotSendSpanId(childSpan, parentHasInvalidSpanIdDueToCallerNotSendingOne);
     }
 
     @Test
