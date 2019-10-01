@@ -75,20 +75,34 @@ public class HttpRequestTracingUtils {
     }
 
     /**
-     * @param request The incoming request that may have {@link Span} information embedded in the headers. If this argument is null then this method will return null.
-     * @param userIdHeaderKeys This list of header keys will be used to search the request headers for a user ID to set on the returned span. The user ID header keys
-     *                         will be searched in list order, and the first non-empty user ID header value found will be used as the {@link Span#getUserId()}.
-     *                         You can safely pass in null or an empty list for this argument if there is no user ID to extract; if you pass in null then the returned
-     *                         span's {@link Span#getUserId()} will be null.
+     * Extracts propagated tracing info from the given request with headers, and returns a {@link Span} to represent
+     * the caller's span. This method is intended to be used by a server receiving a request, and the returned span
+     * represents the caller's span. Therefore, if this method returns a non-null span then its {@link
+     * Span#getSpanPurpose()} will be {@link SpanPurpose#CLIENT}.
      *
-     * @return The {@link Span} stored in the given request's trace headers (e.g. {@link TraceHeaders#TRACE_ID}, {@link TraceHeaders#TRACE_SAMPLED},
-     *         {@link TraceHeaders#PARENT_SPAN_ID}, etc), or null if the request is null or doesn't contain the necessary headers. Since this method is for
-     *         a server receiving a request, if this method returns a non-null span then its {@link Span#getSpanPurpose()} will be {@link SpanPurpose#SERVER}.
-     *         <p>
-     *         NOTE: {@link TraceHeaders#TRACE_ID} is the minimum header needed to return a non-null {@link Span}. If {@link TraceHeaders#SPAN_ID} is missing then
-     *         a new span ID will be generated using {@link TraceAndSpanIdGenerator#generateId()}. If {@link TraceHeaders#TRACE_SAMPLED} is missing then the returned
-     *         span will be sampleable. If {@link TraceHeaders#SPAN_NAME} is missing then {@link #UNSPECIFIED_SPAN_NAME} will be used as the span name.
-     *         </p>
+     * <p>NOTE: The returned span is useful for creating a child span to be the server's overall request span
+     * (and have it point to the caller's span as its parent), <b>however the returned span should *NOT* be completed
+     * or recorded!</b> It is up to the caller to complete and record their span appropriately, not you. The span
+     * returned from this method is not the actual caller's span, just a synthetic {@link Span} object to make it
+     * easier to create a logical child of the incoming caller's span.
+     *
+     * <p>NOTE: {@link TraceHeaders#TRACE_ID} is the minimum header needed to return a non-null {@link Span}. If
+     * {@link TraceHeaders#SPAN_ID} is missing then a new span ID will be generated using {@link
+     * TraceAndSpanIdGenerator#generateId()} since span ID cannot be null (and it will therefore be invalid - see
+     * {@link #SPAN_FROM_HEADERS_WHERE_CALLER_DID_NOT_SEND_SPAN_ID_TAG_KEY}). If {@link TraceHeaders#TRACE_SAMPLED}
+     * is missing then the returned span will be sampleable. If {@link TraceHeaders#SPAN_NAME} is missing then
+     * {@link #UNSPECIFIED_SPAN_NAME} will be used as the span name.
+     *
+     * @param request The incoming request that may have {@link Span} information embedded in the headers. If this
+     * argument is null then this method will return null.
+     * @param userIdHeaderKeys This list of header keys will be used to search the request headers for a user ID to
+     * set on the returned span. The user ID header keys will be searched in list order, and the first non-empty
+     * user ID header value found will be used as the {@link Span#getUserId()}. You can safely pass in null or an
+     * empty list for this argument if there is no user ID to extract; if you pass in null then the returned span's
+     * {@link Span#getUserId()} will be null.
+     * @return A {@link Span} representing the tracing data stored in the given request's trace headers (e.g.
+     * {@link TraceHeaders#TRACE_ID}, {@link TraceHeaders#SPAN_ID}, {@link TraceHeaders#TRACE_SAMPLED}, etc),
+     * or null if the request is null or doesn't contain the necessary headers.
      */
     public static Span fromRequestWithHeaders(RequestWithHeaders request, List<String> userIdHeaderKeys) {
         if (request == null)
@@ -104,7 +118,7 @@ public class HttpRequestTracingUtils {
 
         String spanIdFromRequest = getSpanId(request);
 
-        Span.Builder spanBuilder = Span.newBuilder(spanName, SpanPurpose.SERVER)
+        Span.Builder spanBuilder = Span.newBuilder(spanName, SpanPurpose.CLIENT)
                    .withTraceId(traceId)
                    .withParentSpanId(getParentSpanId(request))
                    .withSpanId(spanIdFromRequest)

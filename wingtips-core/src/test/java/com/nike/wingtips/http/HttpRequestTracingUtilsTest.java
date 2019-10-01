@@ -104,7 +104,7 @@ public class HttpRequestTracingUtilsTest {
         assertThat(goodSpan.getSpanId()).isEqualTo(sampleSpanID);
         assertThat(goodSpan.getParentSpanId()).isEqualTo(sampleParentSpanID);
         assertThat(goodSpan.getUserId()).isEqualTo(userId);
-        assertThat(goodSpan.getSpanPurpose()).isEqualTo(SpanPurpose.SERVER);
+        assertThat(goodSpan.getSpanPurpose()).isEqualTo(SpanPurpose.CLIENT);
     }
 
     @Test
@@ -130,7 +130,7 @@ public class HttpRequestTracingUtilsTest {
             assertThat(goodSpan.getSpanId()).isEqualTo(sampleSpanID);
             assertThat(goodSpan.getParentSpanId()).isEqualTo(sampleParentSpanID);
             assertThat(goodSpan.getUserId()).isEqualTo(userIdValue);
-            assertThat(goodSpan.getSpanPurpose()).isEqualTo(SpanPurpose.SERVER);
+            assertThat(goodSpan.getSpanPurpose()).isEqualTo(SpanPurpose.CLIENT);
         }
     }
 
