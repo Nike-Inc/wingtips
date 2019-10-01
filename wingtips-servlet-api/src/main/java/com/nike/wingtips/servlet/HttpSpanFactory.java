@@ -70,25 +70,6 @@ public class HttpSpanFactory {
     }
 
     /**
-     * @return A {@link Span} object created from the headers if they exist (see {@link #fromHttpServletRequest(HttpServletRequest, List)} for details), or if the headers don't
-     *         have enough information then this will return a new root span with a span name based on the results of {@link #getSpanName(HttpServletRequest)} and user ID based
-     *         on the result of {@link #getUserIdFromHttpServletRequest(HttpServletRequest, List)}. Since this method is for a server receiving a request
-     *         the returned span's {@link Span#getSpanPurpose()} will be {@link SpanPurpose#SERVER}.
-     */
-    public static Span fromHttpServletRequestOrCreateRootSpan(HttpServletRequest servletRequest, List<String> userIdHeaderKeys) {
-        Span span = fromHttpServletRequest(servletRequest, userIdHeaderKeys);
-
-        if (span == null) {
-            span = Span
-                .generateRootSpanForNewTrace(getSpanName(servletRequest), SpanPurpose.SERVER)
-                .withUserId(getUserIdFromHttpServletRequest(servletRequest, userIdHeaderKeys))
-                .build();
-        }
-
-        return span;
-    }
-
-    /**
      * Attempts to pull a valid ID for the user making the request.
      *
      * @return The HTTP Header value of the user ID if it exists, null otherwise. The request's headers will be inspected for the user ID using the given list of userIdHeaderKeys
