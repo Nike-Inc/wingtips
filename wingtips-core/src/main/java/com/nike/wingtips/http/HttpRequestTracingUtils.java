@@ -42,6 +42,32 @@ public class HttpRequestTracingUtils {
     public static final String UNSPECIFIED_SPAN_NAME = "UNSPECIFIED";
 
     /**
+     * A special indicator tag key (with an expected value of "true") that will be added to a span by {@link
+     * #fromRequestWithHeaders(RequestWithHeaders, List)} when the caller sent a trace ID but not a span ID, and
+     * therefore the {@link Span#getSpanId()} on the span returned by {@link
+     * #fromRequestWithHeaders(RequestWithHeaders, List)} is random and cannot be trusted.
+     *
+     * <p>See {@link #hasInvalidSpanIdBecauseCallerDidNotSendOne(Span)} for a helper that can be used to determine
+     * if a span falls into this category.
+     */
+    public static final String SPAN_FROM_HEADERS_WHERE_CALLER_DID_NOT_SEND_SPAN_ID_TAG_KEY =
+        "span_from_headers_caller_did_not_send_span_id";
+
+    /**
+     * The direct children of a span from {@link #fromRequestWithHeaders(RequestWithHeaders, List)} where the caller
+     * did not send a span ID (see {@link #hasInvalidSpanIdBecauseCallerDidNotSendOne(Span)}) should apply a tag with
+     * this key and a value of "true" to indicate that the {@link Span#getParentSpanId()} is invalid and cannot
+     * be trusted. It's recommended that the parent span ID should be set to null in this case - this can lead to
+     * multiple roots in your trace tree, but is the most reasonable way to handle the situation without completely
+     * breaking the trace and starting a new one.
+     *
+     * <p>See {@link #hasInvalidParentIdBecauseCallerDidNotSendSpanId(Span)} for a helper that can be used to determine
+     * if a span falls into this category.
+     */
+    public static final String CHILD_OF_SPAN_FROM_HEADERS_WHERE_CALLER_DID_NOT_SEND_SPAN_ID_TAG_KEY =
+        "caller_did_not_send_span_id";
+
+    /**
      * Intentionally private to force all access through static methods.
      */
     private HttpRequestTracingUtils() {
@@ -49,20 +75,34 @@ public class HttpRequestTracingUtils {
     }
 
     /**
-     * @param request The incoming request that may have {@link Span} information embedded in the headers. If this argument is null then this method will return null.
-     * @param userIdHeaderKeys This list of header keys will be used to search the request headers for a user ID to set on the returned span. The user ID header keys
-     *                         will be searched in list order, and the first non-empty user ID header value found will be used as the {@link Span#getUserId()}.
-     *                         You can safely pass in null or an empty list for this argument if there is no user ID to extract; if you pass in null then the returned
-     *                         span's {@link Span#getUserId()} will be null.
+     * Extracts propagated tracing info from the given request with headers, and returns a {@link Span} to represent
+     * the caller's span. This method is intended to be used by a server receiving a request, and the returned span
+     * represents the caller's span. Therefore, if this method returns a non-null span then its {@link
+     * Span#getSpanPurpose()} will be {@link SpanPurpose#CLIENT}.
      *
-     * @return The {@link Span} stored in the given request's trace headers (e.g. {@link TraceHeaders#TRACE_ID}, {@link TraceHeaders#TRACE_SAMPLED},
-     *         {@link TraceHeaders#PARENT_SPAN_ID}, etc), or null if the request is null or doesn't contain the necessary headers. Since this method is for
-     *         a server receiving a request, if this method returns a non-null span then its {@link Span#getSpanPurpose()} will be {@link SpanPurpose#SERVER}.
-     *         <p>
-     *         NOTE: {@link TraceHeaders#TRACE_ID} is the minimum header needed to return a non-null {@link Span}. If {@link TraceHeaders#SPAN_ID} is missing then
-     *         a new span ID will be generated using {@link TraceAndSpanIdGenerator#generateId()}. If {@link TraceHeaders#TRACE_SAMPLED} is missing then the returned
-     *         span will be sampleable. If {@link TraceHeaders#SPAN_NAME} is missing then {@link #UNSPECIFIED_SPAN_NAME} will be used as the span name.
-     *         </p>
+     * <p>NOTE: The returned span is useful for creating a child span to be the server's overall request span
+     * (and have it point to the caller's span as its parent), <b>however the returned span should *NOT* be completed
+     * or recorded!</b> It is up to the caller to complete and record their span appropriately, not you. The span
+     * returned from this method is not the actual caller's span, just a synthetic {@link Span} object to make it
+     * easier to create a logical child of the incoming caller's span.
+     *
+     * <p>NOTE: {@link TraceHeaders#TRACE_ID} is the minimum header needed to return a non-null {@link Span}. If
+     * {@link TraceHeaders#SPAN_ID} is missing then a new span ID will be generated using {@link
+     * TraceAndSpanIdGenerator#generateId()} since span ID cannot be null (and it will therefore be invalid - see
+     * {@link #SPAN_FROM_HEADERS_WHERE_CALLER_DID_NOT_SEND_SPAN_ID_TAG_KEY}). If {@link TraceHeaders#TRACE_SAMPLED}
+     * is missing then the returned span will be sampleable. If {@link TraceHeaders#SPAN_NAME} is missing then
+     * {@link #UNSPECIFIED_SPAN_NAME} will be used as the span name.
+     *
+     * @param request The incoming request that may have {@link Span} information embedded in the headers. If this
+     * argument is null then this method will return null.
+     * @param userIdHeaderKeys This list of header keys will be used to search the request headers for a user ID to
+     * set on the returned span. The user ID header keys will be searched in list order, and the first non-empty
+     * user ID header value found will be used as the {@link Span#getUserId()}. You can safely pass in null or an
+     * empty list for this argument if there is no user ID to extract; if you pass in null then the returned span's
+     * {@link Span#getUserId()} will be null.
+     * @return A {@link Span} representing the tracing data stored in the given request's trace headers (e.g.
+     * {@link TraceHeaders#TRACE_ID}, {@link TraceHeaders#SPAN_ID}, {@link TraceHeaders#TRACE_SAMPLED}, etc),
+     * or null if the request is null or doesn't contain the necessary headers.
      */
     public static Span fromRequestWithHeaders(RequestWithHeaders request, List<String> userIdHeaderKeys) {
         if (request == null)
@@ -76,13 +116,61 @@ public class HttpRequestTracingUtils {
         if (spanName == null || spanName.length() == 0)
             spanName = UNSPECIFIED_SPAN_NAME;
 
-        return Span.newBuilder(spanName, SpanPurpose.SERVER)
+        String spanIdFromRequest = getSpanId(request);
+
+        Span.Builder spanBuilder = Span.newBuilder(spanName, SpanPurpose.CLIENT)
                    .withTraceId(traceId)
-                   .withParentSpanId(getSpanIdFromRequest(request, TraceHeaders.PARENT_SPAN_ID, false))
-                   .withSpanId(getSpanIdFromRequest(request, TraceHeaders.SPAN_ID, true))
+                   .withParentSpanId(getParentSpanId(request))
+                   .withSpanId(spanIdFromRequest)
                    .withSampleable(getSpanSampleableFlag(request))
-                   .withUserId(getUserIdFromRequestWithHeaders(request, userIdHeaderKeys))
-                   .build();
+                   .withUserId(getUserIdFromRequestWithHeaders(request, userIdHeaderKeys));
+
+        // If the caller didn't send a span ID, then the builder will create a new one because spans aren't allowed to
+        //      have a null span ID. This can cause child spans created from this method's return value to have a
+        //      random parent ID that doesn't point to anything real. If this is the case then we'll add a tag
+        //      indicating that the span ID is invalid because the caller didn't send one.
+        if (spanIdFromRequest == null) {
+            spanBuilder.withTag(SPAN_FROM_HEADERS_WHERE_CALLER_DID_NOT_SEND_SPAN_ID_TAG_KEY, "true");
+        }
+
+        return spanBuilder.build();
+    }
+
+    /**
+     * A helper method for determining whether or not a span that came from {@link
+     * #fromRequestWithHeaders(RequestWithHeaders, List)} has an invalid {@link Span#getSpanId()} because the caller
+     * to the service failed to send a {@link TraceHeaders#SPAN_ID} header. If this returns true then the given span
+     * has an invalid {@link Span#getSpanId()} that can't be trusted.
+     *
+     * <p>Additionally, if this method returns true then it's recommended that any children of the given span should
+     * have their {@link Span#getParentSpanId()} set to null - this can lead to multiple roots in your trace tree,
+     * but is the most reasonable way to handle the situation without completely breaking the trace and starting a
+     * new one.
+     *
+     * @param span The span to inspect.
+     * @return true if the given span came from {@link #fromRequestWithHeaders(RequestWithHeaders, List)} and the
+     * original caller into the service did not send a {@link TraceHeaders#SPAN_ID} header (i.e. returns true if the
+     * given span has a {@link #SPAN_FROM_HEADERS_WHERE_CALLER_DID_NOT_SEND_SPAN_ID_TAG_KEY} tag set to "true"),
+     * false otherwise (when the span ID on the given span is correct).
+     */
+    public static boolean hasInvalidSpanIdBecauseCallerDidNotSendOne(Span span) {
+        return "true".equals(span.getTags().get(SPAN_FROM_HEADERS_WHERE_CALLER_DID_NOT_SEND_SPAN_ID_TAG_KEY));
+    }
+
+    /**
+     * A helper method for determining whether or not the given span is a *child* of a span that came from
+     * {@link #fromRequestWithHeaders(RequestWithHeaders, List)}, where the original caller into the service failed
+     * to send a {@link TraceHeaders#SPAN_ID} header. If this returns true then the given span has an invalid
+     * {@link Span#getParentSpanId()} that can't be trusted because it's parent had an invalid span ID.
+     *
+     * @param span The span to inspect.
+     * @return true if the given span is a *child* of a span that came from {@link
+     * #fromRequestWithHeaders(RequestWithHeaders, List)}, where the original caller did not send a span ID header,
+     * and therefore the given span's {@link Span#getParentSpanId()} is invalid, false otherwise (where the parent span
+     * ID on the given span is correct).
+     */
+    public static boolean hasInvalidParentIdBecauseCallerDidNotSendSpanId(Span span) {
+        return "true".equals(span.getTags().get(CHILD_OF_SPAN_FROM_HEADERS_WHERE_CALLER_DID_NOT_SEND_SPAN_ID_TAG_KEY));
     }
 
     /**
@@ -123,15 +211,19 @@ public class HttpRequestTracingUtils {
     }
 
     /**
-     * The given header from the given request as a span ID (or parent span ID), with the generateNewSpanIdIfNotFoundInRequest argument determining whether this method returns null
-     * or a new random span ID from {@link TraceAndSpanIdGenerator#generateId()} when the request doesn't contain that header.
+     * Extracts the {@link TraceHeaders#SPAN_ID} from the given request's headers, or returns null if the request
+     * doesn't contain that header.
      */
-    protected static String getSpanIdFromRequest(RequestWithHeaders request, String headerName, boolean generateNewSpanIdIfNotFoundInRequest) {
-        String spanIdString = getHeaderWithAttributeAsBackup(request, headerName);
-        if (spanIdString == null)
-            return generateNewSpanIdIfNotFoundInRequest ? TraceAndSpanIdGenerator.generateId() : null;
+    protected static String getSpanId(RequestWithHeaders request) {
+        return getHeaderWithAttributeAsBackup(request, TraceHeaders.SPAN_ID);
+    }
 
-        return spanIdString;
+    /**
+     * Extracts the {@link TraceHeaders#PARENT_SPAN_ID} from the given request's headers, or returns null if the request
+     * doesn't contain that header.
+     */
+    protected static String getParentSpanId(RequestWithHeaders request) {
+        return getHeaderWithAttributeAsBackup(request, TraceHeaders.PARENT_SPAN_ID);
     }
 
     /**

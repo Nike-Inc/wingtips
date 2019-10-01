@@ -1,5 +1,6 @@
 package com.nike.wingtips;
 
+import com.nike.wingtips.http.HttpRequestTracingUtils;
 import com.nike.wingtips.util.TracerManagedSpanStatus;
 import com.nike.wingtips.util.parser.SpanParser;
 
@@ -215,16 +216,31 @@ public class Span implements Closeable, Serializable {
         long childStartTimeEpochMicros =
             this.spanStartTimeEpochMicros + TimeUnit.NANOSECONDS.toMicros(nanosSinceParentStart);
 
-        return Span.newBuilder(spanName, spanPurpose)
+        String parentSpanIdForChild = this.getSpanId();
+        boolean addBadParentIdIndicatorTag = false;
+        if (HttpRequestTracingUtils.hasInvalidSpanIdBecauseCallerDidNotSendOne(this)) {
+            parentSpanIdForChild = null;
+            addBadParentIdIndicatorTag = true;
+        }
+
+        Builder childBuilder = Span.newBuilder(spanName, spanPurpose)
                    .withTraceId(this.getTraceId())
                    .withSampleable(this.isSampleable())
                    .withUserId(this.getUserId())
-                   .withParentSpanId(this.getSpanId())
+                   .withParentSpanId(parentSpanIdForChild)
                    .withSpanId(TraceAndSpanIdGenerator.generateId())
                    .withSpanStartTimeEpochMicros(childStartTimeEpochMicros)
                    .withSpanStartTimeNanos(currentNanoTime)
-                   .withDurationNanos(null)
-                   .build();
+                   .withDurationNanos(null);
+
+        if (addBadParentIdIndicatorTag) {
+            childBuilder.withTag(
+                HttpRequestTracingUtils.CHILD_OF_SPAN_FROM_HEADERS_WHERE_CALLER_DID_NOT_SEND_SPAN_ID_TAG_KEY,
+                "true"
+            );
+        }
+
+        return childBuilder.build();
     }
 
     /**

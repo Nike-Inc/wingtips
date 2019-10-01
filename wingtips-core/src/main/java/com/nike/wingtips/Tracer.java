@@ -1,6 +1,7 @@
 package com.nike.wingtips;
 
 import com.nike.wingtips.Span.SpanPurpose;
+import com.nike.wingtips.http.HttpRequestTracingUtils;
 import com.nike.wingtips.lifecyclelistener.SpanLifecycleListener;
 import com.nike.wingtips.sampling.RootSpanSamplingStrategy;
 import com.nike.wingtips.sampling.SampleAllTheThingsStrategy;
@@ -22,6 +23,8 @@ import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
+
+import static com.nike.wingtips.http.HttpRequestTracingUtils.CHILD_OF_SPAN_FROM_HEADERS_WHERE_CALLER_DID_NOT_SEND_SPAN_ID_TAG_KEY;
 
 /**
  * <p>
@@ -335,8 +338,23 @@ public class Tracer {
                             "If you don't have a parent span then you should call one of the startRequestWithRootSpan(...) methods instead.");
         }
 
-        return startRequestWithSpanInfo(parentSpan.getTraceId(), parentSpan.getSpanId(), childSpanName, parentSpan.isSampleable(), parentSpan.getUserId(),
-                                        SpanPurpose.SERVER);
+        String parentIdForChildSpan = parentSpan.getSpanId();
+        boolean addBadParentIdIndicatorTag = false;
+        if (HttpRequestTracingUtils.hasInvalidSpanIdBecauseCallerDidNotSendOne(parentSpan)) {
+            parentIdForChildSpan = null;
+            addBadParentIdIndicatorTag = true;
+        }
+
+        Span result = startRequestWithSpanInfo(
+            parentSpan.getTraceId(), parentIdForChildSpan, childSpanName, parentSpan.isSampleable(),
+            parentSpan.getUserId(), SpanPurpose.SERVER
+        );
+
+        if (addBadParentIdIndicatorTag) {
+            result.putTag(CHILD_OF_SPAN_FROM_HEADERS_WHERE_CALLER_DID_NOT_SEND_SPAN_ID_TAG_KEY, "true");
+        }
+
+        return result;
     }
 
     /**
