@@ -160,50 +160,6 @@ public class HttpSpanFactoryTest {
     }
 
     @Test
-    public void fromHttpServletRequestOrCreateRootSpan_pulls_from_headers_if_available() {
-        // given: a set of standard Span header values
-        given(request.getHeader(TraceHeaders.TRACE_ID)).willReturn(sampleTraceID);
-        given(request.getHeader(TraceHeaders.TRACE_SAMPLED)).willReturn(Boolean.TRUE.toString());
-        given(request.getHeader(TraceHeaders.SPAN_ID)).willReturn(sampleSpanID);
-        given(request.getHeader(TraceHeaders.PARENT_SPAN_ID)).willReturn(sampleParentSpanID);
-        given(request.getHeader(USER_ID_HEADER_KEY)).willReturn(userId);
-
-        // when: creating Span object from HTTP request using fromHttpServletRequestOrCreateRootSpan
-        long beforeCallNanos = System.nanoTime();
-        Span goodSpan = HttpSpanFactory.fromHttpServletRequestOrCreateRootSpan(request, USER_ID_HEADER_KEYS);
-        long afterCallNanos = System.nanoTime();
-
-        // then: ensure Span object gets identical values from corresponding headers
-        assertThat(goodSpan.getTraceId()).isEqualTo(sampleTraceID);
-        assertThat(goodSpan.isSampleable()).isTrue();
-        assertThat(goodSpan.getSpanId()).isEqualTo(sampleSpanID);
-        assertThat(goodSpan.getParentSpanId()).isEqualTo(sampleParentSpanID);
-        assertThat(goodSpan.getUserId()).isEqualTo(userId);
-        assertThat(goodSpan.getSpanStartTimeNanos()).isBetween(beforeCallNanos, afterCallNanos);
-        assertThat(goodSpan.isCompleted()).isFalse();
-        assertThat(goodSpan.getSpanPurpose()).isEqualTo(SpanPurpose.CLIENT);
-    }
-
-    @Test
-    public void fromHttpServletRequestOrCreateRootSpan_returns_new_root_span_if_traceId_is_missing_from_headers() {
-        // given: no trace ID in headers, but user ID exists
-        given(request.getHeader(ALT_USER_ID_HEADER_KEY)).willReturn(altUserId);
-
-        // when: creating Span object from HTTP request using fromHttpServletRequestOrCreateRootSpan
-        long beforeCallNanos = System.nanoTime();
-        Span newSpan = HttpSpanFactory.fromHttpServletRequestOrCreateRootSpan(request, USER_ID_HEADER_KEYS);
-        long afterCallNanos = System.nanoTime();
-
-        // then: ensure root span object is created even though there was no trace ID header, and the returned span contains the expected user ID
-        assertThat(newSpan).isNotNull();
-        assertThat(newSpan.getParentSpanId()).isNull();
-        assertThat(newSpan.getUserId()).isEqualTo(altUserId);
-        assertThat(newSpan.getSpanStartTimeNanos()).isBetween(beforeCallNanos, afterCallNanos);
-        assertThat(newSpan.isCompleted()).isFalse();
-        assertThat(newSpan.getSpanPurpose()).isEqualTo(SpanPurpose.SERVER);
-    }
-
-    @Test
     public void fromHttpServletRequest_returns_null_if_passed_null_request() {
         // when
         Span nullSpan = HttpSpanFactory.fromHttpServletRequest(null, USER_ID_HEADER_KEYS);
