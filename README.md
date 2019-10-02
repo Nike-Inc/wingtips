@@ -28,7 +28,12 @@ HTTP clients - for Spring MVC serverside support, see
 [Spring WebFlux](https://docs.spring.io/spring/docs/current/spring-framework-reference/web-reactive.html#webflux) 
 environments.
 * [wingtips-spring-boot](wingtips-spring-boot/README.md) - A plugin to help with Wingtips distributed tracing in 
-[Spring Boot](https://spring.io/guides/gs/spring-boot/) environments.
+[Spring Boot](https://spring.io/guides/gs/spring-boot/) environments using Spring Web MVC (Servlet-based). For 
+Spring Boot 2 WebFlux environments see [wingtips-spring-boot2-webflux](wingtips-spring-boot2-webflux) instead.
+* [wingtips-spring-boot2-webflux](wingtips-spring-boot2-webflux/README.md) - A plugin to help with Wingtips 
+distributed tracing in Spring Boot 2 
+[WebFlux](https://docs.spring.io/spring/docs/current/spring-framework-reference/web-reactive.html#webflux) environments
+(not Servlet-based Web MVC environments - for that see [wingtips-spring-boot](wingtips-spring-boot)). 
 * [wingtips-zipkin2-spring-boot](wingtips-zipkin2-spring-boot/README.md) - A plugin to help with Wingtips distributed
 tracing in [Spring Boot](https://spring.io/guides/gs/spring-boot/) environments that also utilize 
 [Zipkin](http://zipkin.io/).  

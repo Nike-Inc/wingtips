@@ -1,0 +1,25 @@
+evaluationDependsOn(':')
+
+sourceCompatibility = JavaVersion.VERSION_1_8
+targetCompatibility = JavaVersion.VERSION_1_8
+
+dependencies {
+    compile(
+            project(":wingtips-spring-webflux")
+    )
+    compileOnly(
+            "org.springframework:spring-webflux:$spring5Version",
+            "org.springframework.boot:spring-boot-autoconfigure:$springboot2Version",
+            "org.jetbrains:annotations:$jetbrainsAnnotationsVersion",
+    )
+    testCompile(
+            "org.jetbrains:annotations:$jetbrainsAnnotationsVersion",
+            "junit:junit-dep:$junitVersion",
+            "org.mockito:mockito-core:$mockitoVersion",
+            "ch.qos.logback:logback-classic:$logbackVersion",
+            "org.assertj:assertj-core:$assertJVersion",
+            "com.tngtech.java:junit-dataprovider:$junitDataproviderVersion",
+            "io.rest-assured:rest-assured:$restAssuredVersion",
+            "org.springframework.boot:spring-boot-starter-webflux:$springboot2Version",
+    )
+}

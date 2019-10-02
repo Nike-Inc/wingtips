@@ -6,6 +6,10 @@ Wingtips is a distributed tracing solution for Java based on the
 This module is a plugin extension module of the core Wingtips library and contains support for distributed tracing in a 
 [Spring Boot](https://spring.io/guides/gs/spring-boot/) environment.
 
+**NOTE:** This module only works with Spring Boot projects that are based on Spring Web MVC (Servlet-based), *not* 
+Spring WebFlux. If you're looking for Wingtips + Spring WebFlux based Spring Boot support, see the 
+[wingtips-spring-boot2-webflux](../wingtips-spring-boot2-webflux) module instead. 
+
 ## Usage Examples
 
 NOTES:
