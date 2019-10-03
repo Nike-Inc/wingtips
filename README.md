@@ -35,8 +35,14 @@ distributed tracing in Spring Boot 2
 [WebFlux](https://docs.spring.io/spring/docs/current/spring-framework-reference/web-reactive.html#webflux) environments
 (not Servlet-based Web MVC environments - for that see [wingtips-spring-boot](wingtips-spring-boot)). 
 * [wingtips-zipkin2-spring-boot](wingtips-zipkin2-spring-boot/README.md) - A plugin to help with Wingtips distributed
-tracing in [Spring Boot](https://spring.io/guides/gs/spring-boot/) environments that also utilize 
-[Zipkin](http://zipkin.io/).  
+tracing in [Spring Boot](https://spring.io/guides/gs/spring-boot/) environments using Spring Web MVC (Servlet-based) 
+that also utilize [Zipkin](http://zipkin.io/). For Spring Boot 2 + WebFlux + Zipkin environments see
+[wingtips-zipkin2-spring-boot2-webflux](wingtips-zipkin2-spring-boot2-webflux) instead.
+* [wingtips-zipkin2-spring-boot2-webflux](wingtips-zipkin2-spring-boot2-webflux/README.md) - A plugin to help with 
+Wingtips distributed tracing in Spring Boot 2
+[WebFlux](https://docs.spring.io/spring/docs/current/spring-framework-reference/web-reactive.html#webflux) environments 
+that also utilize [Zipkin](http://zipkin.io/) (not Servlet-based Web MVC environments - for that see 
+[wingtips-zipkin2-spring-boot](wingtips-zipkin2-spring-boot)).  
 * [wingtips-apache-http-client](wingtips-apache-http-client/README.md) - A plugin to help with Wingtips distributed
 tracing when using Apache's `HttpClient`.
 * [wingtips-jersey2](wingtips-jersey2/README.md) - A plugin for Jersey 2 based applications. This is intended to be
