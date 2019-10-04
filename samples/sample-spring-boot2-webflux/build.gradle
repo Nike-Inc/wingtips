@@ -1,0 +1,44 @@
+evaluationDependsOn(':')
+
+buildscript {
+    repositories {
+        jcenter()
+        mavenCentral()
+    }
+    dependencies {
+        classpath("org.springframework.boot:spring-boot-gradle-plugin:${springboot2Version}")
+    }
+}
+
+sourceCompatibility = JavaVersion.VERSION_1_8
+targetCompatibility = JavaVersion.VERSION_1_8
+
+apply plugin: 'org.springframework.boot'
+apply plugin: "io.spring.dependency-management"
+
+dependencies {
+    compile(
+        project(":wingtips-zipkin2-spring-boot2-webflux"),
+        "ch.qos.logback:logback-classic:$logbackVersion",
+        "org.springframework.boot:spring-boot-dependencies:$springboot2Version",
+        "org.springframework.boot:spring-boot-starter-webflux",
+    )
+    compileOnly(
+        "org.jetbrains:annotations:$jetbrainsAnnotationsVersion"
+    )
+    testCompile(
+        "junit:junit:$junitVersion",
+        "org.mockito:mockito-core:$mockitoVersion",
+        "ch.qos.logback:logback-classic:$logbackVersion",
+        "org.assertj:assertj-core:$assertJVersion",
+        "com.tngtech.java:junit-dataprovider:$junitDataproviderVersion",
+        "io.rest-assured:rest-assured:$restAssuredVersion"
+    )
+}
+
+apply plugin: "application"
+mainClassName = "com.nike.wingtips.springboot2webfluxsample.Main"
+
+run {
+    systemProperties = System.getProperties()
+}
