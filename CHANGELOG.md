@@ -8,6 +8,7 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 
 #### 0.x Releases
 
+- `0.21.x` Releases - [0.21.0](#0210)
 - `0.20.x` Releases - [0.20.1](#0201), [0.20.0](#0200)
 - `0.19.x` Releases - [0.19.2](#0192), [0.19.1](#0191), [0.19.0](#0190)
 - `0.18.x` Releases - [0.18.1](#0181), [0.18.0](#0180)
@@ -20,6 +21,50 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 - `0.11.x` Releases - [0.11.2](#0112), [0.11.1](#0111), [0.11.0](#0110)
 - `0.10.x` Releases - [0.10.0](#0100)
 - `0.9.x` Releases - [0.9.0.1](#0901), [0.9.0](#090)
+
+## [0.21.0](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.21.0)
+
+Released on 2019-10-07.
+
+### Breaking Changes
+
+* The `HttpSpanFactory.fromHttpServletRequestOrCreateRootSpan(...)` method was removed. This method was a bad mix of 
+two competing use cases and was guaranteed to do the wrong thing at some point no matter what you're trying to use it 
+for. We don't believe anybody was using this method, but if you were, then you need to rethink what you're trying to 
+use it for and do the right thing instead. Most likely you'd want to follow a pattern similar to 
+`RequestTracingFilter.createNewSpanForRequest(...)`. See that method for ideas and examples.
+* Removed the deprecated [wingtips-zipkin](wingtips-zipkin) and 
+[wingtips-zipkin-spring-boot](wingtips-zipkin-spring-boot) modules. These were tied to Zipkin v1. We now have 
+[wingtips-zipkin2](wingtips-zipkin2) and [wingtips-zipkin2-spring-boot](wingtips-zipkin2-spring-boot) to replace 
+those old modules, which are based on Zipkin v2 but can still output in Zipkin v1 format if necessary. So those 
+Zipkin v2 modules are full replacements and you should migrate to them if you haven't already. The readmes in the 
+old modules contain migration instructions.
+
+### Added
+
+* Added support for Wingtips tracing in the Spring WebFlux ecosystem, both serverside and clientside. There are 
+several new modules: [wingtips-spring-webflux](wingtips-spring-webflux), 
+[wingtips-spring-boot2-webflux](wingtips-spring-boot2-webflux), 
+[wingtips-zipkin2-spring-boot2-webflux](wingtips-zipkin2-spring-boot2-webflux), and a new
+[sample-spring-boot2-webflux](samples/sample-spring-boot2-webflux) sample app to show all of these features in action. 
+Each module has a readme covering usage - see those readmes for more details. 
+    - Added by [Nic Munroe][contrib_nicmunroe] in pull request [#110](https://github.com/Nike-Inc/wingtips/pull/110).
+
+### Fixed
+
+* Fixed the behavior when callers send trace ID but don't send span ID. Previously, the server's overall request span
+would be generated with a random parent ID that doesn't point to anything real. Now, the server's overall request span
+will be generated with a null parent ID, and it will include a `caller_did_not_send_span_id=true` tag to indicate the
+reason for the null parent ID so you can search for this situation and potentially track down bad callers.
+    - Fixed by [Nic Munroe][contrib_nicmunroe] in pull request [#108](https://github.com/Nike-Inc/wingtips/pull/108).
+    
+### Removed
+
+* Removed the `HttpSpanFactory.fromHttpServletRequestOrCreateRootSpan(...)` method. This is a breaking change. See
+the "Breaking Changes" section above for full details.
+    - Removed by [Nic Munroe][contrib_nicmunroe] in pull request [#109](https://github.com/Nike-Inc/wingtips/pull/109).
+* Removed the deprecated `wingtips-zipkin` and `wingtips-zipkin-spring-boot` modules.
+    - Removed by [Nic Munroe][contrib_nicmunroe] in pull request [#111](https://github.com/Nike-Inc/wingtips/pull/111).
 
 ## [0.20.1](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.20.1)
 
