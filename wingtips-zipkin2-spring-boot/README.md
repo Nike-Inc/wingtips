@@ -6,6 +6,10 @@ Wingtips is a distributed tracing solution for Java based on the
 This module is a plugin extension module of the core Wingtips library and contains support for distributed tracing in a 
 [Spring Boot](https://spring.io/guides/gs/spring-boot/) environment with [Zipkin](http://zipkin.io/) integration.
 
+**NOTE:** This module only works with Spring Boot projects that are based on Spring Web MVC, *not* Spring WebFlux. 
+If you're looking for Wingtips + WebFlux-based Spring Boot + Zipkin support, see the 
+[wingtips-zipkin2-spring-boot2-webflux](../wingtips-zipkin2-spring-boot2-webflux) module instead.
+
 ## Usage Examples
 
 NOTES: 

@@ -13,8 +13,8 @@ dependencies {
             project(":wingtips-java8"),
             project(":wingtips-spring"),
             "ch.qos.logback:logback-classic:$logbackVersion",
-            "org.springframework:spring-web:$springVersion",
-            "org.springframework:spring-webmvc:$springVersion",
+            "org.springframework:spring-web:$spring4Version",
+            "org.springframework:spring-webmvc:$spring4Version",
             "com.fasterxml.jackson.core:jackson-core:$jacksonVersion",
             "com.fasterxml.jackson.core:jackson-databind:$jacksonVersion",
             "org.eclipse.jetty:jetty-webapp:$jettyVersion"

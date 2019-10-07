@@ -12,7 +12,7 @@ dependencies {
     )
     compileOnly(
             "javax.servlet:javax.servlet-api:$servletApiVersion",
-            "org.springframework.boot:spring-boot-autoconfigure:$springbootVersion"
+            "org.springframework.boot:spring-boot-autoconfigure:$springboot1Version"
     )
     testCompile(
             "junit:junit-dep:$junitVersion",
@@ -20,7 +20,7 @@ dependencies {
             "ch.qos.logback:logback-classic:$logbackVersion",
             "org.assertj:assertj-core:$assertJVersion",
             "com.tngtech.java:junit-dataprovider:$junitDataproviderVersion",
-            "org.springframework.boot:spring-boot-starter-web:$springbootVersion",
+            "org.springframework.boot:spring-boot-starter-web:$springboot1Version",
             "javax.servlet:javax.servlet-api:$servletApiForTestsVersion",
             "io.rest-assured:rest-assured:$restAssuredVersion"
     )

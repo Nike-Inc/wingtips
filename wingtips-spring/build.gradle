@@ -10,7 +10,7 @@ dependencies {
             project(":wingtips-core")
     )
     compileOnly(
-            "org.springframework:spring-web:$springVersion",
+            "org.springframework:spring-web:$spring4Version",
             "org.jetbrains:annotations:$jetbrainsAnnotationsVersion"
     )
     testCompile(
@@ -21,7 +21,7 @@ dependencies {
             "com.tngtech.java:junit-dataprovider:$junitDataproviderVersion",
             "org.jetbrains:annotations:$jetbrainsAnnotationsVersion",
             "ch.qos.logback:logback-classic:$logbackVersion",
-            "org.springframework:spring-web:$springVersion",
-            "org.springframework.boot:spring-boot-starter-web:$springbootVersion"
+            "org.springframework:spring-web:$spring4Version",
+            "org.springframework.boot:spring-boot-starter-web:$springboot1Version"
     )
 }

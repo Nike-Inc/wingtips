@@ -25,7 +25,7 @@ There are also a few examples showing how to make tracing state hop threads when
 * Build the sample by running the `./buildSample.sh` script.
 * Launch the sample by running the `./runSample.sh` script. It will bind to port 8080 by default. 
     * You can override the default port by passing in a system property to the run script, 
-    e.g. to bind to port 8181: `./runSample.sh -DspringSample.server.port=8181`
+    e.g. to bind to port 8181: `./runSample.sh -Dserver.port=8181`
  
 <a name="launching_zipkin"></a>
 ## Launching a Zipkin server for use with the sample
