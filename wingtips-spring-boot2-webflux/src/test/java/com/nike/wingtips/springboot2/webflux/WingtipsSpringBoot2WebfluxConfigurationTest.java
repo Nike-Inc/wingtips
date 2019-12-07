@@ -1,5 +1,6 @@
 package com.nike.wingtips.springboot2.webflux;
 
+import com.nike.wingtips.Span;
 import com.nike.wingtips.Tracer;
 import com.nike.wingtips.Tracer.SpanLoggingRepresentation;
 import com.nike.wingtips.spring.webflux.server.SpringWebfluxServerRequestTagAdapter;
@@ -38,6 +39,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import notcomponentscanned.componenttest.ComponentTestMainWithCustomWingtipsWebFilter;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import static java.util.Collections.singletonList;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -479,6 +482,37 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
             assertThat(filtersFromSpring).isEqualTo(
                 Collections.singletonMap("wingtipsSpringWebfluxWebFilter", config.customSpringWebfluxWebFilter)
             );
+        }
+        finally {
+            SpringApplication.exit(serverAppContext);
+        }
+    }
+
+    @DataProvider(value = {
+            "MANUAL_IMPORT_ONLY",
+            "COMPONENT_SCAN_ONLY",
+            "BOTH_MANUAL_AND_COMPONENT_SCAN"
+    })
+    @Test
+    public void reactor_async_trace_propagation(ComponentTestSetup componentTestSetup) {
+        // given
+        int serverPort = findFreePort();
+        Class<?> mainClass = componentTestSetup.mainClass;
+
+        ConfigurableApplicationContext serverAppContext = SpringApplication.run(mainClass, "--server.port=" + serverPort);
+
+        try {
+            //given
+            final Span rootSpan = Tracer.getInstance().startRequestWithRootSpan("root");
+            // when
+            Mono<String> asyncTraceId = Mono.just("test")
+                    //Set up an async boundary
+                    .subscribeOn(Schedulers.elastic())
+                    //Return the traceid
+                    .map(s -> Tracer.getInstance().getCurrentSpan().getTraceId());
+
+            //then
+            assertThat(asyncTraceId.block()).isEqualTo(rootSpan.getTraceId());
         }
         finally {
             SpringApplication.exit(serverAppContext);
