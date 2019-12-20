@@ -133,6 +133,16 @@ public class WingtipsSpringBoot2WebfluxConfiguration {
             .build();
     }
 
+    /**
+     * This bean registers a reactor-core {@link reactor.core.scheduler.Scheduler}
+     * hook, which ensures that Wingtip trace, spans {@link reactor.core.publisher.Mono}
+     * and {@link reactor.core.publisher.Flux} based async boundaries.
+     */
+    @Bean
+    public WingtipsReactorInitializer reactorInitializer() {
+        return new WingtipsReactorInitializer();
+    }
+
     protected @Nullable List<String> extractUserIdHeaderKeysAsList(WingtipsSpringBoot2WebfluxProperties props) {
         if (props.getUserIdHeaderKeys() == null) {
             return null;
