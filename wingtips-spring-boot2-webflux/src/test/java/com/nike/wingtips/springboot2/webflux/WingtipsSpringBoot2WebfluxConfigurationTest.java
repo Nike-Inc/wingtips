@@ -552,6 +552,7 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
             //then
             assertThat(asyncTraceId.block()).isEqualTo(Optional.empty());
         } finally {
+            Schedulers.removeExecutorServiceDecorator(WingtipsReactorInitializer.WINGTIPS_SCHEDULER_KEY);
             SpringApplication.exit(serverAppContext);
         }
     }
