@@ -6,6 +6,7 @@ import com.nike.wingtips.Tracer.SpanLoggingRepresentation;
 import com.nike.wingtips.spring.webflux.server.SpringWebfluxServerRequestTagAdapter;
 import com.nike.wingtips.spring.webflux.server.WingtipsSpringWebfluxWebFilter;
 import com.nike.wingtips.springboot2.webflux.componenttest.componentscanonly.ComponentTestMainWithComponentScanOnly;
+import com.nike.wingtips.springboot2.webflux.componenttest.reactordisabled.ComponentTestMainManualImportNoReactorSupport;
 import com.nike.wingtips.springboot2.webflux.componenttest.manualimportandcomponentscan.ComponentTestMainWithBothManualImportAndComponentScan;
 import com.nike.wingtips.springboot2.webflux.componenttest.manualimportonly.ComponentTestMainManualImportOnly;
 import com.nike.wingtips.tags.HttpTagAndSpanNamingAdapter;
@@ -34,6 +35,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -55,11 +57,11 @@ import static org.mockito.Mockito.mock;
 public class WingtipsSpringBoot2WebfluxConfigurationTest {
 
     private WingtipsSpringBoot2WebfluxProperties generateProps(
-        boolean disabled,
-        String userIdHeaderKeys,
-        SpanLoggingRepresentation spanLoggingFormat,
-        String tagAndNamingStrategy,
-        String tagAndNamingAdapter
+            boolean disabled,
+            String userIdHeaderKeys,
+            SpanLoggingRepresentation spanLoggingFormat,
+            String tagAndNamingStrategy,
+            String tagAndNamingAdapter
     ) {
         WingtipsSpringBoot2WebfluxProperties props = new WingtipsSpringBoot2WebfluxProperties();
         props.setWingtipsDisabled(String.valueOf(disabled));
@@ -71,20 +73,20 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
     }
 
     @DataProvider(value = {
-        "JSON",
-        "KEY_VALUE",
-        "null"
+            "JSON",
+            "KEY_VALUE",
+            "null"
     })
     @Test
     public void constructor_works_as_expected(SpanLoggingRepresentation spanLoggingFormat) {
         // given
         WingtipsSpringBoot2WebfluxProperties props = generateProps(
-            false, UUID.randomUUID().toString(), spanLoggingFormat, "someTagStrategy", "someTagAdapter"
+                false, UUID.randomUUID().toString(), spanLoggingFormat, "someTagStrategy", "someTagAdapter"
         );
         SpanLoggingRepresentation existingSpanLoggingFormat = Tracer.getInstance().getSpanLoggingRepresentation();
         SpanLoggingRepresentation expectedSpanLoggingFormat = (spanLoggingFormat == null)
-                                                              ? existingSpanLoggingFormat
-                                                              : spanLoggingFormat;
+                ? existingSpanLoggingFormat
+                : spanLoggingFormat;
 
         // when
         WingtipsSpringBoot2WebfluxConfiguration conf = new WingtipsSpringBoot2WebfluxConfiguration(props);
@@ -149,33 +151,35 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
     }
 
     @SuppressWarnings("WeakerAccess")
-    static class CustomTagStrategy extends ZipkinHttpTagStrategy<ServerWebExchange, ServerHttpResponse> {}
+    static class CustomTagStrategy extends ZipkinHttpTagStrategy<ServerWebExchange, ServerHttpResponse> {
+    }
 
     @SuppressWarnings("WeakerAccess")
-    static class CustomTagAdapter extends SpringWebfluxServerRequestTagAdapter {}
+    static class CustomTagAdapter extends SpringWebfluxServerRequestTagAdapter {
+    }
 
     @DataProvider(value = {
-        "true   |   USER_ID_HEADER_KEYS_PROP_IS_SET",
-        "true   |   TAG_AND_NAMING_STRATEGY_PROP_IS_SET",
-        "true   |   TAG_AND_NAMING_ADAPTER_PROP_IS_SET",
-        "true   |   ALL_PROPS_ARE_SET",
-        "false  |   USER_ID_HEADER_KEYS_PROP_IS_SET",
-        "false  |   TAG_AND_NAMING_STRATEGY_PROP_IS_SET",
-        "false  |   TAG_AND_NAMING_ADAPTER_PROP_IS_SET",
-        "false  |   ALL_PROPS_ARE_SET"
+            "true   |   USER_ID_HEADER_KEYS_PROP_IS_SET",
+            "true   |   TAG_AND_NAMING_STRATEGY_PROP_IS_SET",
+            "true   |   TAG_AND_NAMING_ADAPTER_PROP_IS_SET",
+            "true   |   ALL_PROPS_ARE_SET",
+            "false  |   USER_ID_HEADER_KEYS_PROP_IS_SET",
+            "false  |   TAG_AND_NAMING_STRATEGY_PROP_IS_SET",
+            "false  |   TAG_AND_NAMING_ADAPTER_PROP_IS_SET",
+            "false  |   ALL_PROPS_ARE_SET"
     }, splitBy = "\\|")
     @SuppressWarnings("unchecked")
     @Test
     public void wingtipsRequestTracingFilter_returns_WingtipsSpringWebfluxWebFilter_with_expected_values(
-        boolean appFilterOverrideIsNull, PropertiesScenario scenario
+            boolean appFilterOverrideIsNull, PropertiesScenario scenario
     ) {
         // given
         WingtipsSpringWebfluxWebFilter appFilterOverride = (appFilterOverrideIsNull)
-                                                           ? null
-                                                           : mock(WingtipsSpringWebfluxWebFilter.class);
+                ? null
+                : mock(WingtipsSpringWebfluxWebFilter.class);
 
         WingtipsSpringBoot2WebfluxProperties props = generateProps(
-            false, scenario.userIdHeaderKeys, null, scenario.tagAndNamingStrategy, scenario.tagAndNamingAdapter
+                false, scenario.userIdHeaderKeys, null, scenario.tagAndNamingStrategy, scenario.tagAndNamingAdapter
         );
         WingtipsSpringBoot2WebfluxConfiguration conf = new WingtipsSpringBoot2WebfluxConfiguration(props);
         conf.customSpringWebfluxWebFilter = appFilterOverride;
@@ -186,25 +190,24 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
         // then
         if (appFilterOverride == null) {
             assertThat(filterBean)
-                .isNotNull()
-                .isInstanceOf(WingtipsSpringWebfluxWebFilter.class);
+                    .isNotNull()
+                    .isInstanceOf(WingtipsSpringWebfluxWebFilter.class);
 
             List<String> filterBeanUserIdHeaderKeys =
-                (List<String>) Whitebox.getInternalState(filterBean, "userIdHeaderKeys");
+                    (List<String>) Whitebox.getInternalState(filterBean, "userIdHeaderKeys");
             HttpTagAndSpanNamingStrategy<ServerWebExchange, ServerHttpResponse> filterBeanTagStrategy =
-                (HttpTagAndSpanNamingStrategy<ServerWebExchange, ServerHttpResponse>)
-                    Whitebox.getInternalState(filterBean, "tagAndNamingStrategy");
+                    (HttpTagAndSpanNamingStrategy<ServerWebExchange, ServerHttpResponse>)
+                            Whitebox.getInternalState(filterBean, "tagAndNamingStrategy");
             HttpTagAndSpanNamingAdapter<ServerWebExchange, ServerHttpResponse> filterBeanTagAdapter =
-                (HttpTagAndSpanNamingAdapter<ServerWebExchange, ServerHttpResponse>)
-                    Whitebox.getInternalState(filterBean, "tagAndNamingAdapter");
+                    (HttpTagAndSpanNamingAdapter<ServerWebExchange, ServerHttpResponse>)
+                            Whitebox.getInternalState(filterBean, "tagAndNamingAdapter");
 
             assertThat(filterBeanUserIdHeaderKeys).isEqualTo(scenario.getExpectedUserIdHeaderKeyList());
             assertThat(filterBeanTagStrategy).isInstanceOf(scenario.getExpectedTagStrategyClass());
             assertThat(filterBeanTagAdapter).isInstanceOf(scenario.getExpectedTagAdapterClass());
 
             assertThat(filterBean.getOrder()).isEqualTo(Ordered.HIGHEST_PRECEDENCE);
-        }
-        else {
+        } else {
             assertThat(filterBean).isNull();
         }
     }
@@ -226,8 +229,8 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
         SINGLE_VALUE_HEADERS_STRING("foo", singletonList("foo")),
         MULTIPLE_VALUE_HEADERS_STRING("foo,bar", Arrays.asList("foo", "bar")),
         MULTIPLE_VALUES_WITH_BLANK_AND_EMPTY_ENTRIES(
-            "foo, bar,  baz  ,,  , \r\n\t ,blah",
-            Arrays.asList("foo", "bar", "baz", "blah")
+                "foo, bar,  baz  ,,  , \r\n\t ,blah",
+                Arrays.asList("foo", "bar", "baz", "blah")
         );
 
         public final String userIdHeaderKeysString;
@@ -242,18 +245,18 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
     @DataProvider
     public static List<List<ExtractUserIdHeaderKeysScenario>> extractUserIdHeaderKeysScenarioDataProvider() {
         return Stream.of(ExtractUserIdHeaderKeysScenario.values())
-                     .map(Collections::singletonList)
-                     .collect(Collectors.toList());
+                .map(Collections::singletonList)
+                .collect(Collectors.toList());
     }
 
     @UseDataProvider("extractUserIdHeaderKeysScenarioDataProvider")
     @Test
     public void extractUserIdHeaderKeysAsList_works_as_expected(
-        ExtractUserIdHeaderKeysScenario scenario
+            ExtractUserIdHeaderKeysScenario scenario
     ) {
         // given
         WingtipsSpringBoot2WebfluxProperties props = generateProps(
-            false, scenario.userIdHeaderKeysString, null, null, null
+                false, scenario.userIdHeaderKeysString, null, null, null
         );
         WingtipsSpringBoot2WebfluxConfiguration conf = new WingtipsSpringBoot2WebfluxConfiguration(props);
 
@@ -270,46 +273,46 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
         EMPTY_STRATEGY_NAME(null, null, null),
         BLANK_STRATEGY_NAME(null, null, null),
         ZIPKIN_ALL_CAPS_SHORTNAME(
-            "ZIPKIN", ZipkinHttpTagStrategy.class, ZipkinHttpTagStrategy.getDefaultInstance()
+                "ZIPKIN", ZipkinHttpTagStrategy.class, ZipkinHttpTagStrategy.getDefaultInstance()
         ),
         ZIPKIN_LOWERCASE_SHORTNAME(
-            "zipkin", ZipkinHttpTagStrategy.class, ZipkinHttpTagStrategy.getDefaultInstance()
+                "zipkin", ZipkinHttpTagStrategy.class, ZipkinHttpTagStrategy.getDefaultInstance()
         ),
         ZIPKIN_MIXED_CASE_SHORTNAME(
-            "zIpKiN", ZipkinHttpTagStrategy.class, ZipkinHttpTagStrategy.getDefaultInstance()
+                "zIpKiN", ZipkinHttpTagStrategy.class, ZipkinHttpTagStrategy.getDefaultInstance()
         ),
         OT_ALL_CAPS_SHORTNAME(
-            "OPENTRACING", OpenTracingHttpTagStrategy.class, OpenTracingHttpTagStrategy.getDefaultInstance()
+                "OPENTRACING", OpenTracingHttpTagStrategy.class, OpenTracingHttpTagStrategy.getDefaultInstance()
         ),
         OT_LOWERCASE_SHORTNAME(
-            "opentracing", OpenTracingHttpTagStrategy.class, OpenTracingHttpTagStrategy.getDefaultInstance()
+                "opentracing", OpenTracingHttpTagStrategy.class, OpenTracingHttpTagStrategy.getDefaultInstance()
         ),
         OT_MIXED_CASE_SHORTNAME(
-            "oPeNtRaCiNg", OpenTracingHttpTagStrategy.class, OpenTracingHttpTagStrategy.getDefaultInstance()
+                "oPeNtRaCiNg", OpenTracingHttpTagStrategy.class, OpenTracingHttpTagStrategy.getDefaultInstance()
         ),
         NONE_ALL_CAPS_SHORTNAME(
-            "NONE", NoOpHttpTagStrategy.class, NoOpHttpTagStrategy.getDefaultInstance()
+                "NONE", NoOpHttpTagStrategy.class, NoOpHttpTagStrategy.getDefaultInstance()
         ),
         NONE_LOWERCASE_SHORTNAME(
-            "none", NoOpHttpTagStrategy.class, NoOpHttpTagStrategy.getDefaultInstance()
+                "none", NoOpHttpTagStrategy.class, NoOpHttpTagStrategy.getDefaultInstance()
         ),
         NONE_MIXED_CASE_SHORTNAME(
-            "nOnE", NoOpHttpTagStrategy.class, NoOpHttpTagStrategy.getDefaultInstance()
+                "nOnE", NoOpHttpTagStrategy.class, NoOpHttpTagStrategy.getDefaultInstance()
         ),
         NOOP_ALL_CAPS_SHORTNAME(
-            "NOOP", NoOpHttpTagStrategy.class, NoOpHttpTagStrategy.getDefaultInstance()
+                "NOOP", NoOpHttpTagStrategy.class, NoOpHttpTagStrategy.getDefaultInstance()
         ),
         NOOP_LOWERCASE_SHORTNAME(
-            "noop", NoOpHttpTagStrategy.class, NoOpHttpTagStrategy.getDefaultInstance()
+                "noop", NoOpHttpTagStrategy.class, NoOpHttpTagStrategy.getDefaultInstance()
         ),
         NOOP_MIXED_CASE_SHORTNAME(
-            "nOoP", NoOpHttpTagStrategy.class, NoOpHttpTagStrategy.getDefaultInstance()
+                "nOoP", NoOpHttpTagStrategy.class, NoOpHttpTagStrategy.getDefaultInstance()
         ),
         CUSTOM_BY_CLASSNAME(
-            CustomTagStrategy.class.getName(), CustomTagStrategy.class, null
+                CustomTagStrategy.class.getName(), CustomTagStrategy.class, null
         ),
         INVALID_CLASSNAME(
-            UUID.randomUUID().toString(), null, null
+                UUID.randomUUID().toString(), null, null
         );
 
         public final String strategyName;
@@ -317,9 +320,9 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
         public final HttpTagAndSpanNamingStrategy<ServerWebExchange, ServerHttpResponse> expectedExactMatch;
 
         ExtractTagAndNamingStrategyScenario(
-            String strategyName,
-            Class<? extends HttpTagAndSpanNamingStrategy> expectedResultClass,
-            HttpTagAndSpanNamingStrategy<ServerWebExchange, ServerHttpResponse> expectedExactMatch
+                String strategyName,
+                Class<? extends HttpTagAndSpanNamingStrategy> expectedResultClass,
+                HttpTagAndSpanNamingStrategy<ServerWebExchange, ServerHttpResponse> expectedExactMatch
         ) {
             this.strategyName = strategyName;
             this.expectedResultClass = expectedResultClass;
@@ -330,30 +333,29 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
     @DataProvider
     public static List<List<ExtractTagAndNamingStrategyScenario>> extractTagAndNamingStrategyScenarioDataProvider() {
         return Stream.of(ExtractTagAndNamingStrategyScenario.values())
-                     .map(Collections::singletonList)
-                     .collect(Collectors.toList());
+                .map(Collections::singletonList)
+                .collect(Collectors.toList());
     }
 
     @UseDataProvider("extractTagAndNamingStrategyScenarioDataProvider")
     @Test
     public void extractTagAndNamingStrategy_works_as_expected(
-        ExtractTagAndNamingStrategyScenario scenario
+            ExtractTagAndNamingStrategyScenario scenario
     ) {
         // given
         WingtipsSpringBoot2WebfluxProperties props = generateProps(
-            false, null, null, scenario.strategyName, null
+                false, null, null, scenario.strategyName, null
         );
         WingtipsSpringBoot2WebfluxConfiguration conf = new WingtipsSpringBoot2WebfluxConfiguration(props);
 
         // when
         HttpTagAndSpanNamingStrategy<ServerWebExchange, ServerHttpResponse> result =
-            conf.extractTagAndNamingStrategy(props);
+                conf.extractTagAndNamingStrategy(props);
 
         // then
         if (scenario.expectedResultClass == null) {
             assertThat(result).isNull();
-        }
-        else {
+        } else {
             assertThat(result).isNotNull();
             assertThat(result.getClass()).isEqualTo(scenario.expectedResultClass);
         }
@@ -369,18 +371,18 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
         EMPTY_ADAPTER_NAME(null, null),
         BLANK_ADAPTER_NAME(null, null),
         CUSTOM_BY_CLASSNAME(
-            CustomTagAdapter.class.getName(), CustomTagAdapter.class
+                CustomTagAdapter.class.getName(), CustomTagAdapter.class
         ),
         INVALID_CLASSNAME(
-            UUID.randomUUID().toString(), null
+                UUID.randomUUID().toString(), null
         );
 
         public final String adapterName;
         public final Class<? extends HttpTagAndSpanNamingAdapter> expectedResultClass;
 
         ExtractTagAndNamingAdapterScenario(
-            String adapterName,
-            Class<? extends HttpTagAndSpanNamingAdapter> expectedResultClass
+                String adapterName,
+                Class<? extends HttpTagAndSpanNamingAdapter> expectedResultClass
         ) {
             this.adapterName = adapterName;
             this.expectedResultClass = expectedResultClass;
@@ -390,30 +392,29 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
     @DataProvider
     public static List<List<ExtractTagAndNamingAdapterScenario>> extractTagAndNamingAdapterScenarioDataProvider() {
         return Stream.of(ExtractTagAndNamingAdapterScenario.values())
-                     .map(Collections::singletonList)
-                     .collect(Collectors.toList());
+                .map(Collections::singletonList)
+                .collect(Collectors.toList());
     }
 
     @UseDataProvider("extractTagAndNamingAdapterScenarioDataProvider")
     @Test
     public void extractTagAndNamingAdapter_works_as_expected(
-        ExtractTagAndNamingAdapterScenario scenario
+            ExtractTagAndNamingAdapterScenario scenario
     ) {
         // given
         WingtipsSpringBoot2WebfluxProperties props = generateProps(
-            false, null, null, null, scenario.adapterName
+                false, null, null, null, scenario.adapterName
         );
         WingtipsSpringBoot2WebfluxConfiguration conf = new WingtipsSpringBoot2WebfluxConfiguration(props);
 
         // when
         HttpTagAndSpanNamingAdapter<ServerWebExchange, ServerHttpResponse> result =
-            conf.extractTagAndNamingAdapter(props);
+                conf.extractTagAndNamingAdapter(props);
 
         // then
         if (scenario.expectedResultClass == null) {
             assertThat(result).isNull();
-        }
-        else {
+        } else {
             assertThat(result).isNotNull();
             assertThat(result.getClass()).isEqualTo(scenario.expectedResultClass);
         }
@@ -423,6 +424,7 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
     private enum ComponentTestSetup {
         MANUAL_IMPORT_ONLY(ComponentTestMainManualImportOnly.class, false),
         COMPONENT_SCAN_ONLY(ComponentTestMainWithComponentScanOnly.class, true),
+        COMPONENT_SCAN_WITHOUT_REACTOR_SUPPORT(ComponentTestMainManualImportNoReactorSupport.class, true),
         BOTH_MANUAL_AND_COMPONENT_SCAN(ComponentTestMainWithBothManualImportAndComponentScan.class, true);
 
         final boolean expectComponentScannedObjects;
@@ -439,9 +441,9 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
     //      scanned, imported manually, or both. Specifically we should not get multiple bean definition errors even
     //      when WingtipsSpringBoot2WebfluxConfiguration is *both* component scanned *and* imported manually.
     @DataProvider(value = {
-        "MANUAL_IMPORT_ONLY",
-        "COMPONENT_SCAN_ONLY",
-        "BOTH_MANUAL_AND_COMPONENT_SCAN"
+            "MANUAL_IMPORT_ONLY",
+            "COMPONENT_SCAN_ONLY",
+            "BOTH_MANUAL_AND_COMPONENT_SCAN"
     })
     @Test
     public void component_test(ComponentTestSetup componentTestSetup) {
@@ -449,22 +451,23 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
         int serverPort = findFreePort();
         Class<?> mainClass = componentTestSetup.mainClass;
 
-        ConfigurableApplicationContext serverAppContext = SpringApplication.run(mainClass, "--server.port=" + serverPort);
+        ConfigurableApplicationContext serverAppContext = SpringApplication.run(mainClass,
+                "--server.port=" + serverPort);
 
         try {
             // when
             WingtipsSpringBoot2WebfluxConfiguration
-                config = serverAppContext.getBean(WingtipsSpringBoot2WebfluxConfiguration.class);
-            WingtipsSpringBoot2WebfluxProperties props = serverAppContext.getBean(WingtipsSpringBoot2WebfluxProperties.class);
+                    config = serverAppContext.getBean(WingtipsSpringBoot2WebfluxConfiguration.class);
+            WingtipsSpringBoot2WebfluxProperties props =
+                    serverAppContext.getBean(WingtipsSpringBoot2WebfluxProperties.class);
             String[] someComponentScannedClassBeanNames =
-                serverAppContext.getBeanNamesForType(SomeComponentScannedClass.class);
+                    serverAppContext.getBeanNamesForType(SomeComponentScannedClass.class);
 
             // then
             // Sanity check that we component scanned (or not) as appropriate.
             if (componentTestSetup.expectComponentScannedObjects) {
                 assertThat(someComponentScannedClassBeanNames).isNotEmpty();
-            }
-            else {
+            } else {
                 assertThat(someComponentScannedClassBeanNames).isEmpty();
             }
 
@@ -478,12 +481,11 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
             //      the config.customSpringWebfluxWebFilter field with whatever wingtipsSpringWebfluxWebFilter()
             //      produces - so they should be the same.
             Map<String, WingtipsSpringWebfluxWebFilter> filtersFromSpring =
-                serverAppContext.getBeansOfType(WingtipsSpringWebfluxWebFilter.class);
+                    serverAppContext.getBeansOfType(WingtipsSpringWebfluxWebFilter.class);
             assertThat(filtersFromSpring).isEqualTo(
-                Collections.singletonMap("wingtipsSpringWebfluxWebFilter", config.customSpringWebfluxWebFilter)
+                    Collections.singletonMap("wingtipsSpringWebfluxWebFilter", config.customSpringWebfluxWebFilter)
             );
-        }
-        finally {
+        } finally {
             SpringApplication.exit(serverAppContext);
         }
     }
@@ -499,7 +501,8 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
         int serverPort = findFreePort();
         Class<?> mainClass = componentTestSetup.mainClass;
 
-        ConfigurableApplicationContext serverAppContext = SpringApplication.run(mainClass, "--server.port=" + serverPort);
+        ConfigurableApplicationContext serverAppContext = SpringApplication.run(mainClass,
+                "--server.port=" + serverPort);
 
         try {
             //given
@@ -507,14 +510,44 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
             // when
             Mono<String> asyncTraceId = Mono.just("test")
                     //Set up an async boundary
-                    .subscribeOn(Schedulers.elastic())
+                    .subscribeOn(Schedulers.newElastic("foo"))
                     //Return the traceid
                     .map(s -> Tracer.getInstance().getCurrentSpan().getTraceId());
 
             //then
             assertThat(asyncTraceId.block()).isEqualTo(rootSpan.getTraceId());
+        } finally {
+            SpringApplication.exit(serverAppContext);
         }
-        finally {
+    }
+
+    @DataProvider(value = {
+            "COMPONENT_SCAN_WITHOUT_REACTOR_SUPPORT"
+    })
+    @Test
+    public void reactor_async_trace_propagation_disabled(ComponentTestSetup componentTestSetup) {
+        // given
+        int serverPort = findFreePort();
+        Class<?> mainClass = componentTestSetup.mainClass;
+
+        ConfigurableApplicationContext serverAppContext = SpringApplication.run(mainClass,
+                "--server.port=" + serverPort);
+
+        try {
+            //given
+            final Span rootSpan = Tracer.getInstance().startRequestWithRootSpan("root");
+            // when
+            Mono<Optional<String>> asyncTraceId = Mono.just("test")
+                    //Set up an async boundary
+                    .subscribeOn(Schedulers.newElastic("another"))
+                    //Return the traceid
+                    .map(s -> Tracer.getInstance().getCurrentSpan() != null
+                            ? Optional.of(Tracer.getInstance().getCurrentSpan().getTraceId())
+                            : Optional.empty());
+
+            //then
+            assertThat(asyncTraceId.block()).isEqualTo(Optional.empty());
+        } finally {
             SpringApplication.exit(serverAppContext);
         }
     }
@@ -525,17 +558,18 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
         int serverPort = findFreePort();
 
         ConfigurableApplicationContext serverAppContext = SpringApplication.run(
-            ComponentTestMainWithCustomWingtipsWebFilter.class,
-            "--server.port=" + serverPort
+                ComponentTestMainWithCustomWingtipsWebFilter.class,
+                "--server.port=" + serverPort
         );
 
         try {
             // when
             WingtipsSpringBoot2WebfluxConfiguration
-                config = serverAppContext.getBean(WingtipsSpringBoot2WebfluxConfiguration.class);
-            WingtipsSpringBoot2WebfluxProperties props = serverAppContext.getBean(WingtipsSpringBoot2WebfluxProperties.class);
+                    config = serverAppContext.getBean(WingtipsSpringBoot2WebfluxConfiguration.class);
+            WingtipsSpringBoot2WebfluxProperties props =
+                    serverAppContext.getBean(WingtipsSpringBoot2WebfluxProperties.class);
             String[] someComponentScannedClassBeanNames =
-                serverAppContext.getBeanNamesForType(SomeComponentScannedClass.class);
+                    serverAppContext.getBeanNamesForType(SomeComponentScannedClass.class);
 
             // then
             // Sanity check that we component scanned (or not) as appropriate. This particular component test does
@@ -551,14 +585,13 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
             // Finally, the thing this test is verifying: the config's custom filter should be the same one from the
             //      component test main class, and it should be the one that Spring exposes.
             assertThat(config.customSpringWebfluxWebFilter)
-                .isSameAs(ComponentTestMainWithCustomWingtipsWebFilter.customFilter);
+                    .isSameAs(ComponentTestMainWithCustomWingtipsWebFilter.customFilter);
             Map<String, WingtipsSpringWebfluxWebFilter> filtersFromSpring =
-                serverAppContext.getBeansOfType(WingtipsSpringWebfluxWebFilter.class);
+                    serverAppContext.getBeansOfType(WingtipsSpringWebfluxWebFilter.class);
             assertThat(filtersFromSpring).isEqualTo(
-                Collections.singletonMap("customFilter", ComponentTestMainWithCustomWingtipsWebFilter.customFilter)
+                    Collections.singletonMap("customFilter", ComponentTestMainWithCustomWingtipsWebFilter.customFilter)
             );
-        }
-        finally {
+        } finally {
             SpringApplication.exit(serverAppContext);
         }
     }

@@ -39,6 +39,7 @@ for the remaining properties:
 
 ``` ini
 wingtips.wingtips-disabled=false
+wingtips.reactor-enabled=true
 wingtips.user-id-header-keys=userid,altuserid
 wingtips.span-logging-format=KEY_VALUE
 wingtips.server-side-span-tagging-strategy=ZIPKIN
@@ -64,7 +65,10 @@ properties to set up the following Wingtips features:
     name spans and tag spans with useful metadata about the request and response. By default it will use 
     `ZipkinHttpTagStrategy` and `SpringWebfluxServerRequestTagAdapter`. To modify the tag strategy and/or adapter, you 
     can set the `wingtips.server-side-span-tagging-strategy` and/or `wingtips.server-side-span-tagging-adapter` 
-    application properties (see `WingtipsSpringBoot2WebfluxProperties` description below). 
+    application properties (see `WingtipsSpringBoot2WebfluxProperties` description below).
+    - Adds a hook that enables Wingtips tracing to span async boundaries when using [Project Reactors](https://projectreactor.io/) 
+    `Mono` and `Flux` types along with `subscribeOn` and `publishOn` operators.
+       
 * **`WingtipsSpringBoot2WebfluxProperties`** - The Spring Boot 
 [@ConfigurationProperties](https://docs.spring.io/spring-boot/docs/current/reference/html/boot-features-external-config.html#boot-features-external-config-typesafe-configuration-properties) 
 companion for `WingtipsSpringBoot2WebfluxConfiguration` (described above) that allows you to customize some Wingtips 
@@ -74,6 +78,9 @@ for a concrete example. The following properties are supported (all of them opti
     - **`wingtips.wingtips-disabled`** - Disables the Wingtips `WingtipsSpringWebfluxWebFilter` filter if and 
     only if this property value is set to true. If false or missing then `WingtipsSpringWebfluxWebFilter` will be 
     registered normally.
+    - **`wingtips.reactor-enabled`** - Enables support for Wingtips tracing across Project reactors async boundaries. 
+    The property is disabled by default.
+
     - **`wingtips.user-id-header-keys`** - Used to specify the user ID header keys that Wingtips will look for on 
     incoming headers. See the `userIdHeaderKeys` parameter javadocs for the 
     `HttpRequestTracingUtils.fromRequestWithHeaders(...)` method for more info. This is optional - if not specified 
