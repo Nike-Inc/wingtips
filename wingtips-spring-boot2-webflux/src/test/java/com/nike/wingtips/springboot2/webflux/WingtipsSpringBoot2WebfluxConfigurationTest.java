@@ -37,11 +37,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import notcomponentscanned.componenttest.ComponentTestMainWithCustomWingtipsWebFilter;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 
 import static java.util.Collections.singletonList;
@@ -486,6 +488,7 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
                     Collections.singletonMap("wingtipsSpringWebfluxWebFilter", config.customSpringWebfluxWebFilter)
             );
         } finally {
+            Schedulers.removeExecutorServiceDecorator(WingtipsReactorInitializer.WINGTIPS_SCHEDULER_KEY);
             SpringApplication.exit(serverAppContext);
         }
     }
@@ -517,6 +520,7 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
             //then
             assertThat(asyncTraceId.block()).isEqualTo(rootSpan.getTraceId());
         } finally {
+            Schedulers.removeExecutorServiceDecorator(WingtipsReactorInitializer.WINGTIPS_SCHEDULER_KEY);
             SpringApplication.exit(serverAppContext);
         }
     }
@@ -535,7 +539,7 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
 
         try {
             //given
-            final Span rootSpan = Tracer.getInstance().startRequestWithRootSpan("root");
+            Tracer.getInstance().startRequestWithRootSpan("root");
             // when
             Mono<Optional<String>> asyncTraceId = Mono.just("test")
                     //Set up an async boundary

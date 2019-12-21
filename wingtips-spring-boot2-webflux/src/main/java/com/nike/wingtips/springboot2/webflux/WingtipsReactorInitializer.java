@@ -13,7 +13,7 @@ import reactor.core.scheduler.Schedulers;
  */
 
 class WingtipsReactorInitializer implements ApplicationListener<ApplicationReadyEvent> {
-    private static final String WINGTIPS_SCHEDULER_KEY = "WINGTIPS_REACTOR";
+    static final String WINGTIPS_SCHEDULER_KEY = "WINGTIPS_REACTOR";
 
     /**
      * Register a {@link reactor.core.scheduler.Scheduler} hook when
