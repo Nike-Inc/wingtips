@@ -8,12 +8,18 @@ import reactor.core.scheduler.Schedulers;
 /**
  * Spring {@link ApplicationListener} responsible for initializing reactors scheduler hook
  * with wingtips support at a Spring Boot Application Startup
+ *
  * @author Biju Kunjummen
  * @author Rafaela Breed
  */
 
 class WingtipsReactorInitializer implements ApplicationListener<ApplicationReadyEvent> {
     static final String WINGTIPS_SCHEDULER_KEY = "WINGTIPS_REACTOR";
+    private final boolean enabled;
+
+    public WingtipsReactorInitializer(boolean enabled) {
+        this.enabled = enabled;
+    }
 
     /**
      * Register a {@link reactor.core.scheduler.Scheduler} hook when
@@ -25,8 +31,10 @@ class WingtipsReactorInitializer implements ApplicationListener<ApplicationReady
      */
     @Override
     public void onApplicationEvent(ApplicationReadyEvent event) {
-        Schedulers.addExecutorServiceDecorator(
-                WINGTIPS_SCHEDULER_KEY,
-                (scheduler, schedulerService) -> new ScheduledExecutorServiceWithTracing(schedulerService));
+        if (enabled) {
+            Schedulers.addExecutorServiceDecorator(
+                    WINGTIPS_SCHEDULER_KEY,
+                    (scheduler, schedulerService) -> new ScheduledExecutorServiceWithTracing(schedulerService));
+        }
     }
 }

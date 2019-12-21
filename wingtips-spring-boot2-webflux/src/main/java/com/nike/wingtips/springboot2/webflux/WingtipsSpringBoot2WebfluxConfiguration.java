@@ -141,10 +141,7 @@ public class WingtipsSpringBoot2WebfluxConfiguration {
      */
     @Bean
     public WingtipsReactorInitializer reactorInitializer(WingtipsSpringBoot2WebfluxProperties props) {
-        if (props.isReactorEnabled()) {
-            return new WingtipsReactorInitializer();
-        }
-        return null;
+        return new WingtipsReactorInitializer(props.isReactorEnabled());
     }
 
     protected @Nullable List<String> extractUserIdHeaderKeysAsList(WingtipsSpringBoot2WebfluxProperties props) {
