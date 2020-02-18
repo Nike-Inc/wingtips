@@ -52,7 +52,10 @@ import java.util.List;
  *         however you can pass in a fully qualified class name for this property if you have a custom impl you want
  *         to use.
  *     </li>
- * </ul>
+ *     <li>
+ *         wingtips.reactor-enabled - Enables passing the Wingtips trace details across
+ *         Project Reactors async boundaries. This is disabled by default.
+ *     </li> * </ul>
  *
  * <p>For example you could set the following properties in your {@code application.properties}:
  * <pre>
@@ -72,6 +75,7 @@ public class WingtipsSpringBoot2WebfluxProperties {
     private Tracer.SpanLoggingRepresentation spanLoggingFormat;
     private String serverSideSpanTaggingStrategy;
     private String serverSideSpanTaggingAdapter;
+    private boolean reactorEnabled = false;
 
     public boolean isWingtipsDisabled() {
         return wingtipsDisabled;
@@ -111,5 +115,13 @@ public class WingtipsSpringBoot2WebfluxProperties {
 
     public void setServerSideSpanTaggingAdapter(String serverSideSpanTaggingAdapter) {
         this.serverSideSpanTaggingAdapter = serverSideSpanTaggingAdapter;
+    }
+
+    public boolean isReactorEnabled() {
+        return reactorEnabled;
+    }
+
+    public void setReactorEnabled(boolean reactorEnabled) {
+        this.reactorEnabled = reactorEnabled;
     }
 }

@@ -13,6 +13,7 @@ import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -131,6 +132,16 @@ public class WingtipsSpringBoot2WebfluxConfiguration {
             .withTagAndNamingStrategy(extractTagAndNamingStrategy(wingtipsProperties))
             .withTagAndNamingAdapter(extractTagAndNamingAdapter(wingtipsProperties))
             .build();
+    }
+
+    /**
+     * This bean registers a reactor-core {@link reactor.core.scheduler.Scheduler}
+     * hook, which ensures that Wingtip trace, spans {@link reactor.core.publisher.Mono}
+     * and {@link reactor.core.publisher.Flux} based async boundaries.
+     */
+    @Bean
+    public WingtipsReactorInitializer reactorInitializer(WingtipsSpringBoot2WebfluxProperties props) {
+        return new WingtipsReactorInitializer(props.isReactorEnabled());
     }
 
     protected @Nullable List<String> extractUserIdHeaderKeysAsList(WingtipsSpringBoot2WebfluxProperties props) {
