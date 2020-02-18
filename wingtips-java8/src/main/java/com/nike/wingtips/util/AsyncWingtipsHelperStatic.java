@@ -4,6 +4,7 @@ import com.nike.internal.util.Pair;
 import com.nike.wingtips.Span;
 import com.nike.wingtips.Tracer;
 import com.nike.wingtips.util.asynchelperwrapper.ExecutorServiceWithTracing;
+import com.nike.wingtips.util.asynchelperwrapper.ScheduledExecutorServiceWithTracing;
 
 import org.slf4j.MDC;
 
@@ -13,6 +14,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
@@ -467,6 +469,22 @@ public class AsyncWingtipsHelperStatic {
      */
     public static ExecutorServiceWithTracing executorServiceWithTracing(ExecutorService delegate) {
         return DEFAULT_IMPL.executorServiceWithTracing(delegate);
+    }
+
+    /**
+     * @return A {@link ScheduledExecutorService} that wraps the given delegate {@link ScheduledExecutorService} so
+     * that when {@link Runnable}s or {@link Callable}s are scheduled or executed through it they will automatically
+     * inherit the tracing state of the thread that called the {@link ScheduledExecutorService} method. Equivalent to
+     * calling: {@code new ScheduledExecutorServiceWithTracing(delegate)}.
+     *
+     * <p>WARNING: Keep in mind that you should avoid using a {@link ScheduledExecutorServiceWithTracing} when spinning
+     * off background threads that aren't tied to a specific trace, or in any other situation where an executed
+     * {@link Runnable}/{@link Callable} should *not* automatically inherit the calling thread's tracing state!
+     */
+    public static ScheduledExecutorServiceWithTracing scheduledExecutorServiceWithTracing(
+        ScheduledExecutorService delegate
+    ) {
+        return DEFAULT_IMPL.scheduledExecutorServiceWithTracing(delegate);
     }
 
     /**

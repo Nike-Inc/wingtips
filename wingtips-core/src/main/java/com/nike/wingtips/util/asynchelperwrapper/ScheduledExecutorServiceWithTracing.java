@@ -7,32 +7,36 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * A wrapper around any {@link ScheduledExecutorService} instance that causes the current (method caller's) tracing
- * state to hop
- * threads when {@link Runnable}s or {@link Callable}s are supplied for execution. Simply supply the constructor with
- * the delegate {@link ScheduledExecutorService} you want to wrap (often one from {@link java.util.concurrent.Executors}) and
- * then treat it like any other {@link ScheduledExecutorService}. Shutdown and termination methods pass through to the
- * delegate - {@link ScheduledExecutorServiceWithTracing} does not contain any state of its own.
- *
+ * state to hop threads when {@link Runnable}s or {@link Callable}s are scheduled for execution. Simply supply the
+ * constructor with the delegate {@link ScheduledExecutorService} you want to wrap (often one from {@link
+ * java.util.concurrent.Executors}) and then treat it like any other {@link ScheduledExecutorService}. Shutdown and
+ * termination methods pass through to the delegate - {@link ScheduledExecutorServiceWithTracing} does not contain any
+ * state of its own.
  *
  * <p>Usage:
  * <pre>
  * // In some setup location, create the ScheduledExecutorWithTracing.
- * ScheduledExecutorService tracingAwareScheduledExecutorService =
+ * //     This is just an example - please use an appropriate ScheduledExecutorService for your use case.
+ * ScheduledExecutorService tracingAwareScheduler =
  *                          new ScheduledExecutorWithTracing(Executors.newSingleThreadScheduledExecutor());
- *
  *
  * // Elsewhere, setup the tracing state for the caller's thread.
  * Tracer.getInstance().startRequestWithRootSpan("someRootSpan");
  * TracingState callerThreadTracingState = TracingState.getCurrentThreadTracingState();
  *
- * // Tell the tracing-wrapped executor to execute a Runnable.
- * tracingAwareExecutorService.execute(() -> {
- *     // Runnable's execution code goes here.
- *     // The important bit is that although we are no longer on the caller's thread, this Runnable's thread
- *     //     will have the same tracing state as the caller. The following line will not throw an exception.
+ * // Tell the tracing-wrapped scheduler to schedule something.
+ * tracingAwareScheduler.schedule(() -> {
+ *     // The scheduled Runnable/Callable execution code goes here.
+ *     // The important bit is that although we are no longer on the caller's thread, this Runnable/Callable's thread
+ *     //     will have the same tracing state as the thread where .schedule(...) was called.
+ *     //     The following line will therefore complete successfully without throwing an assertion failure.
  *     assert callerThreadTracingState.equals(TracingState.getCurrentThreadTracingState());
- * });
+ * }, 42, TimeUnit.SECONDS);
  * </pre>
+ *
+ * Also note that standard executor/executor service methods like {@link
+ * java.util.concurrent.Executor#execute(Runnable)} will also propagate tracing state since this class is an extension
+ * of Wingtips' {@link ExecutorServiceWithTracing}.
  *
  * @author Biju Kunjummen
  * @author Rafaela Breed

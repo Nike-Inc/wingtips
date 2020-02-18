@@ -1,14 +1,15 @@
 package com.nike.wingtips.springboot2.webflux;
 
+import com.nike.internal.util.Pair;
 import com.nike.wingtips.Span;
 import com.nike.wingtips.Tracer;
 import com.nike.wingtips.Tracer.SpanLoggingRepresentation;
 import com.nike.wingtips.spring.webflux.server.SpringWebfluxServerRequestTagAdapter;
 import com.nike.wingtips.spring.webflux.server.WingtipsSpringWebfluxWebFilter;
 import com.nike.wingtips.springboot2.webflux.componenttest.componentscanonly.ComponentTestMainWithComponentScanOnly;
-import com.nike.wingtips.springboot2.webflux.componenttest.reactordisabled.ComponentTestMainManualImportNoReactorSupport;
 import com.nike.wingtips.springboot2.webflux.componenttest.manualimportandcomponentscan.ComponentTestMainWithBothManualImportAndComponentScan;
 import com.nike.wingtips.springboot2.webflux.componenttest.manualimportonly.ComponentTestMainManualImportOnly;
+import com.nike.wingtips.springboot2.webflux.componenttest.reactordisabled.ComponentTestMainManualImportNoReactorSupport;
 import com.nike.wingtips.tags.HttpTagAndSpanNamingAdapter;
 import com.nike.wingtips.tags.HttpTagAndSpanNamingStrategy;
 import com.nike.wingtips.tags.NoOpHttpTagStrategy;
@@ -19,9 +20,12 @@ import com.tngtech.java.junit.dataprovider.DataProvider;
 import com.tngtech.java.junit.dataprovider.DataProviderRunner;
 import com.tngtech.java.junit.dataprovider.UseDataProvider;
 
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.internal.util.reflection.Whitebox;
+import org.slf4j.MDC;
 import org.springframework.boot.SpringApplication;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.core.Ordered;
@@ -35,15 +39,12 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import notcomponentscanned.componenttest.ComponentTestMainWithCustomWingtipsWebFilter;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 
 import static java.util.Collections.singletonList;
@@ -63,7 +64,8 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
             String userIdHeaderKeys,
             SpanLoggingRepresentation spanLoggingFormat,
             String tagAndNamingStrategy,
-            String tagAndNamingAdapter
+            String tagAndNamingAdapter,
+            boolean reactorEnabled
     ) {
         WingtipsSpringBoot2WebfluxProperties props = new WingtipsSpringBoot2WebfluxProperties();
         props.setWingtipsDisabled(String.valueOf(disabled));
@@ -71,7 +73,26 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
         props.setSpanLoggingFormat(spanLoggingFormat);
         props.setServerSideSpanTaggingStrategy(tagAndNamingStrategy);
         props.setServerSideSpanTaggingAdapter(tagAndNamingAdapter);
+        props.setReactorEnabled(reactorEnabled);
         return props;
+    }
+
+    @Before
+    public void beforeMethod() {
+        Schedulers.removeExecutorServiceDecorator(WingtipsReactorInitializer.WINGTIPS_SCHEDULER_KEY);
+        resetTracing();
+    }
+
+    @After
+    public void afterMethod() {
+        Schedulers.removeExecutorServiceDecorator(WingtipsReactorInitializer.WINGTIPS_SCHEDULER_KEY);
+        resetTracing();
+    }
+
+    private void resetTracing() {
+        MDC.clear();
+        Tracer.getInstance().unregisterFromThread();
+        Tracer.getInstance().removeAllSpanLifecycleListeners();
     }
 
     @DataProvider(value = {
@@ -83,7 +104,8 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
     public void constructor_works_as_expected(SpanLoggingRepresentation spanLoggingFormat) {
         // given
         WingtipsSpringBoot2WebfluxProperties props = generateProps(
-                false, UUID.randomUUID().toString(), spanLoggingFormat, "someTagStrategy", "someTagAdapter"
+                false, UUID.randomUUID().toString(), spanLoggingFormat, "someTagStrategy", "someTagAdapter",
+                false
         );
         SpanLoggingRepresentation existingSpanLoggingFormat = Tracer.getInstance().getSpanLoggingRepresentation();
         SpanLoggingRepresentation expectedSpanLoggingFormat = (spanLoggingFormat == null)
@@ -181,7 +203,8 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
                 : mock(WingtipsSpringWebfluxWebFilter.class);
 
         WingtipsSpringBoot2WebfluxProperties props = generateProps(
-                false, scenario.userIdHeaderKeys, null, scenario.tagAndNamingStrategy, scenario.tagAndNamingAdapter
+                false, scenario.userIdHeaderKeys, null, scenario.tagAndNamingStrategy, scenario.tagAndNamingAdapter,
+                false
         );
         WingtipsSpringBoot2WebfluxConfiguration conf = new WingtipsSpringBoot2WebfluxConfiguration(props);
         conf.customSpringWebfluxWebFilter = appFilterOverride;
@@ -217,11 +240,32 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
     @Test
     public void wingtipsRequestTracingFilter_returns_null_if_WingtipsSpringBootProperties_indicates_disabled() {
         // given
-        WingtipsSpringBoot2WebfluxProperties props = generateProps(true, null, null, null, null);
+        WingtipsSpringBoot2WebfluxProperties props = generateProps(true, null, null, null, null, false);
         WingtipsSpringBoot2WebfluxConfiguration conf = new WingtipsSpringBoot2WebfluxConfiguration(props);
 
         // expect
         assertThat(conf.wingtipsSpringWebfluxWebFilter()).isNull();
+    }
+
+    @DataProvider(value = {
+        "true",
+        "false"
+    })
+    @Test
+    public void reactorInitializer_returns_WingtipsReactorInitializer_with_expected_values(
+        boolean reactorEnabled
+    ) {
+        // given
+        WingtipsSpringBoot2WebfluxProperties props = generateProps(
+            false, null, null, null, null, reactorEnabled
+        );
+        WingtipsSpringBoot2WebfluxConfiguration conf = new WingtipsSpringBoot2WebfluxConfiguration(props);
+
+        // when
+        WingtipsReactorInitializer reactorInitializer = conf.reactorInitializer();
+
+        // then
+        assertThat(reactorInitializer.isEnabled()).isEqualTo(reactorEnabled);
     }
 
     private enum ExtractUserIdHeaderKeysScenario {
@@ -258,7 +302,7 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
     ) {
         // given
         WingtipsSpringBoot2WebfluxProperties props = generateProps(
-                false, scenario.userIdHeaderKeysString, null, null, null
+                false, scenario.userIdHeaderKeysString, null, null, null, false
         );
         WingtipsSpringBoot2WebfluxConfiguration conf = new WingtipsSpringBoot2WebfluxConfiguration(props);
 
@@ -346,7 +390,7 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
     ) {
         // given
         WingtipsSpringBoot2WebfluxProperties props = generateProps(
-                false, null, null, scenario.strategyName, null
+                false, null, null, scenario.strategyName, null, false
         );
         WingtipsSpringBoot2WebfluxConfiguration conf = new WingtipsSpringBoot2WebfluxConfiguration(props);
 
@@ -405,7 +449,7 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
     ) {
         // given
         WingtipsSpringBoot2WebfluxProperties props = generateProps(
-                false, null, null, null, scenario.adapterName
+                false, null, null, null, scenario.adapterName, false
         );
         WingtipsSpringBoot2WebfluxConfiguration conf = new WingtipsSpringBoot2WebfluxConfiguration(props);
 
@@ -494,31 +538,65 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
     }
 
     @DataProvider(value = {
-            "MANUAL_IMPORT_ONLY",
-            "COMPONENT_SCAN_ONLY",
-            "BOTH_MANUAL_AND_COMPONENT_SCAN"
-    })
+            "MANUAL_IMPORT_ONLY                     |   true",
+            "COMPONENT_SCAN_ONLY                    |   true",
+            "COMPONENT_SCAN_WITHOUT_REACTOR_SUPPORT |   false",
+            "BOTH_MANUAL_AND_COMPONENT_SCAN         |   true"
+    }, splitBy = "\\|")
     @Test
-    public void reactor_async_trace_propagation(ComponentTestSetup componentTestSetup) {
+    public void project_reactor_wingtips_integration_should_work_as_expected_when_using_subscribeOn(
+        ComponentTestSetup componentTestSetup,
+        boolean expectTracingToPropagate
+    ) {
         // given
         int serverPort = findFreePort();
         Class<?> mainClass = componentTestSetup.mainClass;
 
-        ConfigurableApplicationContext serverAppContext = SpringApplication.run(mainClass,
-                "--server.port=" + serverPort);
+        ConfigurableApplicationContext serverAppContext = SpringApplication.run(
+            mainClass, "--server.port=" + serverPort
+        );
 
         try {
-            //given
-            final Span rootSpan = Tracer.getInstance().startRequestWithRootSpan("root");
-            // when
-            Mono<String> asyncTraceId = Mono.just("test")
-                    //Set up an async boundary
-                    .subscribeOn(Schedulers.newElastic("foo"))
-                    //Return the traceid
-                    .map(s -> Tracer.getInstance().getCurrentSpan().getTraceId());
+            // given
+            // Setup the mono before we even start the trace.
+            Mono<Pair<Long, Span>> asyncThreadAndTraceId =
+                Mono.just("test")
+                    // Return the thread ID and current span.
+                    .map(s -> Pair.of(Thread.currentThread().getId(), Tracer.getInstance().getCurrentSpan()))
+                    // Set up an async boundary using subscribeOn(...).
+                    //      WARNING: This MUST be a new*() (e.g. newElastic()), rather than the built-in defaults
+                    //      like Schedulers.elastic(). Otherwise it's a race condition, as the schedulers are cached
+                    //      after they are created and used, so setting the Wingtips+Reactor scheduler hook after
+                    //      a default scheduler has been used won't work. Think one test running without the hook, and
+                    //      then a different test trying to run with the hook. The second test won't work.
+                    //      By using a new scheduler, we guarantee that it will receive whatever hook we setup as part
+                    //      of *this* test.
+                    .subscribeOn(Schedulers.newElastic("someNewElasticScheduler"));
 
-            //then
-            assertThat(asyncTraceId.block()).isEqualTo(rootSpan.getTraceId());
+            // Start the trace and track the thread ID we're on.
+            final Span rootSpan = Tracer.getInstance().startRequestWithRootSpan("root");
+            final long mainThreadId = Thread.currentThread().getId();
+
+            // when
+            // This block() is where the subscription occurs, and therefore where the
+            //      ProjectReactor+Wingtips magic occurs. It should take the tracing state on the current thread here
+            //      when block() is called, and propagate it into the Mono execution.
+            Pair<Long, Span> result = asyncThreadAndTraceId.block();
+
+            // then
+            // The thread in the Mono.map(...) should always be different than our main thread
+            //      thanks to the subscribeOn(...).
+            assertThat(result.getLeft()).isNotEqualTo(mainThreadId);
+
+            // If expectTracingToPropagate is true, then we expect the span in the Mono.map(...) to match the root span.
+            //      Otherwise, the current span when Mono.map(...) executed should be null.
+            if (expectTracingToPropagate) {
+                assertThat(result.getRight()).isEqualTo(rootSpan);
+            }
+            else {
+                assertThat(result.getRight()).isNull();
+            }
+            Tracer.getInstance().completeRequestSpan();
         } finally {
             Schedulers.removeExecutorServiceDecorator(WingtipsReactorInitializer.WINGTIPS_SCHEDULER_KEY);
             SpringApplication.exit(serverAppContext);
@@ -526,31 +604,65 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
     }
 
     @DataProvider(value = {
-            "COMPONENT_SCAN_WITHOUT_REACTOR_SUPPORT"
-    })
+        "MANUAL_IMPORT_ONLY                     |   true",
+        "COMPONENT_SCAN_ONLY                    |   true",
+        "COMPONENT_SCAN_WITHOUT_REACTOR_SUPPORT |   false",
+        "BOTH_MANUAL_AND_COMPONENT_SCAN         |   true"
+    }, splitBy = "\\|")
     @Test
-    public void reactor_async_trace_propagation_disabled(ComponentTestSetup componentTestSetup) {
+    public void project_reactor_wingtips_integration_should_work_as_expected_when_using_publishOn(
+        ComponentTestSetup componentTestSetup,
+        boolean expectTracingToPropagate
+    ) {
         // given
         int serverPort = findFreePort();
         Class<?> mainClass = componentTestSetup.mainClass;
 
-        ConfigurableApplicationContext serverAppContext = SpringApplication.run(mainClass,
-                "--server.port=" + serverPort);
+        ConfigurableApplicationContext serverAppContext = SpringApplication.run(
+            mainClass, "--server.port=" + serverPort
+        );
 
         try {
-            //given
-            Tracer.getInstance().startRequestWithRootSpan("root");
-            // when
-            Mono<Optional<String>> asyncTraceId = Mono.just("test")
-                    //Set up an async boundary
-                    .subscribeOn(Schedulers.newElastic("another"))
-                    //Return the traceid
-                    .map(s -> Tracer.getInstance().getCurrentSpan() != null
-                            ? Optional.of(Tracer.getInstance().getCurrentSpan().getTraceId())
-                            : Optional.empty());
+            // given
+            // Setup the mono before we even start the trace.
+            Mono<Pair<Long, Span>> asyncThreadAndTraceId =
+                Mono.just("test")
+                    // Set up an async boundary using publishOn(...).
+                    //      WARNING: This MUST be a new*() (e.g. newElastic()), rather than the built-in defaults
+                    //      like Schedulers.elastic(). Otherwise it's a race condition, as the schedulers are cached
+                    //      after they are created and used, so setting the Wingtips+Reactor scheduler hook after
+                    //      a default scheduler has been used won't work. Think one test running without the hook, and
+                    //      then a different test trying to run with the hook. The second test won't work.
+                    //      By using a new scheduler, we guarantee that it will receive whatever hook we setup as part
+                    //      of *this* test.
+                    .publishOn(Schedulers.newElastic("someNewElasticScheduler"))
+                    // Return the thread ID and current span.
+                    .map(s -> Pair.of(Thread.currentThread().getId(), Tracer.getInstance().getCurrentSpan()));
 
-            //then
-            assertThat(asyncTraceId.block()).isEqualTo(Optional.empty());
+            // Start the trace and track the thread ID we're on.
+            final Span rootSpan = Tracer.getInstance().startRequestWithRootSpan("root");
+            final long mainThreadId = Thread.currentThread().getId();
+
+            // when
+            // This block() is where the subscription occurs, and therefore where the
+            //      ProjectReactor+Wingtips magic occurs. It should take the tracing state on the current thread here
+            //      when block() is called, and propagate it into the Mono execution.
+            Pair<Long, Span> result = asyncThreadAndTraceId.block();
+
+            // then
+            // The thread in the Mono.map(...) should always be different than our main thread
+            //      thanks to the publishOn(...).
+            assertThat(result.getLeft()).isNotEqualTo(mainThreadId);
+
+            // If expectTracingToPropagate is true, then we expect the span in the Mono.map(...) to match the root span.
+            //      Otherwise, the current span when Mono.map(...) executed should be null.
+            if (expectTracingToPropagate) {
+                assertThat(result.getRight()).isEqualTo(rootSpan);
+            }
+            else {
+                assertThat(result.getRight()).isNull();
+            }
+            Tracer.getInstance().completeRequestSpan();
         } finally {
             Schedulers.removeExecutorServiceDecorator(WingtipsReactorInitializer.WINGTIPS_SCHEDULER_KEY);
             SpringApplication.exit(serverAppContext);

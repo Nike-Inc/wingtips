@@ -13,7 +13,6 @@ import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -135,13 +134,18 @@ public class WingtipsSpringBoot2WebfluxConfiguration {
     }
 
     /**
-     * This bean registers a reactor-core {@link reactor.core.scheduler.Scheduler}
-     * hook, which ensures that Wingtip trace, spans {@link reactor.core.publisher.Mono}
-     * and {@link reactor.core.publisher.Flux} based async boundaries.
+     * This bean registers a Project Reactor {@link reactor.core.scheduler.Scheduler}
+     * hook, which ensures that Wingtips tracing state is propagated to {@link reactor.core.publisher.Mono}
+     * and {@link reactor.core.publisher.Flux} across async boundaries based on the tracing state at the time
+     * of subscription to the Mono/Flux.
+     *
+     * <p>NOTE: The {@link WingtipsSpringBoot2WebfluxProperties#isReactorEnabled()} property will control whether
+     * this hook actually registers itself or not, so you can enable or disable this integration from your
+     * application properties.
      */
     @Bean
-    public WingtipsReactorInitializer reactorInitializer(WingtipsSpringBoot2WebfluxProperties props) {
-        return new WingtipsReactorInitializer(props.isReactorEnabled());
+    public WingtipsReactorInitializer reactorInitializer() {
+        return new WingtipsReactorInitializer(wingtipsProperties.isReactorEnabled());
     }
 
     protected @Nullable List<String> extractUserIdHeaderKeysAsList(WingtipsSpringBoot2WebfluxProperties props) {

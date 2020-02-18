@@ -526,6 +526,22 @@ CompletableFuture.supplyAsync(withTracing(() -> {
 }));
 ```
 
+* There's a `ScheduledExecutorServiceWithTracing` that extends `ExecutorServiceWithTracing` and implements
+`ScheduledExecutorService`, for when you need a scheduler that supports automatic Wingtips tracing state propagation.
+
+``` java
+import static com.nike.wingtips.util.asynchelperwrapper.ScheduledExecutorServiceWithTracing.withTracing;
+
+// ...
+
+// Just an example - please use an appropriate ScheduledExecutorService for your use case.
+ScheduledExecutorService scheduler = withTracing(Executors.newSingleThreadScheduledExecutor());
+
+scheduler.schedule(() -> {
+    // Code that needs tracing/MDC wrapping goes here
+}, 42, TimeUnit.SECONDS);
+``` 
+
 * This example shows how you might accomplish tasks in an environment where the tracing information is attached
 to some request context, and you need to temporarily attach the tracing info in order to do something (e.g. log some
 messages with tracing info automatically added using MDC):

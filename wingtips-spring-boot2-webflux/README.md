@@ -66,8 +66,10 @@ properties to set up the following Wingtips features:
     `ZipkinHttpTagStrategy` and `SpringWebfluxServerRequestTagAdapter`. To modify the tag strategy and/or adapter, you 
     can set the `wingtips.server-side-span-tagging-strategy` and/or `wingtips.server-side-span-tagging-adapter` 
     application properties (see `WingtipsSpringBoot2WebfluxProperties` description below).
-    - Adds a hook that enables Wingtips tracing to span async boundaries when using [Project Reactors](https://projectreactor.io/) 
-    `Mono` and `Flux` types along with `subscribeOn` and `publishOn` operators.
+    - Adds a hook for [Project Reactor](https://projectreactor.io/) that enables automatic propagation of Wingtips 
+    tracing state across async boundaries when using `Mono` or `Flux` types along with `subscribeOn` and `publishOn` 
+    operators. WARNING: The tracing state that will be propagated is the tracing state on the thread at the time
+    the `Mono` or `Flux` is _subscribed to_, not where the `Mono`/`Flux` is defined.
        
 * **`WingtipsSpringBoot2WebfluxProperties`** - The Spring Boot 
 [@ConfigurationProperties](https://docs.spring.io/spring-boot/docs/current/reference/html/boot-features-external-config.html#boot-features-external-config-typesafe-configuration-properties) 
@@ -78,9 +80,10 @@ for a concrete example. The following properties are supported (all of them opti
     - **`wingtips.wingtips-disabled`** - Disables the Wingtips `WingtipsSpringWebfluxWebFilter` filter if and 
     only if this property value is set to true. If false or missing then `WingtipsSpringWebfluxWebFilter` will be 
     registered normally.
-    - **`wingtips.reactor-enabled`** - Enables support for Wingtips tracing across Project reactors async boundaries. 
-    The property is disabled by default.
-
+    - **`wingtips.reactor-enabled`** - Enables automatic propagation of Wingtips tracing state across async boundaries 
+    when using [Project Reactor](https://projectreactor.io/) `Mono` or `Flux` types along with `subscribeOn` and 
+    `publishOn` operators. WARNING: The tracing state that will be propagated is the tracing state on the thread at 
+    the time the `Mono` or `Flux` is _subscribed to_, not where the `Mono`/`Flux` is defined.
     - **`wingtips.user-id-header-keys`** - Used to specify the user ID header keys that Wingtips will look for on 
     incoming headers. See the `userIdHeaderKeys` parameter javadocs for the 
     `HttpRequestTracingUtils.fromRequestWithHeaders(...)` method for more info. This is optional - if not specified 

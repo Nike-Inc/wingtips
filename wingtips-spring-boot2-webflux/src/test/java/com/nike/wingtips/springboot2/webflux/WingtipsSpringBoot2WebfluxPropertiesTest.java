@@ -9,6 +9,8 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -91,6 +93,15 @@ public class WingtipsSpringBoot2WebfluxPropertiesTest {
 
             props.setServerSideSpanTaggingAdapter(null);
             assertThat(props.getServerSideSpanTaggingAdapter()).isNull();
+        }
+
+        // reactorEnabled getter/setter
+        {
+            List<Boolean> cases = Arrays.asList(true, false, true, false);
+            for (Boolean reactorEnabled : cases) {
+                props.setReactorEnabled(reactorEnabled);
+                assertThat(props.isReactorEnabled()).isEqualTo(reactorEnabled);
+            }
         }
     }
 

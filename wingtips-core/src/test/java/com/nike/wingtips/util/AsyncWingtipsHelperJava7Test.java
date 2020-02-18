@@ -7,6 +7,7 @@ import com.nike.wingtips.Tracer.SpanFieldForLoggerMdc;
 import com.nike.wingtips.util.asynchelperwrapper.CallableWithTracing;
 import com.nike.wingtips.util.asynchelperwrapper.ExecutorServiceWithTracing;
 import com.nike.wingtips.util.asynchelperwrapper.RunnableWithTracing;
+import com.nike.wingtips.util.asynchelperwrapper.ScheduledExecutorServiceWithTracing;
 
 import com.tngtech.java.junit.dataprovider.DataProvider;
 import com.tngtech.java.junit.dataprovider.DataProviderRunner;
@@ -25,11 +26,13 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ScheduledExecutorService;
 
 import static com.nike.wingtips.util.AsyncWingtipsHelperJava7.callableWithTracing;
 import static com.nike.wingtips.util.AsyncWingtipsHelperJava7.executorServiceWithTracing;
 import static com.nike.wingtips.util.AsyncWingtipsHelperJava7.linkTracingToCurrentThread;
 import static com.nike.wingtips.util.AsyncWingtipsHelperJava7.runnableWithTracing;
+import static com.nike.wingtips.util.AsyncWingtipsHelperJava7.scheduledExecutorServiceWithTracing;
 import static com.nike.wingtips.util.AsyncWingtipsHelperJava7.unlinkTracingFromCurrentThread;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -45,12 +48,14 @@ public class AsyncWingtipsHelperJava7Test {
     private Runnable runnableMock;
     private Callable callableMock;
     private ExecutorService executorServiceMock;
+    private ScheduledExecutorService scheduledExecutorServiceMock;
 
     @Before
     public void beforeMethod() {
         runnableMock = mock(Runnable.class);
         callableMock = mock(Callable.class);
         executorServiceMock = mock(ExecutorService.class);
+        scheduledExecutorServiceMock = mock(ScheduledExecutorService.class);
 
         resetTracing();
     }
@@ -214,6 +219,15 @@ public class AsyncWingtipsHelperJava7Test {
 
         // then
         assertThat(Whitebox.getInternalState(result, "delegate")).isSameAs(executorServiceMock);
+    }
+
+    @Test
+    public void scheduledExecutorServiceWithTracing_works_as_expected() {
+        // when
+        ScheduledExecutorServiceWithTracing result = scheduledExecutorServiceWithTracing(scheduledExecutorServiceMock);
+
+        // then
+        assertThat(Whitebox.getInternalState(result, "delegate")).isSameAs(scheduledExecutorServiceMock);
     }
 
     @DataProvider(value = {
