@@ -8,6 +8,7 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 
 #### 0.x Releases
 
+- `0.22.x` Releases - [0.22.0](#0220)
 - `0.21.x` Releases - [0.21.0](#0210)
 - `0.20.x` Releases - [0.20.1](#0201), [0.20.0](#0200)
 - `0.19.x` Releases - [0.19.2](#0192), [0.19.1](#0191), [0.19.0](#0190)
@@ -21,6 +22,21 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 - `0.11.x` Releases - [0.11.2](#0112), [0.11.1](#0111), [0.11.0](#0110)
 - `0.10.x` Releases - [0.10.0](#0100)
 - `0.9.x` Releases - [0.9.0.1](#0901), [0.9.0](#090)
+
+## [0.22.0](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.22.0)
+
+Released on 2020-02-19.
+
+### Added
+
+* Added a hook for [Project Reactor](https://projectreactor.io/) that enables automatic propagation of Wingtips 
+tracing state across async boundaries when using `Mono` or `Flux` types along with `subscribeOn` and `publishOn` 
+operators. Enabled via the new `wingtips.reactor-enabled` property when you're using the 
+[wingtips-spring-boot2-webflux](wingtips-spring-boot2-webflux) library dependency. (WARNING: The tracing state that 
+will be propagated is the tracing state on the thread at the time the `Mono` or `Flux` is _subscribed to_, not where 
+the `Mono`/`Flux` is defined.) 
+    - Added by [Biju Kunjummen][contrib_bijukunjummen] and [RDBreed][contrib_rdbreed] in pull request 
+    [#113](https://github.com/Nike-Inc/wingtips/pull/113).
 
 ## [0.21.0](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.21.0)
 
@@ -606,3 +622,5 @@ Released on 2016-06-07.
 [contrib_brandoncurrie]: https://github.com/brandoncurrie
 [contrib_parkeredwards]: https://github.com/parker-edwards
 [contrib_gregghz]: https://github.com/gregghz
+[contrib_bijukunjummen]: https://github.com/bijukunjummen
+[contrib_rdbreed]: https://github.com/rdbreed
