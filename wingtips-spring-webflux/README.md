@@ -53,15 +53,8 @@ import static com.nike.wingtips.spring.webflux.WingtipsSpringWebfluxUtils.tracin
 @GetMapping(SOME_ENDPOINT_PATH)
 @ResponseBody
 Mono<String> someEndpoint(ServerWebExchange exchange) {
-    // The correct tracing state is attached to the current thread when the endpoint executes. 
-    TracingState endpointExecutionThreadTracingState = TracingState.getCurrentThreadTracingState(); 
-    Span currentSpan = Tracer.getInstance().getCurrentSpan();
-    // The tracing state is also embedded in the ServerWebExchange.
+    // The tracing state is embedded in the ServerWebExchange.
     TracingState tracingStateFromExchange = tracingStateFromExchange(exchange);
-
-    // This thread's current span and current thread TracingState match the TracingState from ServerWebExchange.
-    assert (endpointExecutionThreadTracingState == tracingStateFromExchange);
-    assert (currentSpan == tracingStateFromExchange.spanStack.peek());
 
     return Mono
         .subscriberContext()
@@ -75,11 +68,16 @@ Mono<String> someEndpoint(ServerWebExchange exchange) {
 }
 ```
 
-As shown above, the correct `TracingState` for the request will be on the current thread when the controller
-endpoint executes, it will be embedded in the `ServerWebExchange` attributes for the request, and it will be 
-embedded in the Project Reactor (Mono/Flux) `Context`. You can use this `TracingState` with any of the Java 8 helpers
-from [wingtips-java8](../wingtips-java8) to propagate the `TracingState` when hopping threads. See the
-[wingtips-java8](../wingtips-java8) readme's usage examples for details.  
+As shown above, the correct `TracingState` for the request will be embedded in the `ServerWebExchange` attributes 
+for the request, and it will be embedded in the Project Reactor (Mono/Flux) `Context`. You can use this `TracingState` 
+with any of the Java 8 helpers from [wingtips-java8](../wingtips-java8) to propagate the `TracingState` when hopping 
+threads. See the [wingtips-java8](../wingtips-java8) readme's usage examples for details.
+
+(NOTE: The same `TracingState` _may_ be on the current thread when the controller endpoint executes, or it may not be.
+It depends on the thread that Spring ends up using to subscribe to the `Mono`/`Flux`. This can be affected by 
+something as simple as a `@RequestBody` annotation. Therefore it's recommended that you not rely on having the
+`TracingState` attached to the thread when your endpoint method executes. Instead, you should extract it from the 
+`ServerWebExchange` or the Mono/Flux `Context` as shown above, as it will always be available there.)  
 
 ### Register a `WingtipsSpringWebfluxExchangeFilterFunction` for automatic tracing propagation when using Spring's reactive `WebClient`
 
@@ -113,10 +111,8 @@ To supply the `TracingState` in the request attributes, just provide an attribut
 above). 
 
 As mentioned in the previous `WingtipsSpringWebfluxWebFilter` [usage section](#wingtips_webfilter_usage), you can 
-retrieve the overall request `TracingState` (for a server using `WingtipsSpringWebfluxWebFilter`) in a variety of ways:
+retrieve the overall request `TracingState` (for a server using `WingtipsSpringWebfluxWebFilter`) in two reliable ways:
 
-* From the current thread at the time the controller endpoint is executed using 
-`TracingState.getCurrentThreadTracingState()`.
 * Extracted from the `ServerWebExchange` using the `WingtipsSpringWebfluxUtils.tracingStateFromExchange(...)` helper
 method.
 * Extracted from the Project Reactor Mono/Flux `Context` using the 

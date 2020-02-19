@@ -6,6 +6,7 @@ import com.nike.wingtips.Tracer;
 import com.nike.wingtips.util.asynchelperwrapper.CallableWithTracing;
 import com.nike.wingtips.util.asynchelperwrapper.ExecutorServiceWithTracing;
 import com.nike.wingtips.util.asynchelperwrapper.RunnableWithTracing;
+import com.nike.wingtips.util.asynchelperwrapper.ScheduledExecutorServiceWithTracing;
 
 import org.slf4j.MDC;
 
@@ -14,6 +15,7 @@ import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ScheduledExecutorService;
 
 /**
  * Helper class that provides static methods for dealing with async stuff in Wingtips, mainly providing easy ways
@@ -237,6 +239,26 @@ public class AsyncWingtipsHelperJava7 {
     @Deprecated
     public static ExecutorServiceWithTracing executorServiceWithTracing(ExecutorService delegate) {
         return new ExecutorServiceWithTracing(delegate);
+    }
+
+    /**
+     * @return A {@link ScheduledExecutorService} that wraps the given delegate {@link ScheduledExecutorService} so
+     * that when {@link Runnable}s or {@link Callable}s are scheduled or executed through it they will automatically
+     * inherit the tracing state of the thread that called the {@link ScheduledExecutorService} method. Equivalent to
+     * calling: {@code new ScheduledExecutorServiceWithTracing(delegate)}.
+     *
+     * <p>WARNING: Keep in mind that you should avoid using a {@link ScheduledExecutorServiceWithTracing} when spinning
+     * off background threads that aren't tied to a specific trace, or in any other situation where an executed
+     * {@link Runnable}/{@link Callable} should *not* automatically inherit the calling thread's tracing state!
+     *
+     * @deprecated Please move to the Java 8 version of this class and method ({@code AsyncWingtipsHelper} or the static
+     * {@code AsyncWingtipsHelperStatic}) whenever possible.
+     */
+    @Deprecated
+    public static ScheduledExecutorServiceWithTracing scheduledExecutorServiceWithTracing(
+        ScheduledExecutorService delegate
+    ) {
+        return new ScheduledExecutorServiceWithTracing(delegate);
     }
     
     /**

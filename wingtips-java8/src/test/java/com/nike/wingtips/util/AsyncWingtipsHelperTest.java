@@ -13,6 +13,7 @@ import com.nike.wingtips.util.asynchelperwrapper.ExecutorServiceWithTracing;
 import com.nike.wingtips.util.asynchelperwrapper.FunctionWithTracing;
 import com.nike.wingtips.util.asynchelperwrapper.PredicateWithTracing;
 import com.nike.wingtips.util.asynchelperwrapper.RunnableWithTracing;
+import com.nike.wingtips.util.asynchelperwrapper.ScheduledExecutorServiceWithTracing;
 import com.nike.wingtips.util.asynchelperwrapper.SupplierWithTracing;
 
 import com.tngtech.java.junit.dataprovider.DataProvider;
@@ -32,6 +33,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
@@ -51,6 +53,7 @@ import static com.nike.wingtips.util.AsyncWingtipsHelperStatic.functionWithTraci
 import static com.nike.wingtips.util.AsyncWingtipsHelperStatic.linkTracingToCurrentThread;
 import static com.nike.wingtips.util.AsyncWingtipsHelperStatic.predicateWithTracing;
 import static com.nike.wingtips.util.AsyncWingtipsHelperStatic.runnableWithTracing;
+import static com.nike.wingtips.util.AsyncWingtipsHelperStatic.scheduledExecutorServiceWithTracing;
 import static com.nike.wingtips.util.AsyncWingtipsHelperStatic.supplierWithTracing;
 import static com.nike.wingtips.util.AsyncWingtipsHelperStatic.unlinkTracingFromCurrentThread;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -74,6 +77,7 @@ public class AsyncWingtipsHelperTest {
     private Predicate predicateMock;
     private BiPredicate biPredicateMock;
     private ExecutorService executorServiceMock;
+    private ScheduledExecutorService scheduledExecutorServiceMock;
     
     @Before
     public void beforeMethod() {
@@ -87,6 +91,7 @@ public class AsyncWingtipsHelperTest {
         predicateMock = mock(Predicate.class);
         biPredicateMock = mock(BiPredicate.class);
         executorServiceMock = mock(ExecutorService.class);
+        scheduledExecutorServiceMock = mock(ScheduledExecutorService.class);
         
         resetTracing();
     }
@@ -712,6 +717,22 @@ public class AsyncWingtipsHelperTest {
 
         // then
         assertThat(Whitebox.getInternalState(result, "delegate")).isSameAs(executorServiceMock);
+    }
+
+    @DataProvider(value = {
+        "true",
+        "false"
+    })
+    @Test
+    public void scheduledExecutorServiceWithTracing_works_as_expected(boolean useStaticMethod) {
+        // when
+        ScheduledExecutorServiceWithTracing result =
+            (useStaticMethod)
+            ? scheduledExecutorServiceWithTracing(scheduledExecutorServiceMock)
+            : DEFAULT_IMPL.scheduledExecutorServiceWithTracing(scheduledExecutorServiceMock);
+
+        // then
+        assertThat(Whitebox.getInternalState(result, "delegate")).isSameAs(scheduledExecutorServiceMock);
     }
 
     @DataProvider(value = {

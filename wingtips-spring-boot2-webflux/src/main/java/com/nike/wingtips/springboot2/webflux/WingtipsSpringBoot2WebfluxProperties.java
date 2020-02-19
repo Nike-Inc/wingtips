@@ -53,9 +53,11 @@ import java.util.List;
  *         to use.
  *     </li>
  *     <li>
- *         wingtips.reactor-enabled - Enables passing the Wingtips trace details across
- *         Project Reactors async boundaries. This is disabled by default.
- *     </li> * </ul>
+ *         wingtips.reactor-enabled - Enables auto-propagating the Wingtips tracing state across Project Reactor's
+ *         Mono/Flux async boundaries, based on the tracing state of the thread at the time of Mono/Flux subscription.
+ *         This is disabled by default.
+ *     </li>
+ * </ul>
  *
  * <p>For example you could set the following properties in your {@code application.properties}:
  * <pre>
@@ -64,6 +66,7 @@ import java.util.List;
  *     wingtips.span-logging-format=KEY_VALUE
  *     wingtips.server-side-span-tagging-strategy=ZIPKIN
  *     wingtips.server-side-span-tagging-adapter=com.nike.wingtips.spring.webflux.server.SpringWebfluxServerRequestTagAdapter
+ *     wingtips.reactor-enabled=false
  * </pre>
  *
  * @author Nic Munroe

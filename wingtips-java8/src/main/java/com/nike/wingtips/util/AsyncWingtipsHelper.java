@@ -10,6 +10,7 @@ import com.nike.wingtips.util.asynchelperwrapper.ConsumerWithTracing;
 import com.nike.wingtips.util.asynchelperwrapper.ExecutorServiceWithTracing;
 import com.nike.wingtips.util.asynchelperwrapper.FunctionWithTracing;
 import com.nike.wingtips.util.asynchelperwrapper.PredicateWithTracing;
+import com.nike.wingtips.util.asynchelperwrapper.ScheduledExecutorServiceWithTracing;
 import com.nike.wingtips.util.asynchelperwrapper.SupplierWithTracing;
 
 import org.slf4j.MDC;
@@ -20,6 +21,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
@@ -468,6 +470,23 @@ public interface AsyncWingtipsHelper {
     @SuppressWarnings("deprecation")
     default ExecutorServiceWithTracing executorServiceWithTracing(ExecutorService delegate) {
         return AsyncWingtipsHelperJava7.executorServiceWithTracing(delegate);
+    }
+
+    /**
+     * @return A {@link ScheduledExecutorService} that wraps the given delegate {@link ScheduledExecutorService} so
+     * that when {@link Runnable}s or {@link Callable}s are scheduled or executed through it they will automatically
+     * inherit the tracing state of the thread that called the {@link ScheduledExecutorService} method. Equivalent to
+     * calling: {@code new ScheduledExecutorServiceWithTracing(delegate)}.
+     *
+     * <p>WARNING: Keep in mind that you should avoid using a {@link ScheduledExecutorServiceWithTracing} when spinning
+     * off background threads that aren't tied to a specific trace, or in any other situation where an executed
+     * {@link Runnable}/{@link Callable} should *not* automatically inherit the calling thread's tracing state!
+     */
+    @SuppressWarnings("deprecation")
+    default ScheduledExecutorServiceWithTracing scheduledExecutorServiceWithTracing(
+        ScheduledExecutorService delegate
+    ) {
+        return AsyncWingtipsHelperJava7.scheduledExecutorServiceWithTracing(delegate);
     }
 
     /**
