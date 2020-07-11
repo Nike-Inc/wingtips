@@ -14,7 +14,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Deque;
@@ -23,6 +22,7 @@ import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import static com.nike.wingtips.http.HttpRequestTracingUtils.CHILD_OF_SPAN_FROM_HEADERS_WHERE_CALLER_DID_NOT_SEND_SPAN_ID_TAG_KEY;
 
@@ -239,8 +239,11 @@ public class Tracer {
 
     /**
      * The list of span lifecycle listeners that should be notified when span lifecycle events occur.
+     * Note that we use a {@link CopyOnWriteArrayList} to prevent {@link java.util.ConcurrentModificationException}s
+     * from occurring if spans are being started/completed/etc while this list is being changed. This is deemed
+     * acceptable since iterations over this list happens frequently, but changes to the list should be rare.
      */
-    private final List<SpanLifecycleListener> spanLifecycleListeners = new ArrayList<>();
+    private final List<SpanLifecycleListener> spanLifecycleListeners = new CopyOnWriteArrayList<>();
 
     /**
      * The span representation that should be used when logging completed spans.

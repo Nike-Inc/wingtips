@@ -18,10 +18,12 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.internal.util.reflection.Whitebox;
+import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 
 import java.lang.reflect.Field;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Deque;
@@ -31,6 +33,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -1001,6 +1006,66 @@ public class TracerTest {
 
         assertThat(caughtEx).isNotNull();
         assertThat(caughtEx).isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
+    public void spanLifecycleListeners_list_is_thread_safe() {
+        // Disable info-level wingtips logging during this test to prevent massive amounts of unnecessary spam.
+        Logger logbackWtLogger = (Logger) LoggerFactory.getLogger("VALID_WINGTIPS_SPANS");
+        Level origLogLevel = logbackWtLogger.getLevel();
+        try {
+            logbackWtLogger.setLevel(Level.WARN);
+
+            // given
+            ExecutorService executorService = Executors.newCachedThreadPool();
+            long threadExecutionMillis = 1000;
+            CompletableFuture<Boolean> listenerListModifier = CompletableFuture.supplyAsync(
+                () -> {
+                    long endTime = System.currentTimeMillis() + threadExecutionMillis;
+                    while (System.currentTimeMillis() < endTime) {
+                        List<SpanLifecycleListener> listenersAdded = new ArrayList<>();
+                        for (int i = 0; i < 10; i++) {
+                            SpanLifecycleListener listener = mock(SpanLifecycleListener.class);
+                            Tracer.getInstance().addSpanLifecycleListener(listener);
+                            listenersAdded.add(listener);
+                        }
+
+                        listenersAdded.forEach(l -> {
+                            boolean removalResult = Tracer.getInstance().removeSpanLifecycleListener(l);
+                            assertThat(removalResult).isTrue();
+                        });
+
+                        assertThat(Tracer.getInstance().getSpanLifecycleListeners()).isEmpty();
+                    }
+                    return true;
+                },
+                executorService
+            );
+            CompletableFuture<Boolean> spanCompleter = CompletableFuture.supplyAsync(
+                () -> {
+                    long endTime = System.currentTimeMillis() + threadExecutionMillis;
+                    while (System.currentTimeMillis() < endTime) {
+                        Tracer.getInstance().startRequestWithRootSpan("foo");
+                        Tracer.getInstance().completeRequestSpan();
+                    }
+                    return true;
+                },
+                executorService
+            );
+
+            // when
+            boolean modifierResult = listenerListModifier.join();
+            boolean spanCompleterResult = spanCompleter.join();
+
+            // then
+            // No ConcurrentModificationException thrown (or anything else), which means we're ok.
+            assertThat(modifierResult).isTrue();
+            assertThat(spanCompleterResult).isTrue();
+        }
+        finally {
+            // Reset logging back to what it was at the start of this test.
+            logbackWtLogger.setLevel(origLogLevel);
+        }
     }
 
     @Test
