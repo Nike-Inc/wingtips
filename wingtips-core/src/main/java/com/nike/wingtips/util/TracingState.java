@@ -5,6 +5,8 @@ import com.nike.wingtips.Span;
 import com.nike.wingtips.Tracer;
 import com.nike.wingtips.util.asynchelperwrapper.RunnableWithTracing;
 
+import org.jetbrains.annotations.Nullable;
+
 import java.util.Deque;
 import java.util.Map;
 
@@ -74,5 +76,17 @@ public class TracingState extends Pair<Deque<Span>, Map<String, String>> {
     @Override
     public Map<String, String> setValue(Map<String, String> value) {
         throw new UnsupportedOperationException("TracingState is immutable - please create a new TracingState instead");
+    }
+
+    /**
+     * @return The "active" (a.k.a. "current") span from {@link #spanStack}, or null if {@link #spanStack} is null
+     * or empty.
+     */
+    public @Nullable Span getActiveSpan() {
+        if (spanStack == null) {
+            return null;
+        }
+
+        return spanStack.peek();
     }
 }

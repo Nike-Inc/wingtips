@@ -12,7 +12,12 @@ import com.nike.wingtips.util.asynchelperwrapper.FunctionWithTracing;
 import com.nike.wingtips.util.asynchelperwrapper.PredicateWithTracing;
 import com.nike.wingtips.util.asynchelperwrapper.ScheduledExecutorServiceWithTracing;
 import com.nike.wingtips.util.asynchelperwrapper.SupplierWithTracing;
+import com.nike.wingtips.util.operationwrapper.OperationWrapperOptions;
 
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 
 import java.util.Deque;
@@ -573,8 +578,521 @@ public interface AsyncWingtipsHelper {
         );
     }
 
+    /**
+     * Wraps the {@link CompletableFuture} returned by the given {@code supplier} in a {@link Span} based on the
+     * options from the given {@link OperationWrapperOptions} argument. That span will be completed automatically
+     * when the {@link CompletableFuture} finishes, and it will be tagged as desired based on the given
+     * {@link OperationWrapperOptions}.
+     *
+     * <p>This is most commonly used to wrap client calls from libraries you don't have control over in a child span,
+     * where the library doesn't provide hooks for distributed tracing and hands you back a {@link CompletableFuture}.
+     * This method won't be able to propagate the tracing state downstream by itself, but at least you'll have a child
+     * span to provide visibility in your application for how the wrapped {@link CompletableFuture} is functioning.
+     *
+     * <p>Typical usage would look like this - instead of calling {@code executeFooClientRequest()} to kick off
+     * a {@link CompletableFuture} you'd do:
+     *
+     * <pre>
+     *     OperationWrapperOptions&lt;Foo> options = ...;
+     *     CompletableFuture&lt;Foo> future = wrapCompletableFutureWithSpan(
+     *         options,
+     *         () -> executeFooClientRequest()
+     *     );
+     * </pre>
+     *
+     * <p>NOTE: If the provided {@link OperationWrapperOptions#parentTracingState} is null, then the current thread's
+     * tracing state (at the time this method is called) will be used to generate the child span. If the current
+     * thread also has no tracing state, then a new root span (new trace) will be created rather than a child span.
+     *
+     * <p>No matter what options you pass in or what happens in this method, the tracing state on the thread when this
+     * method is called will be what's on the thread when this method returns. Any tracing state adjustments like the
+     * child or root span will only be in effect while the given {@link Supplier#get()} is called.
+     *
+     * <p>ALSO NOTE: The span that wraps the {@link CompletableFuture} will be on the thread when the given {@link
+     * Supplier#get()} is called in this method. If you have any control over the {@link CompletableFuture}'s creation,
+     * then you can use this fact to propagate the tracing state into the {@link CompletableFuture} itself by using
+     * {@link #supplierWithTracing(Supplier)} or {@link #runnableWithTracing(Runnable)}.
+     * For example:
+     *
+     * <pre>
+     *     OperationWrapperOptions&lt;String> options = ...;
+     *     Supplier&lt;CompletableFuture&lt;String>> futureSupplier = () -> {
+     *         // The tracing state and span wrapping the CompletableFuture will be on the thread at this point.
+     *         return CompletableFuture.supplyAsync(
+     *             supplierWithTracing(() -> {
+     *                 // And when the CompletableFuture executes you can retrieve the wrapper span,
+     *                 //       thanks to supplierWithTracing().
+     *                 Span wrapperSpan = Tracer.getInstance().getCurrentSpan();
+     *                 return "actual work goes here";
+     *             }),
+     *             myAsyncExecutor
+     *         );
+     *     };
+     *
+     *     CompletableFuture&lt;String> future = wrapCompletableFutureWithSpan(
+     *         options,
+     *         futureSupplier
+     *     );
+     * </pre>
+     *
+     * @param options The set of options controlling various things about the span that will surround the
+     * {@link CompletableFuture} (span name, purpose, tagging options, etc). See the {@link OperationWrapperOptions}
+     * javadocs for more details. This cannot be null.
+     * @param supplier The supplier that will generate the {@link CompletableFuture} you want wrapped with a new span.
+     * {@link Supplier#get()} will be called as part of this method. This cannot be null.
+     * @param <T> The type parameter for the {@link CompletableFuture}.
+     * @return The {@link CompletableFuture} returned by the given supplier's {@link Supplier#get()}. That future
+     * will be surrounded with a new child/root span (depending on the given options and what's on the current thread
+     * at the time this method is called), and that new span will be automatically completed when the future completes,
+     * and tagged based on the given options.
+     */
+    default <T> CompletableFuture<T> wrapCompletableFutureWithSpan(
+        @NotNull OperationWrapperOptions<T> options,
+        @NotNull Supplier<CompletableFuture<T>> supplier
+    ) {
+        //noinspection ConstantConditions
+        if (options == null) {
+            throw new NullPointerException("options cannot be null.");
+        }
+
+        //noinspection ConstantConditions
+        if (supplier == null) {
+            throw new NullPointerException("supplier cannot be null.");
+        }
+
+        // We need to keep track of the current thread info so we can reset this thread's tracing state before we
+        //      return. If the options don't specify a specific parent tracing state then we're supposed to use
+        //      the current thread tracing state as the parent state, which means we'll need to set originalThreadInfo
+        //      to a copy of the current tracing state using TracingState.getCurrentThreadTracingState().
+        //      Otherwise, when the options do specify a parent, then we need to link that parent tracing state to the
+        //      current thread and linkTracingToCurrentThread() will return the current thread's tracing state.
+        TracingState originalThreadInfo;
+
+        if (options.parentTracingState == null) {
+            originalThreadInfo = TracingState.getCurrentThreadTracingState();
+        }
+        else {
+            originalThreadInfo = linkTracingToCurrentThread(options.parentTracingState);
+        }
+
+        Span spanAroundFuture = null;
+        try {
+            // Start a span for the CompletableFuture. startSpanInCurrentContext() will do the right thing
+            //      regardless of whether it needs to be a root span or a subspan.
+            spanAroundFuture = Tracer.getInstance().startSpanInCurrentContext(
+                options.operationSpanName, options.spanPurpose
+            );
+
+            final Span spanAroundFutureFinal = spanAroundFuture;
+
+            // Get the CompletableFuture result from the supplier.
+            CompletableFuture<T> resultFuture = supplier.get();
+
+            // Return a CompletableFuture that finishes the span after resultFuture is done.
+            return resultFuture.whenComplete((result, ex) -> {
+                // Do any desired tagging.
+                AsyncWingtipsHelperDefaultImpl.doSpanTaggingWithoutExceptionPropagation(
+                    spanAroundFutureFinal, options, result, ex
+                );
+
+                // Span.close() will do the right thing regardless of whether it's the current span on this thread.
+                spanAroundFutureFinal.close();
+            });
+        }
+        catch (Exception ex) {
+            // An unexpected exception occurred - the supplier is probably bad.
+            //      Do any desired tagging and complete the span, if possible.
+            AsyncWingtipsHelperDefaultImpl.doSpanTaggingWithoutExceptionPropagation(
+                spanAroundFuture, options, null, ex
+            );
+
+            AsyncWingtipsHelperDefaultImpl.doCloseSpanIfPossible(spanAroundFuture);
+
+            throw ex;
+        }
+        finally {
+            // Reset back to the original tracing state that was on this thread when this method began.
+            unlinkTracingFromCurrentThread(originalThreadInfo);
+        }
+    }
+
+    /**
+     * Executes the given {@link Runnable} and wraps it in a {@link Span} based on the options from the given
+     * {@link OperationWrapperOptions} argument. That span will be completed automatically when the
+     * {@link Runnable} finishes, and it will be tagged as desired based on the given
+     * {@link OperationWrapperOptions}.
+     *
+     * <p>Typical usage would look like this:
+     *
+     * <pre>
+     *     OperationWrapperOptions&lt;?> options = ...;
+     *     wrapRunnableWithSpan(
+     *         options,
+     *         () -> {
+     *             // Runnable work goes here.
+     *         }
+     *     );
+     * </pre>
+     *
+     * <p>NOTE: If the provided {@link OperationWrapperOptions#parentTracingState} is null, then the current thread's
+     * tracing state (at the time this method is called) will be used to generate the child span. If the current
+     * thread also has no tracing state, then a new root span (new trace) will be created rather than a child span.
+     *
+     * <p>No matter what options you pass in or what happens in this method, the tracing state on the thread when this
+     * method is called will be what's on the thread when this method returns. Any tracing state adjustments like the
+     * child or root span will only be in effect while the given {@link Runnable#run()} is called.
+     *
+     * <p>ALSO NOTE: This method executes the given {@link Runnable#run()} synchronously and will block until
+     * that execution completes. If you're looking for an asynchronous execution, see {@link
+     * #wrapCompletableFutureWithSpan(OperationWrapperOptions, Supplier)}.
+     *
+     * @param options The set of options controlling various things about the span that will surround the
+     * {@link Runnable} (span name, purpose, tagging options, etc). See the {@link OperationWrapperOptions}
+     * javadocs for more details. This cannot be null.
+     * @param runnable The runnable that you want executed and wrapped with a new span. {@link Runnable#run()}
+     * will be called as part of this method. This cannot be null.
+     */
+    default void wrapRunnableWithSpan(
+        @NotNull OperationWrapperOptions<?> options,
+        @NotNull Runnable runnable
+    ) {
+        //noinspection ConstantConditions
+        if (options == null) {
+            throw new NullPointerException("options cannot be null.");
+        }
+
+        //noinspection ConstantConditions
+        if (runnable == null) {
+            throw new NullPointerException("runnable cannot be null.");
+        }
+
+        try {
+            wrapCallableWithSpan(options, () -> {
+                runnable.run();
+                return null;
+            });
+        }
+        catch (Exception e) {
+            throw AsyncWingtipsHelperDefaultImpl.wrapCheckedExInRuntimeExIfNecessary(e);
+        }
+    }
+
+    /**
+     * Executes the given {@link CheckedRunnable} and wraps it in a {@link Span} based on the options from the given
+     * {@link OperationWrapperOptions} argument. That span will be completed automatically when the
+     * {@link CheckedRunnable} finishes, and it will be tagged as desired based on the given
+     * {@link OperationWrapperOptions}.
+     *
+     * <p>Typical usage would look like this:
+     *
+     * <pre>
+     *     OperationWrapperOptions&lt;?> options = ...;
+     *     wrapCheckedRunnableWithSpan(
+     *         options,
+     *         () -> {
+     *             // CheckedRunnable work goes here.
+     *         }
+     *     );
+     * </pre>
+     *
+     * <p>NOTE: If the provided {@link OperationWrapperOptions#parentTracingState} is null, then the current thread's
+     * tracing state (at the time this method is called) will be used to generate the child span. If the current
+     * thread also has no tracing state, then a new root span (new trace) will be created rather than a child span.
+     *
+     * <p>No matter what options you pass in or what happens in this method, the tracing state on the thread when this
+     * method is called will be what's on the thread when this method returns. Any tracing state adjustments like the
+     * child or root span will only be in effect while the given {@link CheckedRunnable#run()} is called.
+     *
+     * <p>ALSO NOTE: This method executes the given {@link CheckedRunnable#run()} synchronously and will block until
+     * that execution completes. If you're looking for an asynchronous execution, see {@link
+     * #wrapCompletableFutureWithSpan(OperationWrapperOptions, Supplier)}.
+     *
+     * @param options The set of options controlling various things about the span that will surround the
+     * {@link CheckedRunnable} (span name, purpose, tagging options, etc). See the {@link OperationWrapperOptions}
+     * javadocs for more details. This cannot be null.
+     * @param runnable The checked runnable that you want executed and wrapped with a new span. {@link
+     * CheckedRunnable#run()} will be called as part of this method. This cannot be null.
+     */
+    default void wrapCheckedRunnableWithSpan(
+        @NotNull OperationWrapperOptions<?> options,
+        @NotNull CheckedRunnable runnable
+    ) throws Exception {
+        //noinspection ConstantConditions
+        if (options == null) {
+            throw new NullPointerException("options cannot be null.");
+        }
+
+        //noinspection ConstantConditions
+        if (runnable == null) {
+            throw new NullPointerException("runnable cannot be null.");
+        }
+
+        wrapCallableWithSpan(options, () -> {
+            runnable.run();
+            return null;
+        });
+    }
+
+    /**
+     * Executes the given {@link Supplier} and wraps it in a {@link Span} based on the options from the given
+     * {@link OperationWrapperOptions} argument. That span will be completed automatically when the
+     * {@link Supplier} finishes, and it will be tagged as desired based on the given
+     * {@link OperationWrapperOptions}.
+     *
+     * <p>Typical usage would look like this:
+     *
+     * <pre>
+     *     OperationWrapperOptions&lt;Foo> options = ...;
+     *     Foo fooResult = wrapSupplierWithSpan(
+     *         options,
+     *         () -> {
+     *             // Supplier work goes here.
+     *             return foo;
+     *         }
+     *     );
+     * </pre>
+     *
+     * <p>NOTE: If the provided {@link OperationWrapperOptions#parentTracingState} is null, then the current thread's
+     * tracing state (at the time this method is called) will be used to generate the child span. If the current
+     * thread also has no tracing state, then a new root span (new trace) will be created rather than a child span.
+     *
+     * <p>No matter what options you pass in or what happens in this method, the tracing state on the thread when this
+     * method is called will be what's on the thread when this method returns. Any tracing state adjustments like the
+     * child or root span will only be in effect while the given {@link Supplier#get()} is called.
+     *
+     * <p>ALSO NOTE: This method executes the given {@link Supplier#get()} synchronously and will block until
+     * that execution completes. If you're looking for an asynchronous execution, see {@link
+     * #wrapCompletableFutureWithSpan(OperationWrapperOptions, Supplier)}.
+     *
+     * @param options The set of options controlling various things about the span that will surround the
+     * {@link Supplier} (span name, purpose, tagging options, etc). See the {@link OperationWrapperOptions}
+     * javadocs for more details. This cannot be null.
+     * @param supplier The supplier that you want executed and wrapped with a new span. {@link Supplier#get()}
+     * will be called as part of this method. This cannot be null.
+     * @param <T> The type parameter for the {@link Supplier}.
+     * @return The result of calling {@link Supplier#get()} on the given supplier.
+     */
+    default <T> T wrapSupplierWithSpan(
+        @NotNull OperationWrapperOptions<T> options,
+        @NotNull Supplier<T> supplier
+    ) {
+        //noinspection ConstantConditions
+        if (options == null) {
+            throw new NullPointerException("options cannot be null.");
+        }
+
+        //noinspection ConstantConditions
+        if (supplier == null) {
+            throw new NullPointerException("supplier cannot be null.");
+        }
+
+        try {
+            return wrapCallableWithSpan(options, supplier::get);
+        }
+        catch (Exception e) {
+            throw AsyncWingtipsHelperDefaultImpl.wrapCheckedExInRuntimeExIfNecessary(e);
+        }
+    }
+
+    /**
+     * Executes the given {@link Callable} and wraps it in a {@link Span} based on the options from the given
+     * {@link OperationWrapperOptions} argument. That span will be completed automatically when the
+     * {@link Callable} finishes, and it will be tagged as desired based on the given
+     * {@link OperationWrapperOptions}.
+     *
+     * <p>Typical usage would look like this:
+     *
+     * <pre>
+     *     OperationWrapperOptions&lt;Foo> options = ...;
+     *     Foo fooResult = wrapCallableWithSpan(
+     *         options,
+     *         () -> {
+     *             // Callable work goes here.
+     *             return foo;
+     *         }
+     *     );
+     * </pre>
+     *
+     * <p>NOTE: If the provided {@link OperationWrapperOptions#parentTracingState} is null, then the current thread's
+     * tracing state (at the time this method is called) will be used to generate the child span. If the current
+     * thread also has no tracing state, then a new root span (new trace) will be created rather than a child span.
+     *
+     * <p>No matter what options you pass in or what happens in this method, the tracing state on the thread when this
+     * method is called will be what's on the thread when this method returns. Any tracing state adjustments like the
+     * child or root span will only be in effect while the given {@link Callable#call()} is called.
+     *
+     * <p>ALSO NOTE: This method executes the given {@link Callable#call()} synchronously and will block until
+     * that execution completes. If you're looking for an asynchronous execution, see {@link
+     * #wrapCompletableFutureWithSpan(OperationWrapperOptions, Supplier)}.
+     *
+     * @param options The set of options controlling various things about the span that will surround the
+     * {@link Callable} (span name, purpose, tagging options, etc). See the {@link OperationWrapperOptions}
+     * javadocs for more details. This cannot be null.
+     * @param callable The callable that you want executed and wrapped with a new span. {@link Callable#call()}
+     * will be called as part of this method. This cannot be null.
+     * @param <T> The type parameter for the {@link Callable}.
+     * @return The result of calling {@link Callable#call()} on the given callable.
+     */
+    default <T> T wrapCallableWithSpan(
+        @NotNull OperationWrapperOptions<T> options,
+        @NotNull Callable<T> callable
+    ) throws Exception {
+        //noinspection ConstantConditions
+        if (options == null) {
+            throw new NullPointerException("options cannot be null.");
+        }
+
+        //noinspection ConstantConditions
+        if (callable == null) {
+            throw new NullPointerException("callable cannot be null.");
+        }
+
+        TracingState originalThreadInfo;
+
+        if (options.parentTracingState == null) {
+            // No parent tracing state, so we just use the current thread tracing state. We don't need to reset this
+            //      thread's tracing state at the end since we start and complete the wrapper span before this method
+            //      returns.
+            originalThreadInfo = null;
+        }
+        else {
+            // The options specify a parent tracing state, so we need to link it to this thread. And before we
+            //      return from this method, we'll reset it back to originalThreadInfo.
+            originalThreadInfo = linkTracingToCurrentThread(options.parentTracingState);
+        }
+
+        Span spanAroundCall = null;
+        T result = null;
+        Exception callError = null;
+        try {
+            // Start a span to wrap the callable. startSpanInCurrentContext() will do the right thing
+            //      regardless of whether it needs to be a root span or a subspan.
+            spanAroundCall = Tracer.getInstance().startSpanInCurrentContext(
+                options.operationSpanName, options.spanPurpose
+            );
+
+            // Return the result from the callable.
+            result = callable.call();
+
+            return result;
+        }
+        catch (Exception ex) {
+            // Keep track of any error for tagging in the finally block.
+            callError = ex;
+
+            throw ex;
+        }
+        finally {
+            try {
+                // Do any desired tagging.
+                AsyncWingtipsHelperDefaultImpl.doSpanTaggingWithoutExceptionPropagation(
+                    spanAroundCall, options, result, callError
+                );
+
+                // Close the span wrapping the callable.
+                AsyncWingtipsHelperDefaultImpl.doCloseSpanIfPossible(spanAroundCall);
+            }
+            finally {
+                // Reset back to the original tracing state that was on this thread when this method began, if needed.
+                //      If originalThreadInfo is null, then it means the current thread tracing state is already correct,
+                //      in which case we don't need to do anything.
+                if (originalThreadInfo != null) {
+                    unlinkTracingFromCurrentThread(originalThreadInfo);
+                }
+            }
+        }
+    }
+
+    /**
+     * A functional interface that matches {@link Runnable}, but allows checked exceptions to be thrown from the
+     * {@link #run()} method. This is for use with {@link
+     * #wrapCheckedRunnableWithSpan(OperationWrapperOptions, CheckedRunnable)}.
+     */
+    @FunctionalInterface
+    interface CheckedRunnable {
+        /**
+         * Executes this {@link CheckedRunnable}.
+         *
+         * @throws Exception an exception may be thrown from this method.
+         */
+        void run() throws Exception;
+    }
+
+    /**
+     * A concrete implementation of {@link AsyncWingtipsHelper} that does nothing extra beyond the default methods
+     * defined in the {@link AsyncWingtipsHelper} interface.
+     *
+     * <p>Normally you'd access this via {@link AsyncWingtipsHelper#DEFAULT_IMPL} rather than creating a new instance.
+     * Or you can get the same effect by calling the static methods on {@link AsyncWingtipsHelperStatic}.
+     */
     class AsyncWingtipsHelperDefaultImpl implements AsyncWingtipsHelper {
-        // Nothing beyond the default.
+        // Nothing beyond the default, except protected static helper methods that the AsyncWingtipsHelper interface's
+        //      default methods can reuse for util stuff.
+
+        private static final Logger logger = LoggerFactory.getLogger(AsyncWingtipsHelperDefaultImpl.class);
+
+        /**
+         * @param ex The exception that may need wrapping in a {@link RuntimeException}.
+         * @return The given ex if it is a RuntimeException already, otherwise a new {@link RuntimeException} will
+         * be returned with the given ex as its cause.
+         */
+        protected static RuntimeException wrapCheckedExInRuntimeExIfNecessary(Exception ex) {
+            if (ex instanceof RuntimeException) {
+                return (RuntimeException)ex;
+            }
+            else {
+                return new RuntimeException(ex);
+            }
+        }
+
+        protected static <T> void doSpanTaggingWithoutExceptionPropagation(
+            @Nullable Span span,
+            @NotNull OperationWrapperOptions<T> options,
+            @Nullable T payload,
+            @Nullable Throwable error
+        ) {
+            //noinspection ConstantConditions
+            if (span == null || options == null) {
+                return;
+            }
+
+            if (options.spanTagger != null) {
+                try {
+                    options.spanTagger.tagSpan(span, payload);
+                }
+                catch (Exception ex) {
+                    logger.error(
+                        "An unexpected error occurred while executing a SpanTagger. This exception will "
+                        + "be swallowed to avoid unexpected application breakage, but you should fix your "
+                        + "SpanTagger so it doesn't throw an exception.",
+                        ex
+                    );
+                }
+            }
+
+            if (options.errorTagger != null && error != null) {
+                try {
+                    options.errorTagger.tagSpanForError(span, error);
+                }
+                catch (Exception ex) {
+                    logger.error(
+                        "An unexpected error occurred while executing a ErrorSpanTagger. This exception will "
+                        + "be swallowed to avoid unexpected application breakage, but you should fix your "
+                        + "ErrorSpanTagger so it doesn't throw an exception.",
+                        ex
+                    );
+                }
+            }
+        }
+
+        protected static void doCloseSpanIfPossible(@Nullable Span span) {
+            if (span == null) {
+                return;
+            }
+
+            // Span.close() will do the right thing regardless of whether it's the current span on this thread.
+            span.close();
+        }
     }
 
 }

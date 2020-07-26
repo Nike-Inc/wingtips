@@ -3,24 +3,33 @@ package com.nike.wingtips.util;
 import com.nike.wingtips.Span;
 import com.nike.wingtips.Tracer;
 
+import com.tngtech.java.junit.dataprovider.DataProvider;
+import com.tngtech.java.junit.dataprovider.DataProviderRunner;
+
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
 import org.slf4j.MDC;
 
+import java.util.ArrayDeque;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 /**
  * Tests the functionality of {@link TracingState}.
  *
  * @author Nic Munroe
  */
+@RunWith(DataProviderRunner.class)
 public class TracingStateTest {
 
     private Deque<Span> spanStackMock;
@@ -91,5 +100,40 @@ public class TracingStateTest {
         // then
         assertThat(currentTracingState.spanStack).isEqualTo(currentSpanStack);
         assertThat(currentTracingState.mdcInfo).isEqualTo(currentMdcInfo);
+    }
+
+    @Test
+    public void getActiveSpan_works_as_expected() {
+        // given
+        Deque<Span> stackMock = mock(Deque.class);
+        Span spanMock = mock(Span.class);
+        doReturn(spanMock).when(stackMock).peek();
+
+        TracingState tc = new TracingState(stackMock, Collections.emptyMap());
+
+        // when
+        Span result = tc.getActiveSpan();
+
+        // then
+        assertThat(result).isSameAs(spanMock);
+        verify(stackMock).peek();
+    }
+
+    @DataProvider(value = {
+        "true",
+        "false"
+    })
+    @Test
+    public void getActiveSpan_returns_null_if_stack_is_null_or_empty(boolean stackIsNull) {
+        // given
+        Deque<Span> stack = (stackIsNull) ? null : new ArrayDeque<>();
+
+        TracingState tc = new TracingState(stack, Collections.emptyMap());
+
+        // when
+        Span result = tc.getActiveSpan();
+
+        // then
+        assertThat(result).isNull();
     }
 }
