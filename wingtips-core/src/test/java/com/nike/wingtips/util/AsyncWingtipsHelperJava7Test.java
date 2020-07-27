@@ -4,6 +4,7 @@ import com.nike.internal.util.Pair;
 import com.nike.wingtips.Span;
 import com.nike.wingtips.Tracer;
 import com.nike.wingtips.Tracer.SpanFieldForLoggerMdc;
+import com.nike.wingtips.testutil.Whitebox;
 import com.nike.wingtips.util.asynchelperwrapper.CallableWithTracing;
 import com.nike.wingtips.util.asynchelperwrapper.ExecutorServiceWithTracing;
 import com.nike.wingtips.util.asynchelperwrapper.RunnableWithTracing;
@@ -16,7 +17,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.internal.util.reflection.Whitebox;
 import org.slf4j.MDC;
 
 import java.util.Collections;

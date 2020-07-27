@@ -4,6 +4,7 @@ import com.nike.wingtips.Span;
 import com.nike.wingtips.Span.SpanPurpose;
 import com.nike.wingtips.Span.TimestampedAnnotation;
 import com.nike.wingtips.TraceAndSpanIdGenerator;
+import com.nike.wingtips.testutil.Whitebox;
 
 import com.tngtech.java.junit.dataprovider.DataProvider;
 import com.tngtech.java.junit.dataprovider.DataProviderRunner;
@@ -11,7 +12,6 @@ import com.tngtech.java.junit.dataprovider.UseDataProvider;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.internal.util.reflection.Whitebox;
 
 import java.math.BigInteger;
 import java.util.ArrayList;

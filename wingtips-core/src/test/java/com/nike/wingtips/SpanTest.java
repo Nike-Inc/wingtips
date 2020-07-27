@@ -4,6 +4,7 @@ import com.nike.internal.util.MapBuilder;
 import com.nike.wingtips.Span.SpanPurpose;
 import com.nike.wingtips.Span.TimestampedAnnotation;
 import com.nike.wingtips.http.HttpRequestTracingUtils;
+import com.nike.wingtips.testutil.Whitebox;
 import com.nike.wingtips.util.TracerManagedSpanStatus;
 import com.nike.wingtips.util.parser.SpanParser;
 
@@ -18,7 +19,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.internal.util.reflection.Whitebox;
 import org.slf4j.MDC;
 
 import java.io.IOException;
