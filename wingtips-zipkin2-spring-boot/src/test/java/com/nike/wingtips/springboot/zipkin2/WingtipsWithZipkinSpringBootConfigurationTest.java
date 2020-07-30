@@ -11,6 +11,7 @@ import com.nike.wingtips.springboot.zipkin2.componenttest.componenttestoverrided
 import com.nike.wingtips.springboot.zipkin2.componenttest.componenttestoverridedefaultreporter.ComponentTestMainWithReporterOverride;
 import com.nike.wingtips.springboot.zipkin2.componenttest.manualimportandcomponentscan.ComponentTestMainWithBothManualImportAndComponentScan;
 import com.nike.wingtips.springboot.zipkin2.componenttest.manualimportonly.ComponentTestMainManualImportOnly;
+import com.nike.wingtips.testutil.Whitebox;
 import com.nike.wingtips.zipkin2.WingtipsToZipkinLifecycleListener;
 import com.nike.wingtips.zipkin2.util.WingtipsToZipkinSpanConverter;
 import com.nike.wingtips.zipkin2.util.WingtipsToZipkinSpanConverterDefaultImpl;
@@ -22,7 +23,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.internal.util.reflection.Whitebox;
 import org.springframework.boot.SpringApplication;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.stereotype.Component;

@@ -5,6 +5,7 @@ import com.nike.wingtips.Tracer.SpanFieldForLoggerMdc;
 import com.nike.wingtips.lifecyclelistener.SpanLifecycleListener;
 import com.nike.wingtips.sampling.RootSpanSamplingStrategy;
 import com.nike.wingtips.sampling.SampleAllTheThingsStrategy;
+import com.nike.wingtips.testutil.Whitebox;
 import com.nike.wingtips.util.TracerManagedSpanStatus;
 import com.nike.wingtips.util.TracingState;
 import com.nike.wingtips.util.parser.SpanParser;
@@ -17,7 +18,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.internal.util.reflection.Whitebox;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 

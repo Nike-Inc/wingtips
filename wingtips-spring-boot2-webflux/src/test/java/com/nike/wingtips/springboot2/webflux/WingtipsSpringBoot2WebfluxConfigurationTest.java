@@ -15,6 +15,7 @@ import com.nike.wingtips.tags.HttpTagAndSpanNamingStrategy;
 import com.nike.wingtips.tags.NoOpHttpTagStrategy;
 import com.nike.wingtips.tags.OpenTracingHttpTagStrategy;
 import com.nike.wingtips.tags.ZipkinHttpTagStrategy;
+import com.nike.wingtips.testutils.Whitebox;
 
 import com.tngtech.java.junit.dataprovider.DataProvider;
 import com.tngtech.java.junit.dataprovider.DataProviderRunner;
@@ -24,7 +25,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.internal.util.reflection.Whitebox;
 import org.slf4j.MDC;
 import org.springframework.boot.SpringApplication;
 import org.springframework.context.ConfigurableApplicationContext;

@@ -17,6 +17,7 @@ import com.nike.wingtips.testutils.ArgCapturingHttpTagAndSpanNamingStrategy.Init
 import com.nike.wingtips.testutils.ArgCapturingHttpTagAndSpanNamingStrategy.RequestTaggingArgs;
 import com.nike.wingtips.testutils.ArgCapturingHttpTagAndSpanNamingStrategy.ResponseTaggingArgs;
 import com.nike.wingtips.testutils.TestUtils.SpanRecorder;
+import com.nike.wingtips.testutils.Whitebox;
 import com.nike.wingtips.util.TracingState;
 
 import com.tngtech.java.junit.dataprovider.DataProvider;
@@ -29,7 +30,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.internal.util.reflection.Whitebox;
 import org.reactivestreams.Subscription;
 import org.springframework.core.Ordered;
 import org.springframework.http.HttpHeaders;

@@ -92,7 +92,7 @@ ext {
     jetbrainsAnnotationsVersion = '16.0.3'
 
     junitVersion = '4.11'
-    mockitoVersion = '1.9.5'
+    mockitoVersion = '3.4.4'
     logbackVersion = '1.2.3'
     jacksonVersion = '2.4.2'
     assertJVersion = '2.5.0'

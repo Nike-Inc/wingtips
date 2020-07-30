@@ -1,6 +1,7 @@
 package com.nike.wingtips.zipkin2;
 
 import com.nike.wingtips.Span;
+import com.nike.wingtips.testutil.Whitebox;
 import com.nike.wingtips.zipkin2.util.WingtipsToZipkinSpanConverter;
 import com.nike.wingtips.zipkin2.util.WingtipsToZipkinSpanConverterDefaultImpl;
 
@@ -10,7 +11,6 @@ import com.tngtech.java.junit.dataprovider.DataProviderRunner;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.internal.util.reflection.Whitebox;
 import org.slf4j.Logger;
 
 import java.net.MalformedURLException;
@@ -149,13 +149,13 @@ public class WingtipsToZipkinLifecycleListenerTest {
     @Test
     public void spanCompleted_does_not_propagate_exceptions_generated_by_span_reporter() {
         // given
-        doThrow(new RuntimeException("kaboom")).when(spanReporterMock).report(any(zipkin2.Span.class));
+        doThrow(new RuntimeException("kaboom")).when(spanReporterMock).report(any());
 
         // when
         Throwable ex = catchThrowable(() -> listener.spanCompleted(spanMock));
 
         // then
-        verify(spanReporterMock).report(any(zipkin2.Span.class));
+        verify(spanReporterMock).report(any());
         assertThat(ex).isNull();
     }
 
@@ -166,7 +166,7 @@ public class WingtipsToZipkinLifecycleListenerTest {
         Whitebox.setInternalState(listener, "zipkinConversionOrReportingErrorLogger", loggerMock);
         long lastLogTimeToSet = System.currentTimeMillis() - (MIN_SPAN_HANDLING_ERROR_LOG_INTERVAL_MILLIS + 10);
         Whitebox.setInternalState(listener, "lastSpanHandlingErrorLogTimeEpochMillis", lastLogTimeToSet);
-        doThrow(new RuntimeException("kaboom")).when(spanReporterMock).report(any(zipkin2.Span.class));
+        doThrow(new RuntimeException("kaboom")).when(spanReporterMock).report(any());
 
         // when
         long before = System.currentTimeMillis();
@@ -174,7 +174,7 @@ public class WingtipsToZipkinLifecycleListenerTest {
         long after = System.currentTimeMillis();
 
         // then
-        verify(loggerMock).warn(anyString(), anyLong(), anyString(), anyString());
+        verify(loggerMock).warn(anyString(), anyLong(), any(), anyString());
         // Also verify that the lastSpanHandlingErrorLogTimeEpochMillis value got updated.
         assertThat((long)Whitebox.getInternalState(listener, "lastSpanHandlingErrorLogTimeEpochMillis")).isBetween(before, after);
     }
