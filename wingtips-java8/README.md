@@ -137,7 +137,36 @@ finally {
 }
 ```
 
-NOTE: Be careful with the last example (manual linking/unlinking). If you fail to guarantee the associated unlink at 
+* If you have a third party library that hands back a `CompletableFuture` when performing work (like a database call)
+but doesn't provide hooks for distributed tracing, then you can surround that `CompletableFuture` with a child span
+using the `wrapCompletableFutureWithSpan` helper method (see the javadocs on `wrapCompletableFutureWithSpan` and 
+`OperationWrapperOptions` for full details):
+
+``` java
+import static com.nike.wingtips.util.AsyncWingtipsHelperStatic.wrapCompletableFutureWithSpan;
+
+// ...
+
+OperationWrapperOptions<DbRecord> options = OperationWrapperOptions
+    .<DbRecord>newBuilder("mydb-get-foo", SpanPurpose.CLIENT)
+    .withSpanTagger((span, payload) -> {
+        span.putTag("db.instance", "myapp.foodb");
+        span.putTag("db.type", "FooDB");
+    })
+    .build();   
+
+CompletableFuture<DbRecord> recordFuture = wrapCompletableFutureWithSpan(
+    options,
+    // fooDbClient.queryFoo() returns the CompletableFuture<DbRecord> we want wrapped in a span.
+    //      We simply turn it into a Supplier so that wrapCompletableFutureWithSpan() can kick it off inside
+    //      after starting the span wrapper.
+    () -> fooDbClient.queryFoo() 
+);
+```
+
+------------------
+
+NOTE: Be careful with the manual linking/unlinking example. If you fail to guarantee the associated unlink at 
 the end then you risk having traces stomp on each other or having other weird interactions occur that you wouldn't 
 expect or predict. This can mess up your tracing, so before you use the manual linking/unlinking procedure make sure 
 you know what you're doing and test thoroughly in a multi-threaded way under load, and with failure scenarios. For this 

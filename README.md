@@ -560,6 +560,33 @@ runnableWithTracing(
 ).run();
 ```
 
+* If you have a third party library that hands back a `CompletableFuture` when performing work (like a database call)
+but doesn't provide hooks for distributed tracing, then you can surround that `CompletableFuture` with a child span
+using the `wrapCompletableFutureWithSpan` helper method (see the javadocs on `wrapCompletableFutureWithSpan` and 
+`OperationWrapperOptions` for full details):
+
+``` java
+import static com.nike.wingtips.util.AsyncWingtipsHelperStatic.wrapCompletableFutureWithSpan;
+
+// ...
+
+OperationWrapperOptions<DbRecord> options = OperationWrapperOptions
+    .<DbRecord>newBuilder("mydb-get-foo", SpanPurpose.CLIENT)
+    .withSpanTagger((span, payload) -> {
+        span.putTag("db.instance", "myapp.foodb");
+        span.putTag("db.type", "FooDB");
+    })
+    .build();   
+
+CompletableFuture<DbRecord> recordFuture = wrapCompletableFutureWithSpan(
+    options,
+    // fooDbClient.queryFoo() returns the CompletableFuture<DbRecord> we want wrapped in a span.
+    //      We simply turn it into a Supplier so that wrapCompletableFutureWithSpan() can kick it off inside
+    //      after starting the span wrapper.
+    () -> fooDbClient.queryFoo() 
+);
+```
+
 * If you want to use the link and unlink methods manually to wrap some chunk of code, the general procedure looks
 like this:
 

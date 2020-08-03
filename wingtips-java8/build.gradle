@@ -5,13 +5,17 @@ targetCompatibility = JavaVersion.VERSION_1_8
 
 dependencies {
     compile(
-            project(":wingtips-core")
+        project(":wingtips-core")
+    )
+    compileOnly(
+        "org.jetbrains:annotations:$jetbrainsAnnotationsVersion",
     )
     testCompile(
-            "junit:junit-dep:$junitVersion",
-            "org.mockito:mockito-core:$mockitoVersion",
-            "ch.qos.logback:logback-classic:$logbackVersion",
-            "org.assertj:assertj-core:$assertJVersion",
-            "com.tngtech.java:junit-dataprovider:$junitDataproviderVersion"
+        "org.jetbrains:annotations:$jetbrainsAnnotationsVersion",
+        "junit:junit-dep:$junitVersion",
+        "org.mockito:mockito-core:$mockitoVersion",
+        "ch.qos.logback:logback-classic:$logbackVersion",
+        "org.assertj:assertj-core:$assertJVersion",
+        "com.tngtech.java:junit-dataprovider:$junitDataproviderVersion"
     )
 }
