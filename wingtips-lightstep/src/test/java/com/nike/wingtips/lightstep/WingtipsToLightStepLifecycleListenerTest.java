@@ -38,6 +38,8 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyZeroInteractions;
 
 @RunWith(DataProviderRunner.class)
@@ -55,6 +57,7 @@ public class WingtipsToLightStepLifecycleListenerTest {
         jreTracerMock = mock(JRETracer.class);
         listener = new WingtipsToLightStepLifecycleListener(jreTracerMock);
         spanMock = mock(Span.class);
+        doReturn(true).when(spanMock).isSampleable();
 
         lsSpanBuilderMock = mock(SpanBuilder.class);
         otSpanMock = mock(io.opentracing.Span.class);
@@ -315,6 +318,20 @@ public class WingtipsToLightStepLifecycleListenerTest {
         // then
         verify(jreTracerMock).buildSpan(anyString());
         assertThat(ex).isNull();
+    }
+
+    @Test
+    public void spanCompleted_does_nothing_if_span_is_not_sampleable() {
+        // given
+        doReturn(false).when(spanMock).isSampleable();
+
+        // when
+        listener.spanCompleted(spanMock);
+
+        // then
+        verify(spanMock).isSampleable();
+        verifyNoMoreInteractions(spanMock);
+        verifyNoInteractions(jreTracerMock, lsSpanBuilderMock);
     }
 
     private enum IdSanitizationScenario {
