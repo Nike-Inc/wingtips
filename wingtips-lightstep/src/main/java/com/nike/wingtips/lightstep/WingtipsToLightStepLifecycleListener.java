@@ -98,8 +98,17 @@ public class WingtipsToLightStepLifecycleListener implements SpanLifecycleListen
         // Do nothing
     }
 
+    protected boolean shouldReportCompletedSpan(Span span) {
+        // We only want to send the span if it was sampled.
+        return span.isSampleable();
+    }
+
     @Override
     public void spanCompleted(Span wingtipsSpan) {
+        if (!shouldReportCompletedSpan(wingtipsSpan)) {
+            return;
+        }
+
         try {
             String operationName = wingtipsSpan.getSpanName();
             long startTimeMicros = wingtipsSpan.getSpanStartTimeEpochMicros();

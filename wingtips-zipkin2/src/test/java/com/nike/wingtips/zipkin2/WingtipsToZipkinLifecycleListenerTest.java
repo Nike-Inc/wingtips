@@ -32,6 +32,8 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyZeroInteractions;
 
 /**
@@ -58,6 +60,7 @@ public class WingtipsToZipkinLifecycleListenerTest {
         listener = new WingtipsToZipkinLifecycleListener(serviceName, spanConverterMock, spanReporterMock);
 
         spanMock = mock(Span.class);
+        doReturn(true).when(spanMock).isSampleable();
     }
 
     @Test
@@ -195,5 +198,19 @@ public class WingtipsToZipkinLifecycleListenerTest {
         verifyZeroInteractions(loggerMock);
         // Also verify that the lastSpanHandlingErrorLogTimeEpochMillis value was *not* updated.
         assertThat((long)Whitebox.getInternalState(listener, "lastSpanHandlingErrorLogTimeEpochMillis")).isEqualTo(lastLogTimeToSet);
+    }
+
+    @Test
+    public void spanCompleted_does_nothing_if_span_is_not_sampleable() {
+        // given
+        doReturn(false).when(spanMock).isSampleable();
+
+        // when
+        listener.spanCompleted(spanMock);
+
+        // then
+        verify(spanMock).isSampleable();
+        verifyNoMoreInteractions(spanMock);
+        verifyNoInteractions(listener.zipkinSpanConverter, listener.zipkinSpanReporter);
     }
 }

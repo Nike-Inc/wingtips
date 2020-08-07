@@ -152,8 +152,17 @@ public class WingtipsToZipkinLifecycleListener implements SpanLifecycleListener 
         // Do nothing
     }
 
+    protected boolean shouldReportCompletedSpan(Span span) {
+        // We only want to send the span if it was sampled.
+        return span.isSampleable();
+    }
+
     @Override
     public void spanCompleted(Span span) {
+        if (!shouldReportCompletedSpan(span)) {
+            return;
+        }
+
         try {
             zipkin2.Span zipkinSpan = zipkinSpanConverter.convertWingtipsSpanToZipkinSpan(span, zipkinEndpoint);
             zipkinSpanReporter.report(zipkinSpan);
