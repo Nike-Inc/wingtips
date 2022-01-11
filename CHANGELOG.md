@@ -464,7 +464,7 @@ Released on 2017-11-06.
 - Added `ExecutorServiceWithTracing` to automate having tracing state hop threads when using `Executor` or 
 `ExecutorService` to do work on async threads. See the 
 [async section of the main readme](https://github.com/Nike-Inc/wingtips#async_usage), the 
-[readme for the Java 8 module](https://github.com/Nike-Inc/wingtips/tree/master/wingtips-java8), or the javadocs on 
+[readme for the Java 8 module](https://github.com/Nike-Inc/wingtips/tree/main/wingtips-java8), or the javadocs on 
 `ExecutorServiceWithTracing` for usage examples. 
     - Added by [Nic Munroe][contrib_nicmunroe] in pull request [#58](https://github.com/Nike-Inc/wingtips/pull/58).
     
@@ -479,7 +479,7 @@ brings Wingtips in line with Logback, which also intentionally removed the "MDC 
 for similar reasons (see the Logback version 1.1.5 notes in the [logback changelog](https://logback.qos.ch/news.html)). 
 For Wingtips users that relied on this auto-resurrection-from-MDC behavior in Wingtips please refer to the
 [async section of the main readme](https://github.com/Nike-Inc/wingtips#async_usage) and/or the
-[readme for the Java 8 module](https://github.com/Nike-Inc/wingtips/tree/master/wingtips-java8) for information on 
+[readme for the Java 8 module](https://github.com/Nike-Inc/wingtips/tree/main/wingtips-java8) for information on 
 explicitly and intentionally causing tracing state to hop threads.
     - Removed by [Nic Munroe][contrib_nicmunroe] in pull request [#57](https://github.com/Nike-Inc/wingtips/pull/57).    
     
@@ -568,7 +568,7 @@ Released on 2017-09-18.
     - Added by [Nic Munroe][contrib_nicmunroe] in pull request [#38](https://github.com/Nike-Inc/wingtips/pull/38).
 - Added Java 7 and Java 8 async usage helpers. Please see the 
 [async section of the main readme](https://github.com/Nike-Inc/wingtips#async_usage) and the 
-[readme for the new Java 8 module](https://github.com/Nike-Inc/wingtips/tree/master/wingtips-java8) for details. 
+[readme for the new Java 8 module](https://github.com/Nike-Inc/wingtips/tree/main/wingtips-java8) for details. 
     - Added by [Nic Munroe][contrib_nicmunroe] in pull request [#39](https://github.com/Nike-Inc/wingtips/pull/39).
 - Added `AutoCloseable` implementation to `Span` to support usage in Java `try-with-resources` statements. See the
 [try-with-resources section of the readme](https://github.com/Nike-Inc/wingtips#try_with_resources_info) for details.

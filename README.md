@@ -4,7 +4,7 @@
 
 [ ![Download](https://api.bintray.com/packages/nike/maven/wingtips/images/download.svg) ](https://bintray.com/nike/maven/wingtips/_latestVersion)
 [![][travis img]][travis]
-[![Code Coverage](https://img.shields.io/codecov/c/github/Nike-Inc/wingtips/master.svg)](https://codecov.io/github/Nike-Inc/wingtips?branch=master)
+[![Code Coverage](https://img.shields.io/codecov/c/github/Nike-Inc/wingtips/main.svg)](https://codecov.io/github/Nike-Inc/wingtips?branch=main)
 [![][license img]][license]
 
 Wingtips is a distributed tracing solution for Java 7 and greater based on the [Google Dapper paper](http://static.googleusercontent.com/media/research.google.com/en/us/pubs/archive/36356.pdf). 
@@ -675,7 +675,7 @@ See the sample app readmes for further information on building and running the s
 Wingtips is released under the [Apache License, Version 2.0](http://www.apache.org/licenses/LICENSE-2.0)
 
 [travis]:https://travis-ci.org/Nike-Inc/wingtips
-[travis img]:https://api.travis-ci.org/Nike-Inc/wingtips.svg?branch=master
+[travis img]:https://api.travis-ci.org/Nike-Inc/wingtips.svg?branch=main
 
 [license]:LICENSE.txt
 [license img]:https://img.shields.io/badge/License-Apache%202-blue.svg
