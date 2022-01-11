@@ -14,8 +14,8 @@ There are a few guidelines that we need contributors to follow so that we are ab
 
 ## Making Changes
 
-* Create a topic branch off of `master` before you start your work.
-  * Please avoid working directly on the `master` branch.
+* Create a topic branch off of `main` before you start your work.
+  * Please avoid working directly on the `main` branch.
 * Make commits of logical units.
   * You may be asked to squash unnecessary commits down to logical units.
 * Check for unnecessary whitespace with `git diff --check` before committing.

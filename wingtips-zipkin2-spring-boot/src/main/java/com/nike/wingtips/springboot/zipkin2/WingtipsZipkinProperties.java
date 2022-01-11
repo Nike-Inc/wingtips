@@ -24,7 +24,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *     <li>
  *         wingtips.zipkin.service-name - The name of this service, used when sending Wingtips spans to Zipkin. See
  *         the {@link WingtipsToZipkinLifecycleListener)} constructor javadocs or the
- *         <a href="https://github.com/Nike-Inc/wingtips/tree/master/wingtips-zipkin2">wingtips-zipkin2 readme</a>
+ *         <a href="https://github.com/Nike-Inc/wingtips/tree/main/wingtips-zipkin2">wingtips-zipkin2 readme</a>
  *         for details on how this service name is used. If you don't set this property then {@code "unknown"} will be
  *         used.
  *     </li>
