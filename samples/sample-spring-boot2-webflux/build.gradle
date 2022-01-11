@@ -2,7 +2,6 @@ evaluationDependsOn(':')
 
 buildscript {
     repositories {
-        jcenter()
         mavenCentral()
     }
     dependencies {
