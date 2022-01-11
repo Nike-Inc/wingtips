@@ -22,6 +22,8 @@ dependencies {
             "io.rest-assured:rest-assured:$restAssuredVersion",
             "org.glassfish.jersey.containers:jersey-container-servlet:$jersey2Version",
             "org.eclipse.jetty:jetty-server:$jettyVersion",
-            "org.eclipse.jetty:jetty-servlet:$jettyVersion"
+            "org.eclipse.jetty:jetty-servlet:$jettyVersion",
+            // The jaxb-api is needed for building on the java 11 JDK as these classes were moved out of the Java SE libs.
+            "javax.xml.bind:jaxb-api:$jaxbApiVersion",
     )
 }

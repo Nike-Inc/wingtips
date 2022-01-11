@@ -26,6 +26,8 @@ dependencies {
             "org.jetbrains:annotations:$jetbrainsAnnotationsVersion",
             "ch.qos.logback:logback-classic:$logbackVersion",
             "org.springframework.boot:spring-boot-starter-webflux:$springboot2Version",
-            "io.projectreactor:reactor-test:$projectReactorVersion"
+            "io.projectreactor:reactor-test:$projectReactorVersion",
+            // The jaxb-api is needed for building on the java 11 JDK as these classes were moved out of the Java SE libs.
+            "javax.xml.bind:jaxb-api:$jaxbApiVersion",
     )
 }
