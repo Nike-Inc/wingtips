@@ -6,7 +6,7 @@ ext {
 }
 
 dependencies {
-    testCompile(
+    testImplementation(
             project(":wingtips-servlet-api"),
             "junit:junit-dep:$junitVersion",
             "org.mockito:mockito-core:$mockitoVersion",

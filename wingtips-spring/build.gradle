@@ -6,14 +6,14 @@ compileTestJava {
 }
 
 dependencies {
-    compile(
+    api(
             project(":wingtips-core")
     )
     compileOnly(
             "org.springframework:spring-web:$spring4Version",
             "org.jetbrains:annotations:$jetbrainsAnnotationsVersion"
     )
-    testCompile(
+    testImplementation(
             project(":wingtips-servlet-api"),
             "junit:junit-dep:$junitVersion",
             "org.mockito:mockito-core:$mockitoVersion",

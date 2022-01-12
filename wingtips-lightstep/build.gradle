@@ -6,7 +6,7 @@ compileTestJava {
 }
 
 dependencies {
-    compile(
+    api(
             project(":wingtips-core"),
             "com.lightstep.tracer:lightstep-tracer-jre:$lightstepTracerVersion",
             "com.lightstep.tracer:tracer-okhttp:$lightstepHttpVersion",
@@ -17,7 +17,7 @@ dependencies {
     compileOnly(
             "org.jetbrains:annotations:$jetbrainsAnnotationsVersion"
     )
-    testCompile(
+    testImplementation(
             "org.jetbrains:annotations:$jetbrainsAnnotationsVersion",
             "junit:junit-dep:$junitVersion",
             "org.mockito:mockito-core:$mockitoVersion",

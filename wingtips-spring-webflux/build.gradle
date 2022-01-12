@@ -9,7 +9,7 @@ ext {
 }
 
 dependencies {
-    compile(
+    api(
             project(":wingtips-core"),
             project(":wingtips-java8")
     )
@@ -17,7 +17,7 @@ dependencies {
             "org.springframework:spring-webflux:$spring5Version",
             "org.jetbrains:annotations:$jetbrainsAnnotationsVersion",
     )
-    testCompile(
+    testImplementation(
             "junit:junit-dep:$junitVersion",
             "org.mockito:mockito-core:$mockitoVersion",
             "org.assertj:assertj-core:$assertJVersion",

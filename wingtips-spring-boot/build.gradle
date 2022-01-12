@@ -6,7 +6,7 @@ ext {
 }
 
 dependencies {
-    compile(
+    api(
             project(":wingtips-servlet-api"),
             project(":wingtips-spring")
     )
@@ -14,7 +14,7 @@ dependencies {
             "javax.servlet:javax.servlet-api:$servletApiVersion",
             "org.springframework.boot:spring-boot-autoconfigure:$springboot1Version"
     )
-    testCompile(
+    testImplementation(
             "junit:junit-dep:$junitVersion",
             "org.mockito:mockito-core:$mockitoVersion",
             "ch.qos.logback:logback-classic:$logbackVersion",

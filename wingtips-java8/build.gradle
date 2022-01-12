@@ -4,13 +4,13 @@ sourceCompatibility = JavaVersion.VERSION_1_8
 targetCompatibility = JavaVersion.VERSION_1_8
 
 dependencies {
-    compile(
+    api(
         project(":wingtips-core")
     )
     compileOnly(
         "org.jetbrains:annotations:$jetbrainsAnnotationsVersion",
     )
-    testCompile(
+    testImplementation(
         "org.jetbrains:annotations:$jetbrainsAnnotationsVersion",
         "junit:junit-dep:$junitVersion",
         "org.mockito:mockito-core:$mockitoVersion",

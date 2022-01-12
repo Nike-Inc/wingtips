@@ -6,14 +6,14 @@ compileTestJava {
 }
 
 dependencies {
-    compile(
+    api(
             "org.slf4j:slf4j-api:$slf4jVersion",
             "com.nike.internal:nike-internal-util:$nikeInternalUtilVersion"
     )
     compileOnly(
             "org.jetbrains:annotations:$jetbrainsAnnotationsVersion"
     )
-    testCompile(
+    testImplementation(
             "junit:junit-dep:$junitVersion",
             "org.mockito:mockito-core:$mockitoVersion",
             "com.fasterxml.jackson.core:jackson-core:$jacksonVersion",
