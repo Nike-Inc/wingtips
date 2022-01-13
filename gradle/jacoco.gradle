@@ -99,13 +99,6 @@ task jacocoRootReport(type: JacocoReport) {
     onlyIf = {
         true
     }
-    doFirst {
-        executionData.from(
-                files(executionData.findAll {
-                    it.exists()
-                })
-        )
-    }
 }
 
 // Ensure that the combo root report runs after tests.
