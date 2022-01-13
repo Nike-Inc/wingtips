@@ -285,6 +285,7 @@ public class SampleController {
                             .get()
                             .uri(nestedCallUri)
                             .headers(headers -> addUserIdHeader(headers, overallRequestSpan))
+                            .attribute(TracingState.class.getName(), TracingState.getCurrentThreadTracingState())
                             .exchange()
                             .flatMap(
                                 response -> response

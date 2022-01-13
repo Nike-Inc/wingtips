@@ -1,5 +1,10 @@
 evaluationDependsOn(':')
 
+compileTestJava {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
 ext {
     // Springboot requires Servlet API to be at least version 3.1
     servletApiForTestsVersion = '3.1.0'
