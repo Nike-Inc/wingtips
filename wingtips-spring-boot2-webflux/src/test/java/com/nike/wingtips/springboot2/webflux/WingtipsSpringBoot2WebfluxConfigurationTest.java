@@ -32,6 +32,7 @@ import org.springframework.core.Ordered;
 import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
+import org.springframework.web.server.WebFilter;
 
 import java.io.IOException;
 import java.net.ServerSocket;
@@ -210,7 +211,7 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
         conf.customSpringWebfluxWebFilter = appFilterOverride;
 
         // when
-        WingtipsSpringWebfluxWebFilter filterBean = conf.wingtipsSpringWebfluxWebFilter();
+        WingtipsSpringWebfluxWebFilter filterBean = (WingtipsSpringWebfluxWebFilter)conf.wingtipsSpringWebfluxWebFilter();
 
         // then
         if (appFilterOverride == null) {
@@ -523,14 +524,16 @@ public class WingtipsSpringBoot2WebfluxConfigurationTest {
             assertThat(props).isNotNull();
             assertThat(config.wingtipsProperties).isSameAs(props);
 
-            // The config should not have any custom WingtipsSpringWebfluxWebFilter. Spring will populate
-            //      the config.customSpringWebfluxWebFilter field with whatever wingtipsSpringWebfluxWebFilter()
-            //      produces - so they should be the same.
-            Map<String, WingtipsSpringWebfluxWebFilter> filtersFromSpring =
-                    serverAppContext.getBeansOfType(WingtipsSpringWebfluxWebFilter.class);
-            assertThat(filtersFromSpring).isEqualTo(
-                    Collections.singletonMap("wingtipsSpringWebfluxWebFilter", config.customSpringWebfluxWebFilter)
-            );
+            // The config should not have any custom WingtipsSpringWebfluxWebFilter. Therefore
+            //      config.customSpringWebfluxWebFilter should be null. But we should have a WebFilter of
+            //      type WingtipsSpringWebfluxWebFilter registered with Spring.
+            Map<String, WebFilter> filtersFromSpring =
+                    serverAppContext.getBeansOfType(WebFilter.class);
+            assertThat(filtersFromSpring).hasSize(1);
+            assertThat(filtersFromSpring.keySet()).contains("wingtipsSpringWebfluxWebFilter");
+            assertThat(filtersFromSpring.get("wingtipsSpringWebfluxWebFilter"))
+                .isInstanceOf(WingtipsSpringWebfluxWebFilter.class);
+            assertThat(config.customSpringWebfluxWebFilter).isNull();
         } finally {
             Schedulers.removeExecutorServiceDecorator(WingtipsReactorInitializer.WINGTIPS_SCHEDULER_KEY);
             SpringApplication.exit(serverAppContext);
