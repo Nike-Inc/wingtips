@@ -5,15 +5,15 @@ import groovy.time.TimeCategory
 task testReport(type: TestReport) {
     destinationDir = file("$buildDir/reports/tests")
     // Include the results from the `test` task's output dir in all subprojects
-    reportOn subprojects*.test.binResultsDir
+    reportOn subprojects*.test.binaryResultsDirectory
 }
 
 // Aggregate test reports for all subprojects at the root project level
 subprojects {
     test {
-        reports.html.enabled = true
-        reports.junitXml.enabled = true
-        reports.junitXml.destination = file("${rootProject.test.reports.junitXml.destination}/${project.name}")
+        reports.html.required = true
+        reports.junitXml.required = true
+        reports.junitXml.outputLocation.set(file("${rootProject.test.reports.junitXml.getOutputLocation().get()}/${project.name}"))
     }
     // Tell testReport to run after the tests run
     test.finalizedBy(testReport)

@@ -22,9 +22,9 @@ subprojects {
         sourceDirectories.from(files(sourceSets.main.allSource.srcDirs))
         classDirectories.from(files(sourceSets.main.output))
         reports {
-            html.enabled = true
-            xml.enabled = true
-            csv.enabled = false
+            html.required = true
+            xml.required = true
+            csv.required = false
         }
         afterEvaluate {
             //noinspection GroovyAssignabilityCheck
@@ -84,9 +84,9 @@ task jacocoRootReport(type: JacocoReport) {
     classDirectories.from(files(subprojectsToInclude.sourceSets.main.output))
     executionData.from(files(subprojectsToInclude.jacocoTestReport.executionData))
     reports {
-        html.enabled = true
-        xml.enabled = true
-        csv.enabled = false
+        html.required = true
+        xml.required = true
+        csv.required = false
     }
     afterEvaluate {
         //noinspection GroovyAssignabilityCheck
@@ -122,7 +122,7 @@ test.finalizedBy(zForceAllSubprojectTestsToRunDummyTask)
 
 // This method parses jacoco report XML to pull out the instruction coverage summary value and store it for later.
 def parseJacocoSummaryInfo(JacocoReport task, boolean isRootReport) {
-    File xmlFile = task.reports.xml.destination
+    File xmlFile = task.reports.xml.getOutputLocation().getAsFile().getOrNull()
     if (xmlFile == null || !xmlFile.exists()) {
         return
     }
