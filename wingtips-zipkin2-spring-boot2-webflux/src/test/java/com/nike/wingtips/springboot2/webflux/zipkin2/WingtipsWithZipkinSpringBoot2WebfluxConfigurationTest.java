@@ -285,7 +285,8 @@ public class WingtipsWithZipkinSpringBoot2WebfluxConfigurationTest {
             assertThat(baseConfig).isNotNull();
             assertThat(baseProps).isNotNull();
             assertThat(baseConfig).extracting("wingtipsProperties")
-                .containsExactly(baseProps);
+                                  .usingRecursiveComparison()
+                                  .isEqualTo(baseProps);
 
             assertThat(zipkinConfig).isNotNull();
             assertThat(zipkinProps).isNotNull();

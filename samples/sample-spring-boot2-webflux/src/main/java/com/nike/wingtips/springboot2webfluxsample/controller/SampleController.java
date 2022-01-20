@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.web.ServerProperties;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.core.env.Environment;
+import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -285,16 +286,15 @@ public class SampleController {
                             .get()
                             .uri(nestedCallUri)
                             .headers(headers -> addUserIdHeader(headers, overallRequestSpan))
-                            .exchange()
-                            .flatMap(
-                                response -> response
-                                    .bodyToMono(new ParameterizedTypeReference<EndpointSpanInfoDto>() {})
-                                    .doOnTerminate(
-                                        runnableWithTracing(
-                                            () -> logger.info("Nested WebClient call complete"),
-                                            overallRequestTracingState
-                                        )
-                                    )
+                            .attribute(TracingState.class.getName(), TracingState.getCurrentThreadTracingState())
+                            .retrieve()
+                            .toEntity(EndpointSpanInfoDto.class)
+                            .map(HttpEntity::getBody)
+                            .doOnTerminate(
+                                runnableWithTracing(
+                                    () -> logger.info("Nested WebClient call complete"),
+                                    overallRequestTracingState
+                                )
                             );
                     },
                     overallRequestTracingState

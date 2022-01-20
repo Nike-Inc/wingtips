@@ -6,12 +6,12 @@ ext {
 }
 
 dependencies {
-    testCompile(
+    testImplementation(
             project(":wingtips-servlet-api"),
             "junit:junit-dep:$junitVersion",
             "org.mockito:mockito-core:$mockitoVersion",
             "ch.qos.logback:logback-classic:$logbackVersion",
-            "org.assertj:assertj-core:$assertJVersion",
+            "org.assertj:assertj-core:$assertJForJava7Version",
             "com.tngtech.java:junit-dataprovider:$junitDataproviderVersion",
             "io.rest-assured:rest-assured:$restAssuredVersion",
             "javax.servlet:servlet-api:$oldServletApiTargetVersion",

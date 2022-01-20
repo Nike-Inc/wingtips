@@ -19,6 +19,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.web.server.ServerWebExchange;
+import org.springframework.web.server.WebFilter;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -113,7 +114,7 @@ public class WingtipsSpringBoot2WebfluxConfiguration {
      */
     @Bean
     @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.REACTIVE)
-    public WingtipsSpringWebfluxWebFilter wingtipsSpringWebfluxWebFilter() {
+    public WebFilter wingtipsSpringWebfluxWebFilter() {
         if (wingtipsProperties.isWingtipsDisabled()) {
             return null;
         }

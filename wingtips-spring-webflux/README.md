@@ -88,13 +88,7 @@ WebClient webClientWithWingtips = WebClient
     .filter(WingtipsSpringWebfluxExchangeFilterFunction.DEFAULT_IMPL) // <- or use a constructor with config options.
     .build();
 
-// ... later, when ready to execute your request *AND* the overall request tracing state is on the current thread:           
-Mono<ClientResponse> responseMono = webClientWithWingtips
-    .get()
-    .uri(someRequestUri)
-    .exchange();
-        
-// ... or if you need to supply the overall request tracing state manually because it's *not* on the current thread:
+// ... later, when ready to execute your request:           
 Mono<ClientResponse> responseMono = webClientWithWingtips
     .get()
     .uri(someRequestUri)
@@ -103,7 +97,7 @@ Mono<ClientResponse> responseMono = webClientWithWingtips
 ```
 
 Note that in order for the `WingtipsSpringWebfluxExchangeFilterFunction` to know what the correct `TracingState` is
-that it should use, the correct `TracingState` either needs to be on the current thread or supplied in the request
+that it should use, the correct `TracingState` must be supplied in the request
 attributes when the call is executed (i.e. via the `WebClient`'s `exchange()` or `retrieve()` methods). 
 
 To supply the `TracingState` in the request attributes, just provide an attribute with the key of 

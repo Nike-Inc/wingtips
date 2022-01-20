@@ -272,7 +272,7 @@ public class ScheduledExecutorServiceWithTracingTest {
         ScheduledFuture<?> result = instance.schedule(origTaskMock, 10L, TimeUnit.SECONDS);
 
         // then
-        assertThat(result).isSameAs(expectedResultMock);
+        assertThat((Future<?>)result).isSameAs(expectedResultMock);
         verify(executorServiceMock).schedule(runnableCaptor.capture(), eq(10L), eq(TimeUnit.SECONDS));
         Runnable actualTask = runnableCaptor.getValue();
         verifyRunnableWithTracingWrapper(actualTask, origTaskMock, expectedTracingState);
@@ -294,7 +294,7 @@ public class ScheduledExecutorServiceWithTracingTest {
         ScheduledFuture<?> result = instance.scheduleAtFixedRate(origTaskMock, 10L, 10L, TimeUnit.SECONDS);
 
         // then
-        assertThat(result).isSameAs(expectedResultMock);
+        assertThat((Future<?>)result).isSameAs(expectedResultMock);
         verify(executorServiceMock).scheduleAtFixedRate(runnableCaptor.capture(), eq(10L), eq(10L), eq(TimeUnit.SECONDS));
         Runnable actualTask = runnableCaptor.getValue();
         verifyRunnableWithTracingWrapper(actualTask, origTaskMock, expectedTracingState);
@@ -316,7 +316,7 @@ public class ScheduledExecutorServiceWithTracingTest {
         ScheduledFuture<?> result = instance.scheduleWithFixedDelay(origTaskMock, 10L, 10L, TimeUnit.SECONDS);
 
         // then
-        assertThat(result).isSameAs(expectedResultMock);
+        assertThat((Future<?>)result).isSameAs(expectedResultMock);
         verify(executorServiceMock).scheduleWithFixedDelay(runnableCaptor.capture(), eq(10L), eq(10L), eq(TimeUnit.SECONDS));
         Runnable actualTask = runnableCaptor.getValue();
         verifyRunnableWithTracingWrapper(actualTask, origTaskMock, expectedTracingState);

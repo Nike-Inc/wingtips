@@ -8,7 +8,7 @@ ext {
 }
 
 dependencies {
-    compile(
+    implementation(
             project(":wingtips-servlet-api"),
             project(":wingtips-jersey2"),
             "ch.qos.logback:logback-classic:$logbackVersion",
@@ -17,7 +17,7 @@ dependencies {
             "org.eclipse.jetty:jetty-server:$jettyVersion",
             "org.eclipse.jetty:jetty-servlet:$jettyVersion"
     )
-    testCompile(
+    testImplementation(
             "junit:junit:$junitVersion",
             "org.mockito:mockito-core:$mockitoVersion",
             "ch.qos.logback:logback-classic:$logbackVersion",

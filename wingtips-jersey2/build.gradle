@@ -6,13 +6,13 @@ compileTestJava {
 }
 
 dependencies {
-    compile(
+    api(
             project(":wingtips-core")
     )
     compileOnly(
             "org.glassfish.jersey.core:jersey-server:$jersey2Version"
     )
-    testCompile(
+    testImplementation(
             project(":wingtips-servlet-api"),
             "junit:junit-dep:$junitVersion",
             "org.mockito:mockito-core:$mockitoVersion",

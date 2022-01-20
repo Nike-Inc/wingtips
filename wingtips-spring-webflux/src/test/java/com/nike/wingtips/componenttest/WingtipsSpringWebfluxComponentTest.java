@@ -43,6 +43,7 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.reactive.function.client.ClientRequest;
 import org.springframework.web.reactive.function.client.ClientResponse;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientRequestException;
 import org.springframework.web.reactive.function.server.HandlerFilterFunction;
 import org.springframework.web.reactive.function.server.HandlerFunction;
 import org.springframework.web.reactive.function.server.RouterFunction;
@@ -710,13 +711,15 @@ public class WingtipsSpringWebfluxComponentTest {
                 .get()
                 .uri(fullRequestUrl)
                 .attributes(baseTracingStateScenario.tracingStateAttrSetup(baseTracingState))
-                .exchange()
+                .exchangeToMono(Mono::just)
                 .block()
         );
 
         // then
         Throwable unwrappedEx = Exceptions.unwrap(ex);
-        assertThat(unwrappedEx).isInstanceOf(UnknownHostException.class);
+        assertThat(unwrappedEx)
+            .isInstanceOfAny(WebClientRequestException.class)
+            .hasCauseInstanceOf(UnknownHostException.class);
         waitUntilSpanRecorderHasExpectedNumSpans(expectedNumSpansCompleted);
         assertThat(spanRecorder.completedSpans).hasSize(expectedNumSpansCompleted);
         if (expectedNumSpansCompleted > 0) {
