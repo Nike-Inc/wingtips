@@ -157,7 +157,5 @@ apply from: file(rootProject.projectDir.getAbsolutePath() + '/gradle/junitComboT
 //                           Individual reports for each submodule can be found at: [project_root]/[submodule]/build/reports/jacoco/test/html/index.html
 apply from: file(rootProject.projectDir.getAbsolutePath() + '/gradle/jacoco.gradle')
 
-// ========== MISCELLANEOUS BUILD STUFF
-allprojects {
-    group = groupId // Necessary for the maven install task to function correctly
-}
+// ========== MAVEN CENTRAL PUBLISHING
+apply from: file(rootProject.projectDir.getAbsolutePath() + '/gradle/publishing.gradle')

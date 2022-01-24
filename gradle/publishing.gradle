@@ -1,0 +1,132 @@
+private String getSonatypeUsername() {
+    return System.getenv("SONATYPE_OSSRH_ACCT_USERNAME")
+}
+
+private String getSonatypePassword() {
+    return System.getenv("SONATYPE_OSSRH_ACCT_PASSWORD")
+}
+
+configure(subprojects.findAll {
+    // Don't publish sample or testonly artifacts.
+    return !it.name.startsWith("sample") && !it.name.startsWith("testonly")
+}) {
+    apply plugin: 'maven-publish'
+    apply plugin: 'signing'
+
+    ext {
+        isReleaseVersion = !version.toString().endsWith("SNAPSHOT")
+    }
+
+    setGroup(groupId) // Necessary for the maven tasks to function correctly
+
+    java {
+        // These will cause the maven publish task to include javadoc and sources jars when publishing.
+        withJavadocJar()
+        withSourcesJar()
+    }
+
+    publishing {
+        publications {
+            mavenJava(MavenPublication) {
+                from components.java
+                versionMapping {
+                    usage('java-api') {
+                        fromResolutionOf('runtimeClasspath')
+                    }
+                    usage('java-runtime') {
+                        fromResolutionResult()
+                    }
+                }
+                pom {
+                    name = artifactId
+                    description = "Wingtips module $artifactId"
+                    url = 'https://github.com/Nike-Inc/wingtips'
+                    inceptionYear = '2016'
+                    licenses {
+                        license {
+                            name = 'The Apache Software License, Version 2.0'
+                            url = 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+                            distribution = 'repo'
+                        }
+                    }
+                    developers {
+                        developer {
+                            id = 'nicmunroe'
+                            name = 'Nic Munroe'
+                        }
+                    }
+                    organization {
+                        name = 'Nike'
+                        url = 'http://nike-inc.github.io'
+                    }
+                    scm {
+                        url = 'https://github.com/Nike-Inc/wingtips'
+                        connection = 'git@github.com:Nike-Inc/wingtips.git'
+                    }
+                }
+            }
+        }
+
+        repositories {
+            maven {
+                def releasesRepoUrl = uri('https://oss.sonatype.org/service/local/staging/deploy/maven2/')
+                def snapshotsRepoUrl = uri('https://oss.sonatype.org/content/repositories/snapshots/')
+                url = isReleaseVersion ? releasesRepoUrl : snapshotsRepoUrl
+
+                String sonatypeUsername = getSonatypeUsername()
+                String sonatypePassword = getSonatypePassword()
+
+                if (sonatypeUsername != null && sonatypePassword != null) {
+                    credentials {
+                        username sonatypeUsername
+                        password sonatypePassword
+                    }
+                }
+            }
+        }
+    }
+
+    // Throw an informative error if the publish task is executed without the Sonatype OSSRH credentials being
+    //      specified in the expeceted environment variables.
+    tasks.withType(PublishToMavenRepository) {
+        // Add an explicit dependency on the signArchives task - needed to fix implicit dependency issues with gradle.
+        //      See: https://docs.gradle.org/7.3.3/userguide/validation_problems.html#implicit_dependency
+        dependsOn("signArchives")
+
+        doFirst {
+            String sonatypeUsername = getSonatypeUsername()
+            if (sonatypeUsername == null || sonatypeUsername.trim().isEmpty()) {
+                throw new RuntimeException("Sonatype username could not be retrieved - make sure the SONATYPE_OSSRH_ACCT_USERNAME env variable is set when gradle is executed")
+            }
+
+            String sonatypePassword = getSonatypePassword()
+            if (sonatypePassword == null || sonatypePassword.trim().isEmpty()) {
+                throw new RuntimeException("Sonatype password could not be retrieved - make sure the SONATYPE_OSSRH_ACCT_PASSWORD env variable is set when gradle is executed")
+            }
+        }
+    }
+
+    signing {
+        // You'll need to tell gradle what you want your GPG key ID to be so that the gpg-agent can do the right thing.
+        //      On the command line this means including the following gradle property: -Psigning.gnupg.keyName=${MY_GPG_PUBLIC_KEY_ID}
+        //      And if the machine this is running on has the gpg command but not the gpg2 command, then you'll need this gradle prop as well: -Psigning.gnupg.useLegacyGpg=true
+        //      Full details here: https://docs.gradle.org/current/userguide/signing_plugin.html#sec:using_gpg_agent
+        useGpgCmd()
+        // This line is necessary because without it gradle will complain that the signArchives task doesn't exist
+        //      for the root project. This seems like a bug, but it's working for now so... :shrug:
+        sign configurations.archives
+        // This line is necessary to get the maven-publish command to actually push the signature files when publishing.
+        //      Otherwise, they don't get sent along with the usual jar and pom artifacts.
+        sign publishing.publications.mavenJava
+    }
+
+    tasks.withType(Sign) {
+        // Only bother signing if we're publishing, or the user has explicitly asked for signing via the
+        //      forceSignArchives gradle property (-PforceSignArchives=true on the command line). This prevents the
+        //      build from failing for people who aren't actively attempting to publish.
+        onlyIf {
+            gradle.taskGraph.hasTask(":publish")
+                || "true".equalsIgnoreCase(project.getProperties().get("forceSignArchives").toString())
+        }
+    }
+}
