@@ -8,6 +8,7 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 
 #### 0.x Releases
 
+- `0.24.x` Releases - [0.24.0](#0240)
 - `0.23.x` Releases - [0.23.1](#0231), [0.23.0](#0230)
 - `0.22.x` Releases - [0.22.1](#0221), [0.22.0](#0220)
 - `0.21.x` Releases - [0.21.0](#0210)
@@ -23,6 +24,56 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 - `0.11.x` Releases - [0.11.2](#0112), [0.11.1](#0111), [0.11.0](#0110)
 - `0.10.x` Releases - [0.10.0](#0100)
 - `0.9.x` Releases - [0.9.0.1](#0901), [0.9.0](#090)
+
+## [0.24.0](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.24.0)
+
+Released on 2022-01-24.
+
+### Potentially Breaking Changes
+
+* The upgrade to Gradle required adjusting how library dependencies are declared. Mostly this means dependencies 
+  declared in gradle as `compile` scope turned into `api` scope. This shouldn't affect you - the resulting POMs 
+  published to Maven Central appear to be identical. Just calling it out as a possibility that something unexpected 
+  might result.
+* As mentioned in the `Fixed` section below, SpringBoot 2.6 added a breaking change that we had to work around. This
+  should be an invisible fix, however it is Spring so things may break anyway for some users. See the `Fixed`
+  section for details.
+
+### Deprecations
+
+* While testing out newer versions of SpringBoot 2, it was discovered that SB 2 changed their threading behavior for 
+  their WebFlux `WebClient` HTTP client. This means you can no longer rely on Wingtips to automatically pull the 
+  correct tracing state from the current thread when executing `WebClient` calls. Instead you need to specify the 
+  tracing state explicitly using `WebClient.attribute(TracingState.class.getName(), tracingState)`. See the javadoc 
+  changes to 
+  [WingtipsSpringWebfluxExchangeFilterFunction](wingtips-spring-webflux/src/main/java/com/nike/wingtips/spring/webflux/client/WingtipsSpringWebfluxExchangeFilterFunction.java) 
+  and the [wingtips-spring-webflux readme changes](wingtips-spring-webflux/README.md) as part of PR 
+  [#130](https://github.com/Nike-Inc/wingtips/pull/130) for details. 
+
+### Fixed
+
+* In SB 2.6 they added a breaking change, which causes a circular reference error when starting up a SB app and using
+  [WingtipsSpringBoot2WebfluxConfiguration](wingtips-spring-boot2-webflux/src/main/java/com/nike/wingtips/springboot2/webflux/WingtipsSpringBoot2WebfluxConfiguration.java) 
+  (see SB 2.6 release notes 
+  [here](https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-2.6-Release-Notes#circular-references-prohibited-by-default)
+  for details on Spring's breaking change). We fixed this circular reference by adjusting how we're exposing the 
+  `WingtipsSpringWebfluxWebFilter` in `WingtipsSpringBoot2WebfluxConfiguration`. This should be an invisible fix - 
+  you should not notice any errors or problems with this, however it is Spring so it's possible this might break 
+  someone even though it's not supposed to.
+  - Fixed by [Nic Munroe][contrib_nicmunroe] in pull request [#130](https://github.com/Nike-Inc/wingtips/pull/130).
+      
+### Project Build
+
+* Moved to Github actions for CI build, and switched to building on Java 11 (does not affect compatibility for 
+  library consumers).
+  - Done by [Nic Munroe][contrib_nicmunroe] in pull requests [#126](https://github.com/Nike-Inc/wingtips/pull/126), 
+    [#127](https://github.com/Nike-Inc/wingtips/pull/127), and [#129](https://github.com/Nike-Inc/wingtips/pull/129).
+* Renamed the default branch in Github to `main`.
+  - Done by [Nic Munroe][contrib_nicmunroe] in pull request [#128](https://github.com/Nike-Inc/wingtips/pull/128). 
+* Updated to Gradle 7.3.3.
+  - Done by [Nic Munroe][contrib_nicmunroe] in pull request [#130](https://github.com/Nike-Inc/wingtips/pull/130). 
+* Moved to publishing to Maven Central via Sonatype OSSRH.
+  - Done by [Nic Munroe][contrib_nicmunroe] in pull request [#131](https://github.com/Nike-Inc/wingtips/pull/131). 
 
 ## [0.23.1](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.23.1)
 
