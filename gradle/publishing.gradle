@@ -53,6 +53,65 @@ configure(subprojects.findAll {
                         developer {
                             id = 'nicmunroe'
                             name = 'Nic Munroe'
+                            url = 'https://github.com/nicmunroe'
+                            roles = ['maintainer']
+                        }
+                    }
+                    contributors {
+                        contributor {
+                            name = 'Thomas Lockney'
+                            url = 'https://github.com/tlockney'
+                            roles = ['contributor']
+                        }
+                        contributor {
+                            name = 'adriancole'
+                            url = 'https://github.com/adriancole'
+                            roles = ['contributor']
+                        }
+                        contributor {
+                            name = 'Janusz Piechówka'
+                            url = 'https://github.com/jpiechowka'
+                            roles = ['contributor']
+                        }
+                        contributor {
+                            name = 'woldie'
+                            url = 'https://github.com/woldie'
+                            roles = ['contributor']
+                        }
+                        contributor {
+                            name = 'Aleš Justin'
+                            url = 'https://github.com/alesj'
+                            roles = ['contributor']
+                        }
+                        contributor {
+                            name = 'Long Ton That'
+                            url = 'https://github.com/longtonthat'
+                            roles = ['contributor']
+                        }
+                        contributor {
+                            name = 'Brandon Currie'
+                            url = 'https://github.com/brandoncurrie'
+                            roles = ['contributor']
+                        }
+                        contributor {
+                            name = 'Parker Hyland'
+                            url = 'https://github.com/parker-edwards'
+                            roles = ['contributor']
+                        }
+                        contributor {
+                            name = 'Gregg Hernandez'
+                            url = 'https://github.com/gregghz'
+                            roles = ['contributor']
+                        }
+                        contributor {
+                            name = 'Biju Kunjummen'
+                            url = 'https://github.com/bijukunjummen'
+                            roles = ['contributor']
+                        }
+                        contributor {
+                            name = 'RDBreed'
+                            url = 'https://github.com/RDBreed'
+                            roles = ['contributor']
                         }
                     }
                     organization {
