@@ -8,7 +8,7 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 
 #### 0.x Releases
 
-- `0.24.x` Releases - [0.24.0](#0240)
+- `0.24.x` Releases - [0.24.1](#0241), [0.24.0](#0240)
 - `0.23.x` Releases - [0.23.1](#0231), [0.23.0](#0230)
 - `0.22.x` Releases - [0.22.1](#0221), [0.22.0](#0220)
 - `0.21.x` Releases - [0.21.0](#0210)
@@ -24,6 +24,19 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 - `0.11.x` Releases - [0.11.2](#0112), [0.11.1](#0111), [0.11.0](#0110)
 - `0.10.x` Releases - [0.10.0](#0100)
 - `0.9.x` Releases - [0.9.0.1](#0901), [0.9.0](#090)
+
+## [0.24.1](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.24.1)
+
+Released on 2022-01-28.
+
+### Updated
+
+* Updated dependency versions to the latest for transitive dependencies exported by Wingtips:
+  - SLF4J `1.7.25` -> `1.7.35`
+  - Zipkin 2 `2.10.1` -> `2.23.16`
+  - Zipkin 2 Reporter `2.7.6` -> `2.16.3`
+  - Apache Commons Codec `1.11` -> `1.15`
+  - Updated by [Nic Munroe][contrib_nicmunroe] in pull request [#133](https://github.com/Nike-Inc/wingtips/pull/133).
 
 ## [0.24.0](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.24.0)
 
