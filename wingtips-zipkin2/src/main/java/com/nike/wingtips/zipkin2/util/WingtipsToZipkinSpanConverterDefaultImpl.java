@@ -73,28 +73,50 @@ public class WingtipsToZipkinSpanConverterDefaultImpl implements WingtipsToZipki
         
         // Iterate over existing wingtips tags and add them to the zipkin builder.
         for (Map.Entry<String, String> tagEntry : wingtipsSpan.getTags().entrySet()) {
-            spanBuilder.putTag(tagEntry.getKey(), tagEntry.getValue());
+            nullSafePutTag(spanBuilder, tagEntry.getKey(), tagEntry.getValue());
         }
             
         if (!spanId.equals(wingtipsSpan.getSpanId())) {
-            spanBuilder.putTag("invalid.span_id", wingtipsSpan.getSpanId());
+            nullSafePutTag(spanBuilder, "invalid.span_id", wingtipsSpan.getSpanId());
             wingtipsSpan.putTag("sanitized_span_id", spanId);
         }
         if (!traceId.equals(wingtipsSpan.getTraceId())) {
-            spanBuilder.putTag("invalid.trace_id", wingtipsSpan.getTraceId());
+            nullSafePutTag(spanBuilder, "invalid.trace_id", wingtipsSpan.getTraceId());
             wingtipsSpan.putTag("sanitized_trace_id", traceId);
         }
         if (parentId != null && !parentId.equals(wingtipsSpan.getParentSpanId())) {
-            spanBuilder.putTag("invalid.parent_id", wingtipsSpan.getParentSpanId());
+            nullSafePutTag(spanBuilder, "invalid.parent_id", wingtipsSpan.getParentSpanId());
             wingtipsSpan.putTag("sanitized_parent_id", parentId);
         }
 
         // Iterate over existing wingtips annotations and add them to the zipkin builder.
         for (TimestampedAnnotation wingtipsAnnotation : wingtipsSpan.getTimestampedAnnotations()) {
-            spanBuilder.addAnnotation(wingtipsAnnotation.getTimestampEpochMicros(), wingtipsAnnotation.getValue());
+            nullSafeAddAnnotation(
+                spanBuilder, wingtipsAnnotation.getTimestampEpochMicros(), wingtipsAnnotation.getValue()
+            );
         }
         
         return spanBuilder.build();
+    }
+
+    protected void nullSafePutTag(zipkin2.Span.Builder spanBuilder, String key, String value) {
+        if (key == null) {
+            key = "NULL_KEY";
+        }
+
+        if (value == null) {
+            value = "NULL_VALUE";
+        }
+
+        spanBuilder.putTag(key, value);
+    }
+
+    protected void nullSafeAddAnnotation(zipkin2.Span.Builder spanBuilder, long timestamp, String value) {
+        if (value == null) {
+            value = "NULL_VALUE";
+        }
+
+        spanBuilder.addAnnotation(timestamp, value);
     }
 
     protected zipkin2.Span.Kind determineZipkinKind(Span wingtipsSpan) {
@@ -171,7 +193,7 @@ public class WingtipsToZipkinSpanConverterDefaultImpl implements WingtipsToZipki
     }
 
     /**
-     * Copied from {@link zipkin2.Span#validateHex(String)} and slightly modified.
+     * Copied from {@code zipkin2.Span#validateHex(String)} and slightly modified.
      *
      * @param id The ID to check for hexadecimal conformity.
      * @param allowUppercase Pass true to allow uppercase A-F letters, false to force lowercase-hexadecimal check
@@ -215,6 +237,7 @@ public class WingtipsToZipkinSpanConverterDefaultImpl implements WingtipsToZipki
     private static final char[] ABS_MIN_LONG_AS_CHAR_ARRY = String.valueOf(Long.MIN_VALUE).substring(1).toCharArray();
     static {
         // Sanity check that MAX_LONG_AS_CHAR_ARRY and ABS_MIN_LONG_AS_CHAR_ARRY have the same number of chars.
+        //noinspection ConstantConditions
         assert MAX_LONG_AS_CHAR_ARRY.length == ABS_MIN_LONG_AS_CHAR_ARRY.length;
     }
     protected Long attemptToConvertToLong(final String id) {

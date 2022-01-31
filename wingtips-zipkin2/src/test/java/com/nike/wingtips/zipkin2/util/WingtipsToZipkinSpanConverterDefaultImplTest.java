@@ -136,7 +136,7 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
     }
 
     protected Map<String,String> createSingleTagMap() {
-        Map<String,String> singleValue = new HashMap<String,String>(1);
+        Map<String,String> singleValue = new HashMap<>(1);
         singleValue.put("tagName", "tagValue");
         return singleValue;
     }
@@ -180,6 +180,28 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
             traceId, null, spanId, spanName, true, null, spanPurpose, startTimeEpochMicros, null, durationNanos, null,
             null
         );
+        // We can have null tags and annotations though, and we need to verify that doesn't cause problems.
+        wingtipsSpan.putTag("someTagWithNullValue", null);
+        wingtipsSpan.putTag(null, "someTagValueWithNullKey");
+        wingtipsSpan.addTimestampedAnnotationForCurrentTime(null);
+
+        Map<String, String> expectedTags = wingtipsSpan
+            .getTags()
+            .entrySet()
+            .stream()
+            .collect(Collectors.toMap(
+                entry -> entry.getKey() == null ? "NULL_KEY" : entry.getKey(),
+                entry -> entry.getValue() == null ? "NULL_VALUE" : entry.getValue()
+            ));
+
+        List<zipkin2.Annotation> expectedAnnotations = wingtipsSpan
+            .getTimestampedAnnotations()
+            .stream()
+            .map(w -> Annotation.create(
+                w.getTimestampEpochMicros(),
+                w.getValue() == null ? "NULL_VALUE" : w.getValue()
+            ))
+            .collect(Collectors.toList());
 
         // when
         zipkin2.Span zipkinSpan = impl.convertWingtipsSpanToZipkinSpan(wingtipsSpan, zipkinEndpoint);
@@ -192,14 +214,13 @@ public class WingtipsToZipkinSpanConverterDefaultImplTest {
         assertThat(zipkinSpan.traceId()).isEqualTo(wingtipsSpan.getTraceId());
         assertThat(zipkinSpan.duration()).isEqualTo(durationMicros);
         assertThat(zipkinSpan.localEndpoint()).isEqualTo(zipkinEndpoint);
-        assertThat(zipkinSpan.tags()).isEqualTo(wingtipsSpan.getTags()).isEmpty();
-        assertThat(zipkinSpan.annotations()).isEqualTo(wingtipsSpan.getTimestampedAnnotations()).isEmpty();
+        assertThat(zipkinSpan.tags()).isEqualTo(expectedTags);
+        assertThat(zipkinSpan.annotations()).isEqualTo(expectedAnnotations);
 
         verifySpanPurposeRelatedStuff(zipkinSpan, wingtipsSpan);
     }
 
     @Test
-    @SuppressWarnings("UnnecessaryLocalVariable")
     public void convertWingtipsSpanToZipkinSpan_works_as_expected_for_128_bit_trace_id() {
         // given
         String high64Bits = "463ac35c9f6413ad";
