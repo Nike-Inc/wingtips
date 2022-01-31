@@ -25,6 +25,7 @@ import zipkin2.reporter.urlconnection.URLConnectionSender;
 import static com.nike.wingtips.zipkin2.WingtipsToZipkinLifecycleListener.MIN_SPAN_HANDLING_ERROR_LOG_INTERVAL_MILLIS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyLong;
 import static org.mockito.Matchers.anyString;
@@ -169,7 +170,8 @@ public class WingtipsToZipkinLifecycleListenerTest {
         Whitebox.setInternalState(listener, "zipkinConversionOrReportingErrorLogger", loggerMock);
         long lastLogTimeToSet = System.currentTimeMillis() - (MIN_SPAN_HANDLING_ERROR_LOG_INTERVAL_MILLIS + 10);
         Whitebox.setInternalState(listener, "lastSpanHandlingErrorLogTimeEpochMillis", lastLogTimeToSet);
-        doThrow(new RuntimeException("kaboom")).when(spanReporterMock).report(any());
+        Throwable ex = new RuntimeException("kaboom");
+        doThrow(ex).when(spanReporterMock).report(any());
 
         // when
         long before = System.currentTimeMillis();
@@ -177,7 +179,7 @@ public class WingtipsToZipkinLifecycleListenerTest {
         long after = System.currentTimeMillis();
 
         // then
-        verify(loggerMock).warn(anyString(), anyLong(), any(), anyString());
+        verify(loggerMock).warn(anyString(), anyLong(), any(), anyString(), eq(ex));
         // Also verify that the lastSpanHandlingErrorLogTimeEpochMillis value got updated.
         assertThat((long)Whitebox.getInternalState(listener, "lastSpanHandlingErrorLogTimeEpochMillis")).isBetween(before, after);
     }

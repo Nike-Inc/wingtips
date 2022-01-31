@@ -179,10 +179,11 @@ public class WingtipsToZipkinLifecycleListener implements SpanLifecycleListener 
                 //      malicious caller to endlessly spam the logs.
                 lastSpanHandlingErrorLogTimeEpochMillis = currentTimeMillis;
 
+                String exAsString = ex.toString();
                 zipkinConversionOrReportingErrorLogger.warn(
                     "There have been {} spans that were not Zipkin compatible, or that experienced an error during span handling. Latest example: "
                     + "wingtips_span_with_error=\"{}\", conversion_or_handling_error=\"{}\"",
-                    currentBadSpanCount, span.toKeyValueString(), ex.toString());
+                    currentBadSpanCount, span.toKeyValueString(), exAsString, ex);
             }
         }
     }
