@@ -8,7 +8,7 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 
 #### 0.x Releases
 
-- `0.24.x` Releases - [0.24.1](#0241), [0.24.0](#0240)
+- `0.24.x` Releases - [0.24.2](#0242), [0.24.1](#0241), [0.24.0](#0240)
 - `0.23.x` Releases - [0.23.1](#0231), [0.23.0](#0230)
 - `0.22.x` Releases - [0.22.1](#0221), [0.22.0](#0220)
 - `0.21.x` Releases - [0.21.0](#0210)
@@ -24,6 +24,21 @@ Wingtips is used heavily and is stable internally at Nike, however the wider com
 - `0.11.x` Releases - [0.11.2](#0112), [0.11.1](#0111), [0.11.0](#0110)
 - `0.10.x` Releases - [0.10.0](#0100)
 - `0.9.x` Releases - [0.9.0.1](#0901), [0.9.0](#090)
+
+## [0.24.2](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.24.2)
+
+Released on 2022-01-31.
+
+### Fixed
+
+* Fixed the Wingtips-to-Zipkin conversion in `WingtipsToZipkinSpanConverterDefaultImpl` to bulletproof against null 
+  tag keys/values or null timestamped annotation values in the Wingtips `Span`. The Zipkin spans don't allow those 
+  fields to be null. Now you will see `"NULL_KEY"` OR `"NULL_VALUE"` strings set on those fields in the Zipkin spans.
+  - Fixed by [Nic Munroe][contrib_nicmunroe] in pull request [#136](https://github.com/Nike-Inc/wingtips/pull/136).
+* Fixed the error/warning log message output by `WingtipsToZipkinLifecycleListener` when a conversion error occurs 
+  to include the full exception stack trace. This makes tracking down the source of conversion errors much easier. This 
+  log message is rate limited to once per minute, so it should not spam your logs.  
+  - Fixed by [Nic Munroe][contrib_nicmunroe] in pull request [#136](https://github.com/Nike-Inc/wingtips/pull/136).
 
 ## [0.24.1](https://github.com/Nike-Inc/wingtips/releases/tag/wingtips-v0.24.1)
 
