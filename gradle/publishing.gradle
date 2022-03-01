@@ -165,6 +165,8 @@ configure(subprojects.findAll {
         }
     }
 
+    publishMavenJavaPublicationToMavenLocal.dependsOn("signArchives")
+
     signing {
         // You'll need to tell gradle what you want your GPG key ID to be so that the gpg-agent can do the right thing.
         //      On the command line this means including the following gradle property: -Psigning.gnupg.keyName=${MY_GPG_PUBLIC_KEY_ID}
