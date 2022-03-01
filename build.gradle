@@ -27,6 +27,10 @@ allprojects {
         failOnError = false
     }
 
+    tasks.withType(Javadoc) {
+        options.addStringOption('Xdoclint:none', '-quiet')
+    }
+
     artifacts {
         archives sourcesJar, javadocJar
     }
@@ -45,7 +49,7 @@ allprojects {
         // Minimize console spam while running tests without swallowing critical debugging info.
         testLogging {
             exceptionFormat "FULL"
-            events "passed", "skipped", "failed"
+            events "skipped", "failed"
             displayGranularity = 0
             showExceptions true
             showCauses true

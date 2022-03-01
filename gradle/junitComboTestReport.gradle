@@ -3,9 +3,9 @@ import groovy.time.TimeCategory
 // ========== COMBO TEST REPORT - View the combined/merged report at: [project_root]/build/reports/tests/index.html
 //noinspection GroovyAssignabilityCheck
 task testReport(type: TestReport) {
-    destinationDir = file("$buildDir/reports/tests")
+    getDestinationDirectory().set(file("$buildDir/reports/tests"))
     // Include the results from the `test` task's output dir in all subprojects
-    reportOn subprojects*.test.binaryResultsDirectory
+    getTestResults().setFrom(subprojects*.test.binaryResultsDirectory)
 }
 
 // Aggregate test reports for all subprojects at the root project level

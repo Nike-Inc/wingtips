@@ -27,3 +27,10 @@ jobs:
           files: build/reports/jacoco/jacocoRootReport/jacocoRootReport.xml
           fail_ci_if_error: true
           verbose: true
+      - name: Upload reports and test results to GitHub
+        uses: actions/upload-artifact@v2
+        with:
+          name: reports-and-test-results
+          path: |
+            build/reports/
+            build/test-results/
