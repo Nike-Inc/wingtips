@@ -16,6 +16,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -71,7 +72,7 @@ public class Span implements Closeable, Serializable {
     private final Map<String,String> tags = new LinkedHashMap<>();
     private final Map<String,String> unmodifiableTags = Collections.unmodifiableMap(tags);
     // The default initial capacity (10) seems ok for the annotations list.
-    private final List<TimestampedAnnotation> annotations = new ArrayList<>();
+    private final List<TimestampedAnnotation> annotations = new CopyOnWriteArrayList<>();
     private final List<TimestampedAnnotation> unmodifiableAnnotations = Collections.unmodifiableList(annotations);
 
     private Long durationNanos;
